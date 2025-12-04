@@ -1,0 +1,32 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["node_modules", "lib"]
+fs_permissions = [{ access = "read", path = "./config"}]
+
+# Default chain ID for testing (Ethereum mainnet fork)
+# Can be overridden for other operations with --chain-id <id>
+chain_id = 1
+
+remappings = [
+  "@openzeppelin-v5/contracts/=lib/openzepplin-contracts-v5/contracts/",
+  "@openzeppelin-v5/contracts-upgradeable/=lib/openzepplin-contracts-upgradeable-v5/contracts/",
+  "eigenlayer-contracts/=lib/eigenlayer-contracts/src/contracts/",
+  "forge-std/=lib/forge-std/src/"
+]
+
+[rpc_endpoints]
+mainnet = "${MAINNET_ARCHIVE_RPC}"
+
+[lint]
+ignore = [
+    "src/**/external-*/*.sol"
+]
+
+exclude_lints = [
+    "mixed-case-function",
+    "mixed-case-variable"
+]
+
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
