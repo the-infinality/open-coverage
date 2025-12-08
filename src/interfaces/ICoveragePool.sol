@@ -29,6 +29,7 @@ interface ICoveragePool {
     event CoverageManagerRegistered(address indexed coverageManager);
     event PositionRegistered(address indexed coverageManager, uint256 indexed positionId);
 
+
     /// ============ Coverage Managers ============
 
     /// @notice Register a coverage manager.
@@ -40,6 +41,7 @@ interface ICoveragePool {
     /// @dev A coverage position is a guarantee from the coverage manager to provide coverage within their given parameters.
     /// @param positionId The coverage position to register.
     function onRegisterPosition(uint256 positionId) external;
+
 
     /// ============ Coverage ============
 
@@ -66,8 +68,8 @@ interface ICoveragePool {
     /// @return coverage The coverage data
     function coverage(uint256 coverageId) external view returns (Coverage memory coverage);
 
-    // /// @notice Get the positions for a given coverage manager.
-    // /// @param coverageManager The coverage manager to get the positions for.
-    // /// @return positionIds The position ids.
-    // function positions(address coverageManager) external view returns (uint256[] memory positionIds);
+    /// @notice Get the asset that the coverage pool requires coverage on
+    /// @dev The asset must be an ERC20 token. Premiums will be paid in this asset.
+    /// @return asset The asset address.
+    function coverageAsset() external view returns (address asset);
 }

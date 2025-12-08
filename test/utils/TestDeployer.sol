@@ -3,7 +3,6 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {stdJson} from "forge-std/StdJson.sol";
-import {Vm} from "forge-std/Vm.sol";
 import {getConfig} from "../../utils/Config.sol";
 import {EigenAddresses} from "src/providers/eigenlayer/Types.sol";
 import {EigenCoverageManager} from "src/providers/eigenlayer/EigenCoverageManager.sol";
@@ -56,6 +55,6 @@ contract TestDeployer is Test, EigenHelper {
         eigenCoverageManager = EigenCoverageManager(address(new ERC1967Proxy(address(implementation), initData)));
 
         // Deploy coverage pool and allow this address to be the operator
-        coveragePool = new CoveragePool(address(this));
+        coveragePool = new CoveragePool(address(this), USDC);
     }
 }

@@ -3,6 +3,9 @@ pragma solidity ^0.8.24;
 
 error CoveragePoolAlreadyRegistered();
 error InvalidRecipient();
-error NotOperatorHandler();
-error StrategyNotWhitelisted();
+error StrategyNotWhitelisted(address strategy);
 error InvalidAVS();
+
+error NotOperatorHandler(address operatorProxy, address handler);
+error InvalidAsset(address strategyAsset, address positionAsset);
+error NotAllocated();

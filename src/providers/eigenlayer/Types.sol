@@ -16,9 +16,7 @@ struct EigenAddresses {
 }
 
 struct OperatorData {
-    uint32 operatorSetId;
     uint32 createdAtEpoch;
-    address handler;
 }
 
 struct DelegatorData {

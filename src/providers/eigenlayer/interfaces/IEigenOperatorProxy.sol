@@ -34,7 +34,7 @@ interface IEigenOperatorProxy {
     /// @dev Can only be called after ALLOCATION_CONFIGURATION_DELAY (approximately 17.5 days) has passed since registration.
     /// @param coveragePool_ The coverage pool to allocate to
     /// @param _strategyAddresses Strategy addresses
-    function allocate(address coveragePool_, address[] calldata _strategyAddresses) external;
+    function allocate(address coveragePool_, address[] calldata _strategyAddresses, uint64[] calldata _magnitudes) external;
 
     /// @notice Get the service manager
     /// @return The service manager address

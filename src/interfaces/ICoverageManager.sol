@@ -3,11 +3,19 @@ pragma solidity ^0.8.24;
 
 struct CoveragePosition {
     /// @notice The minimum rate for any delegation locking.
-    uint256 minRate;
+    /// @dev Rate is in basis points per annum
+    uint16 minRate;
 
-    /// @notice The maximum duration of any delegation locking.
+    /// @notice The maximum duration of any delegation locking in seconds.
     /// @dev If 0 there is no maximum duration.
     uint256 maxDuration;
+
+    /// @notice The timestamp at which the coverage position expires.
+    /// @dev If 0 there is no expiry block.
+    uint256 expiryTimestamp;
+
+    /// @notice The asset that the coverage position is denominated in.
+    address asset;
 
     /// @notice Whether the coverage position is refundable if the coverage pool can not meet its obligations.
     /// @dev If true, the coverage manager must provide contingencies to fully refund the premium to allow the coverage pool to 
@@ -46,6 +54,10 @@ interface ICoverageManager {
     event Liquidated(uint256 indexed claimId);
     event ClaimCompleted(uint256 indexed claimId);
 
+    error PositionExpired(uint256 positionId);
+    error TimestampInvalid(uint256 timestamp);
+    error MinRateInvalid(uint16 minRate);
+
 
     /// ============ Hooks ============
 
@@ -61,8 +73,9 @@ interface ICoverageManager {
     /// @dev Should call the `registerPosition` function of the coverage pool.
     /// @param coveragePool The coverage pool to create the coverage position for.
     /// @param data The coverage position data to create.
+    /// @param additionalData Any extra data to be used when creating the position
     /// @return positionId The id of the created coverage position.
-    function createPosition(address coveragePool, CoveragePosition memory data) external returns (uint256 positionId);
+    function createPosition(address coveragePool, CoveragePosition memory data, bytes calldata additionalData) external returns (uint256 positionId);
 
     /// @notice Update a coverage position.
     /// @dev This can be called without notifying the coverage pool because it is assumed that they are already aware via events emitted.
@@ -78,8 +91,10 @@ interface ICoverageManager {
     /// @param positionId ID of the coverage position to claim coverage from.
     /// @param amount The amount of coverage to claim.
     /// @param duration The duration of the coverage to claim.
+    /// @param paymentAsset The asset to pay the coverage premium in.
+    /// @param paymentAmount The amount of the coverage premium to pay in the payment asset.
     /// @return claimId ID of the coverage claim on success.
-    function issueCoverage(uint256 positionId, uint256 amount, uint256 duration) external returns (uint256 claimId);
+    function issueCoverage(uint256 positionId, uint256 amount, uint256 duration, address paymentAsset, uint256 paymentAmount) external returns (uint256 claimId);
 
     /// @notice Liquidate a coverage claim if it doesn't meet its obligations.
     /// @dev This should be called by the coverage pool if the coverage position doesn't meet its obligations.
@@ -103,12 +118,8 @@ interface ICoverageManager {
 
     /// @notice Get the amount of the delegation for a given coverage pool.
     /// @param coveragePool The target of the delegation.
-    /// @return amount USD value of the total coverage issued to a pool.
+    /// @return amount Total coverage issued to a pool.
     function totalCoverageByPool(address coveragePool) external view returns (uint256 amount);
-
-    /// @notice Get the total amount of the coverage issued.
-    /// @return amount The total amount of the coverage issued.
-    function totalCoverage() external view returns (uint256 amount);
 
     /// @notice Get the coverage position for a given coverage id.
     /// @param positionId The position id to get the position for.

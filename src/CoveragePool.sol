@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {NotHandler, CoverageManagerNotActive} from "./Errors.sol";
+import {NotCoveragePoolHandler, CoverageManagerNotActive} from "./Errors.sol";
 import {ICoveragePool, CoverageManagerData, PurchaseCoverageRequest, Coverage} from "./interfaces/ICoveragePool.sol";
 import {ICoverageManager} from "./interfaces/ICoverageManager.sol";
 
@@ -9,14 +9,16 @@ import {ICoverageManager} from "./interfaces/ICoverageManager.sol";
 /// @dev Each pool acts as a target contract for the restaking networks to delegate to e.g. for Eigen this will be the strategy.
 /// Delegators are whitelisted by the operators to ensure they are trusted.
 contract CoveragePool is ICoveragePool {
-    address public handler;
+    address public immutable HANDLER;
+    address public immutable COVERAGE_ASSET;
     mapping(address => CoverageManagerData) private _coverageManagers;
     address[] private _coverageManagerAddresses;
 
     /// @notice The asset that the coverage pool will distribute as yield
-    constructor(address _handler) {
-        if (_handler == address(0)) revert NotHandler();
-        handler = _handler;
+    constructor(address _handler, address _coverageAsset) {
+        if (_handler == address(0)) revert NotCoveragePoolHandler();
+        HANDLER = _handler;
+        COVERAGE_ASSET = _coverageAsset;
     }
 
     /// @inheritdoc ICoveragePool
@@ -57,6 +59,10 @@ contract CoveragePool is ICoveragePool {
         //TODO: Implement coverage
     }
 
+    /// @inheritdoc ICoveragePool
+    function coverageAsset() external view returns (address) {
+        return COVERAGE_ASSET;
+    }
 
     modifier onlyHandler() {
         _onlyHandler();
@@ -64,6 +70,6 @@ contract CoveragePool is ICoveragePool {
     }
 
     function _onlyHandler() internal view {
-        if (msg.sender != handler) revert NotHandler();
+        if (msg.sender != HANDLER) revert NotCoveragePoolHandler();
     }
 }

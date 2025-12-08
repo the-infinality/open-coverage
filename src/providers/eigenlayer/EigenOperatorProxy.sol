@@ -57,29 +57,23 @@ contract EigenOperatorProxy is IEigenOperatorProxy, Initializable {
     }
 
     /// @inheritdoc IEigenOperatorProxy
-    function allocate(address coveragePool_, address[] calldata _strategyAddresses) external onlyHandler {
+    function allocate(address coveragePool_, address[] calldata _strategyAddresses, uint64[] calldata _magnitudes) external onlyHandler {
         uint32 operatorSetId = IEigenServiceManager(_serviceManager).getOperatorSetId(coveragePool_);
 
         // The strategy that the restakers capital is deployed to
         IStrategy[] memory strategies = new IStrategy[](_strategyAddresses.length);
         for (uint256 i = 0; i < _strategyAddresses.length; i++) {
             if (!IEigenServiceManager(_serviceManager).isStrategyWhitelisted(_strategyAddresses[i])) {
-                revert StrategyNotWhitelisted();
+                revert StrategyNotWhitelisted(_strategyAddresses[i]);
             }
             strategies[i] = IStrategy(_strategyAddresses[i]);
-        }
-
-        // Only 1 allocation so 1e18 just means everything will be allocated to the avs
-        uint64[] memory magnitudes = new uint64[](_strategyAddresses.length);
-        for (uint256 i = 0; i < _strategyAddresses.length; i++) {
-            magnitudes[i] = 1e18;
         }
 
         // Create the allocation params
         OperatorSet memory operatorSet = OperatorSet({avs: _serviceManager, id: operatorSetId});
         IAllocationManager.AllocateParams[] memory allocations = new IAllocationManager.AllocateParams[](1);
         allocations[0] = IAllocationManagerTypes.AllocateParams({
-            operatorSet: operatorSet, strategies: strategies, newMagnitudes: magnitudes
+            operatorSet: operatorSet, strategies: strategies, newMagnitudes: _magnitudes
         });
 
         // Allocates the operator set. Can only be called after ALLOCATION_CONFIGURATION_DELAY (approximately 17.5 days) has passed since registration.
@@ -103,7 +97,7 @@ contract EigenOperatorProxy is IEigenOperatorProxy, Initializable {
     }
 
     function _onlyHandler() internal view {
-        if (msg.sender != _handler) revert NotOperatorHandler();
+        if (msg.sender != _handler) revert NotOperatorHandler(address(this), msg.sender);
     }
 
     modifier onlyHandler() {
