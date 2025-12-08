@@ -3,18 +3,14 @@ pragma solidity ^0.8.24;
 
 import {UUPSUpgradeable} from "@openzeppelin-v5/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {OwnableUpgradeable} from "@openzeppelin-v5/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {UpgradeableBeacon} from "@openzeppelin-v5/contracts/proxy/beacon/UpgradeableBeacon.sol";
-import {BeaconProxy} from "@openzeppelin-v5/contracts/proxy/beacon/BeaconProxy.sol";
-
 import {IAllocationManager, IAllocationManagerTypes} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
 import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
+import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermissionController.sol";
 
-import {EigenOperatorProxy} from "./EigenOperatorProxy.sol";
 import {EigenAddresses} from "./Types.sol";
-import {CoveragePoolAlreadyRegistered, InvalidAVS, NotOperatorHandler, InvalidAsset, NotAllocated} from "./Errors.sol";
+import {CoveragePoolAlreadyRegistered, InvalidAVS, NotOperatorAuthorized, InvalidAsset, NotAllocated} from "./Errors.sol";
 import {IEigenServiceManager, CreatePositionAddtionalData, EigenCoveragePosition, OperatorData} from "./interfaces/IEigenServiceManager.sol";
-import {IEigenOperatorProxy} from "./interfaces/IEigenOperatorProxy.sol";
 import {ICoverageManager, CoveragePosition, CoverageClaim, CoverageClaimStatus} from "../../interfaces/ICoverageManager.sol";
 import {ICoveragePool} from "../../interfaces/ICoveragePool.sol";
 
@@ -25,7 +21,6 @@ import {ICoveragePool} from "../../interfaces/ICoveragePool.sol";
 /// @dev Manage delegation strategies to whitelist strategies, distribute rewards and slash operators.
 contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpgradeable, OwnableUpgradeable {
     EigenAddresses private _eigenAddresses;
-    address public eigenOperatorInstance;
 
     uint32 private _operatorSetCount = 0;
 
@@ -50,10 +45,6 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
     function initialize(address _owner, EigenAddresses memory eigenAddresses_, string memory _metadataURI) external initializer {
         __Ownable_init(_owner);
         _eigenAddresses = eigenAddresses_;
-
-        // Deploy a instance for the upgradeable beacon proxies
-        UpgradeableBeacon beacon = new UpgradeableBeacon(address(new EigenOperatorProxy()), address(this));
-        eigenOperatorInstance = address(beacon);
 
         _updateAVSMetadataURI(_metadataURI);
     }
@@ -87,17 +78,21 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
     }
 
     /// @inheritdoc ICoverageManager
+    /// @dev The caller must have the `modifyAllocations` permission for the operator
     function createPosition(address coveragePool, CoveragePosition memory data, bytes calldata additionalData) external returns (uint256 positionId) {
         _validatePositionData(data);
 
         CreatePositionAddtionalData memory createPositionAddtionalData = abi.decode(additionalData, (CreatePositionAddtionalData));
-        if(IEigenOperatorProxy(createPositionAddtionalData.operatorProxy).handler() != msg.sender) revert NotOperatorHandler(createPositionAddtionalData.operatorProxy, msg.sender);
+
+
+        if(!_checkOperatorPermissions(createPositionAddtionalData.operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector)) revert NotOperatorAuthorized(createPositionAddtionalData.operator, msg.sender);
+
         if(address(IStrategy(createPositionAddtionalData.strategy).underlyingToken()) != data.asset) revert InvalidAsset(createPositionAddtionalData.strategy, data.asset);
 
         // Make sure operator has strategy allocations to the operator set for the coverage pool
         uint32 operatorSetId = coveragePoolToOperatorSetId[coveragePool];
         OperatorSet memory operatorSet = OperatorSet({avs: address(this), id: operatorSetId});
-        IAllocationManagerTypes.Allocation memory allocation = IAllocationManager(_eigenAddresses.allocationManager).getAllocation(createPositionAddtionalData.operatorProxy, operatorSet, IStrategy(createPositionAddtionalData.strategy));
+        IAllocationManagerTypes.Allocation memory allocation = IAllocationManager(_eigenAddresses.allocationManager).getAllocation(createPositionAddtionalData.operator, operatorSet, IStrategy(createPositionAddtionalData.strategy));
 
         if(allocation.currentMagnitude == 0) revert NotAllocated();
 
@@ -134,7 +129,9 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
         // Placeholder for rest of the logic: minting claim, storing claim, transferring payment, etc.
         // TODO: Implement full issueCoverage logic
         claims.push(CoverageClaim({positionId: positionId, amount: amount, duration: duration, status: CoverageClaimStatus.Issued}));
-        operators[positionData.operatorProxy].coveragePoolAmount[positionData.coveragePool] += premiumInPositionAsset;
+        operators[positionData.operator].coveragePoolAmount[positionData.coveragePool] += premiumInPositionAsset;
+
+        return claims.length - 1;
     }
 
     /// @inheritdoc ICoverageManager
@@ -170,21 +167,9 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
     // ============ IEigenServiceManager implementations ============ //
 
     /// @inheritdoc IEigenServiceManager
-    function registerOperator(address, address _avs, uint32[] calldata, bytes calldata) external {
+    function registerOperator(address, address _avs, uint32[] calldata, bytes calldata) external view {
         require(msg.sender != _eigenAddresses.delegationManager, "Not delegation manager");
         if (_avs != address(this)) revert InvalidAVS();
-    }
-
-    /// @inheritdoc IEigenServiceManager
-    function createOperatorProxy(string calldata _operatorMetadata)
-        external
-        returns (address operator)
-    {
-        // Best practice initialize on deployment
-        bytes memory initdata = abi.encodeWithSelector(
-            EigenOperatorProxy.initialize.selector, address(this), msg.sender, _operatorMetadata
-        );
-        operator = address(new BeaconProxy(eigenOperatorInstance, initdata));
     }
 
     /// @inheritdoc IEigenServiceManager
@@ -215,7 +200,7 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
     }
 
     function _registerPosition(address coveragePool, CoveragePosition memory data, CreatePositionAddtionalData memory createPositionAddtionalData) private returns (uint256 positionId) {
-        positions.push(EigenCoveragePosition({data: data, operatorProxy: createPositionAddtionalData.operatorProxy, strategy: createPositionAddtionalData.strategy, coveragePool: coveragePool}));
+        positions.push(EigenCoveragePosition({data: data, operator: createPositionAddtionalData.operator, strategy: createPositionAddtionalData.strategy, coveragePool: coveragePool}));
         positionId = positions.length - 1;
 
         emit PositionCreated(positionId);
@@ -227,5 +212,9 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
     function _validatePositionData(CoveragePosition memory data) private view {
         if(data.expiryTimestamp < block.timestamp) revert TimestampInvalid(data.expiryTimestamp);
         if(data.minRate > 10000) revert MinRateInvalid(data.minRate);
+    }
+
+    function _checkOperatorPermissions(address operator, address target, bytes4 selector) private returns (bool) {
+        return IPermissionController(_eigenAddresses.permissionController).canCall(operator, msg.sender, target, selector);
     }
 }

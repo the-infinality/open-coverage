@@ -6,6 +6,6 @@ error InvalidRecipient();
 error StrategyNotWhitelisted(address strategy);
 error InvalidAVS();
 
-error NotOperatorHandler(address operatorProxy, address handler);
+error NotOperatorAuthorized(address operator, address handler);
 error InvalidAsset(address strategyAsset, address positionAsset);
 error NotAllocated();

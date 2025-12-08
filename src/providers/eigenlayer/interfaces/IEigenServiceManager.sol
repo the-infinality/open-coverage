@@ -4,13 +4,13 @@ import {EigenAddresses} from "../Types.sol";
 import {CoveragePosition} from "../../../interfaces/ICoverageManager.sol";
 
 struct CreatePositionAddtionalData {
-    address operatorProxy;
+    address operator;
     address strategy;
 }
 
 struct EigenCoveragePosition {
     CoveragePosition data;
-    address operatorProxy;
+    address operator;
     address strategy;
     address coveragePool;
 }
@@ -23,13 +23,6 @@ struct OperatorData {
 /// @notice An interface for the Eigen coverage manager.
 interface IEigenServiceManager {
     function eigenAddresses() external view returns (EigenAddresses memory);
-
-    /// @notice Creates a new operator for a coverage pool
-    /// @param _operatorMetadata The metadata for the operator
-    /// @return operator The address of the created operator
-    function createOperatorProxy(string calldata _operatorMetadata)
-        external
-        returns (address operator);
     
     /// @notice Registers an operator to the AVS, called by the Allocation Manager contract (access control set for the allocation manager).
     /// @param _operator The operator to register

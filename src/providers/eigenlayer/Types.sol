@@ -13,6 +13,7 @@ struct EigenAddresses {
     address delegationManager;
     address strategyManager;
     address rewardsCoordinator;
+    address permissionController;
 }
 
 struct OperatorData {

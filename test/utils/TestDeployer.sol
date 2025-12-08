@@ -9,6 +9,9 @@ import {EigenCoverageManager} from "src/providers/eigenlayer/EigenCoverageManage
 import {EigenHelper, EigenAddressbook} from "../../utils/EigenHelper.sol";
 import {CoveragePool} from "src/CoveragePool.sol";
 import {ERC1967Proxy} from "@openzeppelin-v5/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {UpgradeableBeacon} from "@openzeppelin-v5/contracts/proxy/beacon/UpgradeableBeacon.sol";
+
+import {EigenOperatorProxy} from "src/providers/eigenlayer/EigenOperatorProxy.sol";
 
 
 contract TestDeployer is Test, EigenHelper {
@@ -19,6 +22,8 @@ contract TestDeployer is Test, EigenHelper {
     address owner = address(this);
 
     address USDC;
+
+    address public eigenOperatorInstance;
 
     // *** Deployed Contracts *** //
     CoveragePool coveragePool;
@@ -37,7 +42,7 @@ contract TestDeployer is Test, EigenHelper {
 
         USDC = chainJson.readAddress(string.concat(selectorPrefix, ".assets.USDC"));
 
-        EigenAddressbook memory eigenAddresses = _getAddressBook();
+        EigenAddressbook memory eigenAddressBook = _getAddressBook();
 
         // Deploy EigenCoverageManager via proxy
         EigenCoverageManager implementation = new EigenCoverageManager();
@@ -45,10 +50,11 @@ contract TestDeployer is Test, EigenHelper {
             EigenCoverageManager.initialize.selector,
             owner,
             EigenAddresses({
-                allocationManager: eigenAddresses.eigenAddresses.allocationManager,
-                delegationManager: eigenAddresses.eigenAddresses.delegationManager,
-                strategyManager: eigenAddresses.eigenAddresses.strategyManager,
-                rewardsCoordinator: eigenAddresses.eigenAddresses.rewardsCoordinator
+                allocationManager: eigenAddressBook.eigenAddresses.allocationManager,
+                delegationManager: eigenAddressBook.eigenAddresses.delegationManager,
+                strategyManager: eigenAddressBook.eigenAddresses.strategyManager,
+                rewardsCoordinator: eigenAddressBook.eigenAddresses.rewardsCoordinator,
+                permissionController: eigenAddressBook.eigenAddresses.permissionController
             }),
             ""
         );
@@ -56,5 +62,9 @@ contract TestDeployer is Test, EigenHelper {
 
         // Deploy coverage pool and allow this address to be the operator
         coveragePool = new CoveragePool(address(this), USDC);
+
+        // Deploy a instance for the upgradeable beacon proxies
+        UpgradeableBeacon beacon = new UpgradeableBeacon(address(new EigenOperatorProxy()), address(this));
+        eigenOperatorInstance = address(beacon);
     }
 }

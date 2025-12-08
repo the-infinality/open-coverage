@@ -35,6 +35,10 @@ contract EigenHelper {
 
     string public constant EIGEN_CONFIG_SUFFIX = "eigen";
 
+    constructor() {
+        _labelAddresses(_getAddressBook());
+    }
+
     function _getAllocationManager() internal view returns (IAllocationManager) {
         return IAllocationManager(_getAddressBook().eigenAddresses.allocationManager);
     }
@@ -74,5 +78,17 @@ contract EigenHelper {
             configJson.readAddress(string.concat(selectorPrefix, ".permissionsController"));
         ab.eigenAddresses.strategyFactory = configJson.readAddress(string.concat(selectorPrefix, ".strategyFactory"));
         ab.eigenAddresses.testStrategy = configJson.readAddress(string.concat(selectorPrefix, ".testStrategy"));
+    }
+
+    function _labelAddresses(EigenAddressbook memory ab) internal {
+        Vm vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
+
+        vm.label(ab.eigenAddresses.allocationManager, "Allocation Manager");
+        vm.label(ab.eigenAddresses.delegationManager, "Delegation Manager");
+        vm.label(ab.eigenAddresses.strategyManager, "Strategy Manager");
+        vm.label(ab.eigenAddresses.rewardsCoordinator, "Rewards Coordinator");
+        vm.label(ab.eigenAddresses.permissionController, "Permission Controller");
+        vm.label(ab.eigenAddresses.strategyFactory, "Strategy Factory");
+        vm.label(ab.eigenAddresses.testStrategy, "Test Strategy");
     }
 }
