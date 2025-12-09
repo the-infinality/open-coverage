@@ -22,5 +22,11 @@
       "name": "v5.5.0",
       "rev": "fcbae5394ae8ad52d8e580a3477db99814b9d565"
     }
+  },
+  "lib/uniswap-universal-router": {
+    "branch": {
+      "name": "main",
+      "rev": "050b93cf4e9508b78412f23ad66e85d5c76a45b5"
+    }
   }
 }

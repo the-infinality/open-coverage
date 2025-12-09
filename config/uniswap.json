@@ -1,0 +1,24 @@
+{
+    "1": {
+        "universalRouter": "0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af",
+        "permit2": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+        "poolPaths": {
+            "v4:": {
+                "USDC/USDT": {
+                    "poolKey": {
+                        "currency0": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+                        "currency1": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+                        "fee": 500,
+                        "tickSpacing": 60
+                    },
+                    "zeroForOne": true
+                }
+            },
+            "v3:": {
+                "USDC/USDT": {
+                    "poolInfo": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                }
+            }
+        }
+    }
+}

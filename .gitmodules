@@ -10,3 +10,10 @@
 [submodule "lib/openzepplin-contracts-upgradeable-v5"]
 	path = lib/openzepplin-contracts-upgradeable-v5
 	url = https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable
+[submodule "lib/uniswap-universal-router"]
+	path = lib/uniswap-universal-router
+	url = https://github.com/Uniswap/universal-router
+	branch = main
+[submodule "lib/uniswap-permit2"]
+	path = lib/uniswap-permit2
+	url = https://github.com/Uniswap/permit2

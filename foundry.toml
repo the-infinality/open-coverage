@@ -12,6 +12,11 @@ remappings = [
   "@openzeppelin-v5/contracts/=lib/openzepplin-contracts-v5/contracts/",
   "@openzeppelin-v5/contracts-upgradeable/=lib/openzepplin-contracts-upgradeable-v5/contracts/",
   "eigenlayer-contracts/=lib/eigenlayer-contracts/src/contracts/",
+  "@uniswap/universal-router/=lib/uniswap-universal-router/contracts/",
+  "@uniswap/v3-periphery/=lib/uniswap-universal-router/lib/v3-periphery/",
+  "@uniswap/v4-periphery/=lib/uniswap-universal-router/lib/v4-periphery/",
+  "@uniswap/v4-core/=lib/uniswap-universal-router/lib/v4-periphery/lib/v4-core/",
+  "@uniswap/permit2/=lib/uniswap-universal-router/lib/permit2/",
   "forge-std/=lib/forge-std/src/"
 ]
 

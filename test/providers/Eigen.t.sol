@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {TestDeployer} from "../utils/TestDeployer.sol";
+import {EigenTestDeployer} from "../utils/EigenTestDeployer.sol";
 import {CoverageManagerData} from "src/interfaces/ICoveragePool.sol";
 import {CoveragePosition} from "src/interfaces/ICoverageManager.sol";
 import {CreatePositionAddtionalData} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
@@ -9,10 +9,10 @@ import {IAllocationManager} from "eigenlayer-contracts/interfaces/IAllocationMan
 import {IAllocationManagerTypes} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermissionController.sol";
 import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
-import {EigenMethods} from "src/providers/eigenlayer/EigenMethods.sol";
+import {EigenProviderMethods} from "utils/EigenProviderMethods.sol";
 import {IEigenOperatorProxy} from "src/providers/eigenlayer/interfaces/IEigenOperatorProxy.sol";
 
-contract EigenTest is TestDeployer {
+contract EigenTest is EigenTestDeployer {
     IEigenOperatorProxy public operator;
 
     function _setupwithAllocations() internal {
@@ -29,7 +29,7 @@ contract EigenTest is TestDeployer {
         super.setUp();
 
         operator = IEigenOperatorProxy(
-            EigenMethods.createOperatorProxy(
+            EigenProviderMethods.createOperatorProxy(
                 eigenOperatorInstance,
                 eigenCoverageManager.eigenAddresses(),
                 address(this),
