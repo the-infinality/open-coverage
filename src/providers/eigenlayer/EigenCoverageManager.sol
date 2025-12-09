@@ -84,7 +84,6 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
 
         CreatePositionAddtionalData memory createPositionAddtionalData = abi.decode(additionalData, (CreatePositionAddtionalData));
 
-
         if(!_checkOperatorPermissions(createPositionAddtionalData.operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector)) revert NotOperatorAuthorized(createPositionAddtionalData.operator, msg.sender);
 
         if(address(IStrategy(createPositionAddtionalData.strategy).underlyingToken()) != data.asset) revert InvalidAsset(createPositionAddtionalData.strategy, data.asset);
@@ -145,7 +144,7 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
     }
 
     /// @inheritdoc ICoverageManager
-    function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts) external {
+    function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts) external returns (CoverageClaimStatus[] memory slashStatuses) {
         //TODO: Implement slashClaims
     }
 

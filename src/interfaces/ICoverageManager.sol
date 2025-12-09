@@ -111,7 +111,7 @@ interface ICoverageManager {
     /// @dev Can only be called by a coverage pool. Should take a slash coordinator into account if set.
     /// @param claimIds The ids of the coverage claims to slash.
     /// @param amounts The amounts of the slashes.
-    function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts) external;
+    function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts) external returns (CoverageClaimStatus[] memory slashStatuses);
 
 
     /// ============ Discovery ============
