@@ -3,14 +3,11 @@ pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {TestDeployer} from "test/utils/TestDeployer.sol";
-import {IUniversalRouter} from "@uniswap/universal-router/interfaces/IUniversalRouter.sol";
 import {AssetPriceOracleAndSwapper, IPriceOracle, SwapEngine, SwapParams, UniswapV4PoolInfo} from "../../src/mixins/AssetPriceOracleAndSwapper.sol";
 import {UniswapHelper, UniswapAddressbook} from "utils/UniswapHelper.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
-
-import {console} from "forge-std/console.sol";
 
 contract MockPriceOracle is IPriceOracle {
     function name() external pure returns (string memory) {
@@ -85,18 +82,12 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         deal(USDC, address(mockContract), amountOut * 2);
 
 
+        // Token 0 needs to be first for exact output
         bytes memory poolInfo = abi.encodePacked(
             USDT,           // 20 bytes - output token first for exact output
             uint24(100),    // 3 bytes - 0.01% fee for stablecoin pairs
             USDC            // 20 bytes - input token last for exact output
         );
-
-        // address[] memory path = new address[](2);
-        // path[0] = USDC;
-        // path[1] = USDT;
-
-        // uint24[] memory fees = new uint24[](1);
-        // fees[0] = 100;
 
         SwapParams memory swapParams = SwapParams({
             swapEngine: SwapEngine.UNISWAP_V3,
@@ -114,6 +105,21 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         deal(USDC, address(mockContract), amountOut * 2);
 
         vm.expectRevert(abi.encodeWithSelector(AssetPriceOracleAndSwapper.AssetPairNotRegistered.selector));
-        mockContract.swap(amountOut, USDC, USDT);
+        mockContract.swap(amountOut, USDC, address(0));
+    }
+
+    function test_quote() public view {
+        uint256 amountIn = 1000e6;
+        uint256 quote = mockContract.quote(amountIn, USDC, USDT);
+        assertEq(quote, amountIn);
+
+        uint256 newQuote = mockContract.quote(amountIn, USDT, USDC);
+        assertEq(newQuote, amountIn);
+    }
+
+    function test_RevertWhen_quote_asset_pair_not_registered() public {
+        uint256 amountIn = 1000e6;
+        vm.expectRevert(abi.encodeWithSelector(AssetPriceOracleAndSwapper.AssetPairNotRegistered.selector));
+        mockContract.quote(amountIn, USDC, address(0));
     }
 }

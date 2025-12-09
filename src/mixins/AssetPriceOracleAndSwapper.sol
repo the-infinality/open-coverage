@@ -201,6 +201,14 @@ abstract contract AssetPriceOracleAndSwapper {
     /// @return The price of the first asset in terms of the second asset
     function quote(uint256 amountIn, address asset1, address asset2) external view returns (uint256) {
         AssetPair memory _assetPair = assetPairs[keccak256(abi.encode(asset1, asset2))];
+
+        // Should flip around since the price oracle works both ways
+        if(address(_assetPair.priceOracle) == address(0)) {
+            _assetPair = assetPairs[keccak256(abi.encode(asset2, asset1))];
+            if(address(_assetPair.priceOracle) == address(0)) {
+                revert AssetPairNotRegistered();
+            }
+        }
         return IPriceOracle(_assetPair.priceOracle).getQuote(amountIn, asset1, asset2);
     }
 }
