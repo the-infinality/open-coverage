@@ -33,12 +33,11 @@ contract CoveragePool is ICoveragePool {
 
     /// @inheritdoc ICoveragePool
     function onRegisterPosition(uint256 positionId) external {
-        if(!_coverageManagers[msg.sender].active){
+        if (!_coverageManagers[msg.sender].active) {
             revert CoverageManagerNotActive();
         }
         emit PositionRegistered(msg.sender, positionId);
     }
-
 
     /// @inheritdoc ICoveragePool
     function purchaseCoverage(PurchaseCoverageRequest[] calldata requests) external returns (uint256 coverageId) {

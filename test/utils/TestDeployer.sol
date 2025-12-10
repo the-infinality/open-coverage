@@ -5,7 +5,6 @@ import {Test} from "forge-std/Test.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 import {getConfig} from "utils/Config.sol";
 
-
 contract TestDeployer is Test {
     using stdJson for string;
 
@@ -19,7 +18,6 @@ contract TestDeployer is Test {
     function setUp() public virtual {
         string memory chainJson = getConfig(CHAIN_CONFIG_SUFFIX);
         string memory selectorPrefix = string.concat("$['", vm.toString(block.chainid), "']");
-
 
         vm.createSelectFork(
             chainJson.readString(string.concat(selectorPrefix, ".name")),

@@ -29,7 +29,6 @@ interface ICoveragePool {
     event CoverageManagerRegistered(address indexed coverageManager);
     event PositionRegistered(address indexed coverageManager, uint256 indexed positionId);
 
-
     /// ============ Coverage Managers ============
 
     /// @notice Register a coverage manager.
@@ -42,7 +41,6 @@ interface ICoveragePool {
     /// @param positionId The coverage position to register.
     function onRegisterPosition(uint256 positionId) external;
 
-
     /// ============ Coverage ============
 
     /// @notice Purchase coverage from coverage managers.
@@ -50,7 +48,6 @@ interface ICoveragePool {
     /// @param requests The requests to purchase coverage.
     /// @return coverageId The id of the coverage purchased.
     function purchaseCoverage(PurchaseCoverageRequest[] calldata requests) external returns (uint256 coverageId);
-
 
     /// ============ Discovery ============
 

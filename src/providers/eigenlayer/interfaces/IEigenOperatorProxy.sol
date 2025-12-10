@@ -21,11 +21,8 @@ interface IEigenOperatorProxy {
     /// @param eigenAddresses_ EigenAddresses struct containing all EigenLayer contract addresses
     /// @param handler_ Eigen operator proxies handler
     /// @param operatorMetadata_ Operator metadata URI
-    function initialize(
-        EigenAddresses memory eigenAddresses_,
-        address handler_,
-        string calldata operatorMetadata_
-    ) external;
+    function initialize(EigenAddresses memory eigenAddresses_, address handler_, string calldata operatorMetadata_)
+        external;
 
     /// @notice Register a coverage pool to the operator
     /// @param serviceManager_ The service manager to register the coverage pool to
@@ -42,7 +39,12 @@ interface IEigenOperatorProxy {
     /// @param serviceManager_ The service manager to allocate to
     /// @param coveragePool_ The coverage pool to allocate to
     /// @param _strategyAddresses Strategy addresses
-    function allocate(address serviceManager_, address coveragePool_, address[] calldata _strategyAddresses, uint64[] calldata _magnitudes) external;
+    function allocate(
+        address serviceManager_,
+        address coveragePool_,
+        address[] calldata _strategyAddresses,
+        uint64[] calldata _magnitudes
+    ) external;
 
     /// @notice Get the handler for the operator proxy
     /// @return handler The handler's address administating the operator proxy.

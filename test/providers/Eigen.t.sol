@@ -30,10 +30,7 @@ contract EigenTest is EigenTestDeployer {
 
         operator = IEigenOperatorProxy(
             EigenProviderMethods.createOperatorProxy(
-                eigenOperatorInstance,
-                eigenCoverageManager.eigenAddresses(),
-                address(this),
-                ""
+                eigenOperatorInstance, eigenCoverageManager.eigenAddresses(), address(this), ""
             )
         );
 
@@ -54,8 +51,12 @@ contract EigenTest is EigenTestDeployer {
 
     function test_allocate() public {
         _setupwithAllocations();
-        OperatorSet memory operatorSet = OperatorSet({avs: address(eigenCoverageManager), id: eigenCoverageManager.getOperatorSetId(address(coveragePool))});
-        IAllocationManagerTypes.Allocation memory allocation = IAllocationManager(eigenCoverageManager.eigenAddresses().allocationManager).getAllocation(address(operator), operatorSet, _getTestStrategy());
+        OperatorSet memory operatorSet = OperatorSet({
+            avs: address(eigenCoverageManager), id: eigenCoverageManager.getOperatorSetId(address(coveragePool))
+        });
+        IAllocationManagerTypes.Allocation memory allocation = IAllocationManager(
+                eigenCoverageManager.eigenAddresses().allocationManager
+            ).getAllocation(address(operator), operatorSet, _getTestStrategy());
         assertEq(allocation.currentMagnitude, 1e18);
     }
 
@@ -70,7 +71,9 @@ contract EigenTest is EigenTestDeployer {
             refundable: Refundable.None,
             slashCoordinator: address(0)
         });
-        bytes memory additionalData = abi.encode(CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())}));
+        bytes memory additionalData = abi.encode(
+            CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
+        );
         uint256 positionId = eigenCoverageManager.createPosition(address(coveragePool), data, additionalData);
         assertEq(positionId, 0);
     }

@@ -11,7 +11,6 @@ import {UpgradeableBeacon} from "@openzeppelin-v5/contracts/proxy/beacon/Upgrade
 
 import {EigenOperatorProxy} from "src/providers/eigenlayer/EigenOperatorProxy.sol";
 
-
 contract EigenTestDeployer is TestDeployer, EigenHelper {
     address public eigenOperatorInstance;
 
@@ -19,8 +18,7 @@ contract EigenTestDeployer is TestDeployer, EigenHelper {
     CoveragePool coveragePool;
     EigenCoverageManager eigenCoverageManager;
 
-
-    function setUp() public override virtual {
+    function setUp() public virtual override {
         super.setUp();
 
         EigenAddressbook memory eigenAddressBook = _getAddressBook();

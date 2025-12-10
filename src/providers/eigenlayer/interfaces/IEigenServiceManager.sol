@@ -23,13 +23,14 @@ struct OperatorData {
 /// @notice An interface for the Eigen coverage manager.
 interface IEigenServiceManager {
     function eigenAddresses() external view returns (EigenAddresses memory);
-    
+
     /// @notice Registers an operator to the AVS, called by the Allocation Manager contract (access control set for the allocation manager).
     /// @param _operator The operator to register
     /// @param _avs The AVS to register the operator to
     /// @param _operatorSetIds The operator set ids to register the operator to
     /// @param _data Additional data
-    function registerOperator(address _operator, address _avs, uint32[] calldata _operatorSetIds, bytes calldata _data) external;
+    function registerOperator(address _operator, address _avs, uint32[] calldata _operatorSetIds, bytes calldata _data)
+        external;
 
     /// @notice Sets the whitelist status for a strategy
     /// @param strategyAddress The strategy address to set the whitelist status for

@@ -28,11 +28,10 @@ contract EigenOperatorProxy is IEigenOperatorProxy, Initializable {
     mapping(bytes32 => bool) private _allowlistedDigests;
 
     /// @inheritdoc IEigenOperatorProxy
-    function initialize(
-        EigenAddresses memory eigenAddresses_,
-        address handler_,
-        string calldata operatorMetadata_
-    ) external initializer {
+    function initialize(EigenAddresses memory eigenAddresses_, address handler_, string calldata operatorMetadata_)
+        external
+        initializer
+    {
         _eigenAddresses = eigenAddresses_;
         _handler = handler_;
 
@@ -46,7 +45,10 @@ contract EigenOperatorProxy is IEigenOperatorProxy, Initializable {
     }
 
     /// @inheritdoc IEigenOperatorProxy
-    function registerCoveragePool(address serviceManager_, address coveragePool_, uint16 rewardsSplit_) external onlyHandler {
+    function registerCoveragePool(address serviceManager_, address coveragePool_, uint16 rewardsSplit_)
+        external
+        onlyHandler
+    {
         // Build the register params
         uint32[] memory operatorSetIds = new uint32[](1);
         operatorSetIds[0] = IEigenServiceManager(serviceManager_).getOperatorSetId(coveragePool_);
@@ -58,11 +60,17 @@ contract EigenOperatorProxy is IEigenOperatorProxy, Initializable {
         IAllocationManager(_eigenAddresses.allocationManager).registerForOperatorSets(address(this), params);
 
         // 2. Set the operator split to 0, all rewards go to restakers
-        IRewardsCoordinator(_eigenAddresses.rewardsCoordinator).setOperatorAVSSplit(address(this), serviceManager_, rewardsSplit_);
+        IRewardsCoordinator(_eigenAddresses.rewardsCoordinator)
+            .setOperatorAVSSplit(address(this), serviceManager_, rewardsSplit_);
     }
 
     /// @inheritdoc IEigenOperatorProxy
-    function allocate(address serviceManager_, address coveragePool_, address[] calldata _strategyAddresses, uint64[] calldata _magnitudes) external onlyHandler {
+    function allocate(
+        address serviceManager_,
+        address coveragePool_,
+        address[] calldata _strategyAddresses,
+        uint64[] calldata _magnitudes
+    ) external onlyHandler {
         uint32 operatorSetId = IEigenServiceManager(serviceManager_).getOperatorSetId(coveragePool_);
 
         // The strategy that the restakers capital is deployed to
