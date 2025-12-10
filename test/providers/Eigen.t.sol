@@ -2,8 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {EigenTestDeployer} from "../utils/EigenTestDeployer.sol";
-import {CoverageManagerData} from "src/interfaces/ICoveragePool.sol";
-import {CoveragePosition, Refundable} from "src/interfaces/ICoverageManager.sol";
+import {CoveragePosition, Refundable} from "src/interfaces/ICoverageProvider.sol";
 import {CreatePositionAddtionalData} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
 import {IAllocationManager} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {IAllocationManagerTypes} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
@@ -11,18 +10,19 @@ import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermission
 import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
 import {EigenProviderMethods} from "utils/EigenProviderMethods.sol";
 import {IEigenOperatorProxy} from "src/providers/eigenlayer/interfaces/IEigenOperatorProxy.sol";
+import {CoverageProviderData} from "src/interfaces/ICoverageAgent.sol";
 
 contract EigenTest is EigenTestDeployer {
     IEigenOperatorProxy public operator;
 
     function _setupwithAllocations() internal {
         vm.roll(block.number + 126001);
-        operator.registerCoveragePool(address(eigenCoverageManager), address(coveragePool), 0);
+        operator.registerCoverageAgent(address(eigenCoverageProvider), address(coverageAgent), 0);
         address[] memory strategyAddresses = new address[](1);
         strategyAddresses[0] = address(_getTestStrategy());
         uint64[] memory magnitudes = new uint64[](1);
         magnitudes[0] = 1e18;
-        operator.allocate(address(eigenCoverageManager), address(coveragePool), strategyAddresses, magnitudes);
+        operator.allocate(address(eigenCoverageProvider), address(coverageAgent), strategyAddresses, magnitudes);
     }
 
     function setUp() public override {
@@ -30,32 +30,34 @@ contract EigenTest is EigenTestDeployer {
 
         operator = IEigenOperatorProxy(
             EigenProviderMethods.createOperatorProxy(
-                eigenOperatorInstance, eigenCoverageManager.eigenAddresses(), address(this), ""
+                eigenOperatorInstance, eigenCoverageProvider.eigenAddresses(), address(this), ""
             )
         );
 
-        IPermissionController(eigenCoverageManager.eigenAddresses().permissionController).acceptAdmin(address(operator));
+        IPermissionController(eigenCoverageProvider.eigenAddresses().permissionController)
+            .acceptAdmin(address(operator));
 
-        coveragePool.registerCoverageManager(address(eigenCoverageManager));
-        eigenCoverageManager.setStrategyWhitelist(address(_getTestStrategy()), true);
+        coverageAgent.registerCoverageProvider(address(eigenCoverageProvider));
+        eigenCoverageProvider.setStrategyWhitelist(address(_getTestStrategy()), true);
     }
 
-    function test_checkCoverageManagerRegistered() public view {
-        CoverageManagerData memory coverageManagerData = coveragePool.coverageManagerData(address(eigenCoverageManager));
-        assertEq(coverageManagerData.active, true);
+    function test_checkCoverageProviderRegistered() public view {
+        CoverageProviderData memory coverageProviderData =
+            coverageAgent.coverageProviderData(address(eigenCoverageProvider));
+        assertEq(coverageProviderData.active, true);
     }
 
-    function test_registerCoveragePool() public {
-        operator.registerCoveragePool(address(eigenCoverageManager), address(coveragePool), 10000);
+    function test_registerCoverageAgent() public {
+        operator.registerCoverageAgent(address(eigenCoverageProvider), address(coverageAgent), 10000);
     }
 
     function test_allocate() public {
         _setupwithAllocations();
         OperatorSet memory operatorSet = OperatorSet({
-            avs: address(eigenCoverageManager), id: eigenCoverageManager.getOperatorSetId(address(coveragePool))
+            avs: address(eigenCoverageProvider), id: eigenCoverageProvider.getOperatorSetId(address(coverageAgent))
         });
         IAllocationManagerTypes.Allocation memory allocation = IAllocationManager(
-                eigenCoverageManager.eigenAddresses().allocationManager
+                eigenCoverageProvider.eigenAddresses().allocationManager
             ).getAllocation(address(operator), operatorSet, _getTestStrategy());
         assertEq(allocation.currentMagnitude, 1e18);
     }
@@ -74,7 +76,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageManager.createPosition(address(coveragePool), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
         assertEq(positionId, 0);
     }
 }

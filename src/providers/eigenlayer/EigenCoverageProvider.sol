@@ -10,7 +10,7 @@ import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermission
 
 import {EigenAddresses} from "./Types.sol";
 import {
-    CoveragePoolAlreadyRegistered,
+    CoverageAgentAlreadyRegistered,
     InvalidAVS,
     NotOperatorAuthorized,
     InvalidAsset,
@@ -23,18 +23,18 @@ import {
     OperatorData
 } from "./interfaces/IEigenServiceManager.sol";
 import {
-    ICoverageManager,
+    ICoverageProvider,
     CoveragePosition,
     CoverageClaim,
     CoverageClaimStatus
-} from "../../interfaces/ICoverageManager.sol";
-import {ICoveragePool} from "../../interfaces/ICoveragePool.sol";
+} from "../../interfaces/ICoverageProvider.sol";
+import {ICoverageAgent} from "../../interfaces/ICoverageAgent.sol";
 
-/// @title EigenCoverageManager
+/// @title EigenCoverageProvider
 /// @author p-dealwis, Infinality
-/// @notice A manager for Eigen delegations
+/// @notice A provider for Eigen delegations
 /// @dev Manage delegation strategies to whitelist strategies, distribute rewards and slash operators.
-contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpgradeable, OwnableUpgradeable {
+contract EigenCoverageProvider is IEigenServiceManager, ICoverageProvider, UUPSUpgradeable, OwnableUpgradeable {
     EigenAddresses private _eigenAddresses;
 
     uint32 private _operatorSetCount = 0;
@@ -42,7 +42,7 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
     EigenCoveragePosition[] public positions;
     CoverageClaim[] public claims;
 
-    mapping(address => uint32) public coveragePoolToOperatorSetId;
+    mapping(address => uint32) public coverageAgentToOperatorSetId;
 
     mapping(address => bool) public strategyWhitelist;
 
@@ -69,11 +69,11 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
         // Only owner can upgrade
     }
 
-    /// ============ ICoverageManager implementations ============ //
+    /// ============ ICoverageProvider implementations ============ //
 
-    /// @inheritdoc ICoverageManager
+    /// @inheritdoc ICoverageProvider
     function onIsRegistered() external {
-        if (coveragePoolToOperatorSetId[msg.sender] != 0) revert CoveragePoolAlreadyRegistered();
+        if (coverageAgentToOperatorSetId[msg.sender] != 0) revert CoverageAgentAlreadyRegistered();
 
         IAllocationManagerTypes.CreateSetParams[] memory params = new IAllocationManager.CreateSetParams[](1);
 
@@ -89,12 +89,12 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
         IAllocationManager(_eigenAddresses.allocationManager)
             .createRedistributingOperatorSets(address(this), params, redistributionRecipients);
 
-        coveragePoolToOperatorSetId[msg.sender] = operatorSetId;
+        coverageAgentToOperatorSetId[msg.sender] = operatorSetId;
     }
 
-    /// @inheritdoc ICoverageManager
+    /// @inheritdoc ICoverageProvider
     /// @dev The caller must have the `modifyAllocations` permission for the operator
-    function createPosition(address coveragePool, CoveragePosition memory data, bytes calldata additionalData)
+    function createPosition(address coverageAgent, CoveragePosition memory data, bytes calldata additionalData)
         external
         returns (uint256 positionId)
     {
@@ -113,8 +113,8 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
             revert InvalidAsset(createPositionAddtionalData.strategy, data.asset);
         }
 
-        // Make sure operator has strategy allocations to the operator set for the coverage pool
-        uint32 operatorSetId = coveragePoolToOperatorSetId[coveragePool];
+        // Make sure operator has strategy allocations to the operator set for the coverage agent
+        uint32 operatorSetId = coverageAgentToOperatorSetId[coverageAgent];
         OperatorSet memory operatorSet = OperatorSet({avs: address(this), id: operatorSetId});
         IAllocationManagerTypes.Allocation memory allocation = IAllocationManager(_eigenAddresses.allocationManager)
             .getAllocation(
@@ -123,17 +123,17 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
 
         if (allocation.currentMagnitude == 0) revert NotAllocated();
 
-        positionId = _registerPosition(coveragePool, data, createPositionAddtionalData);
+        positionId = _registerPosition(coverageAgent, data, createPositionAddtionalData);
     }
 
-    /// @inheritdoc ICoverageManager
+    /// @inheritdoc ICoverageProvider
     function updatePosition(uint256 positionId, CoveragePosition memory data) external {
         _validatePositionData(data);
         positions[positionId].data = data;
         emit PositionUpdated(positionId);
     }
 
-    /// @inheritdoc ICoverageManager
+    /// @inheritdoc ICoverageProvider
     function issueCoverage(
         uint256 positionId,
         uint256 amount,
@@ -166,22 +166,22 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
                 positionId: positionId, amount: amount, duration: duration, status: CoverageClaimStatus.Issued
             })
         );
-        operators[positionData.operator].coveragePoolAmount[positionData.coveragePool] += premiumInPositionAsset;
+        operators[positionData.operator].coverageAgentAmount[positionData.coverageAgent] += premiumInPositionAsset;
 
         return claims.length - 1;
     }
 
-    /// @inheritdoc ICoverageManager
+    /// @inheritdoc ICoverageProvider
     function liquidateClaim(uint256 claimId) external {
         //TODO: Implement liquidateClaim
     }
 
-    /// @inheritdoc ICoverageManager
+    /// @inheritdoc ICoverageProvider
     function completeClaims(uint256 claimId) external {
         //TODO: Implement completeClaims
     }
 
-    /// @inheritdoc ICoverageManager
+    /// @inheritdoc ICoverageProvider
     function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts)
         external
         returns (CoverageClaimStatus[] memory slashStatuses)
@@ -189,17 +189,17 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
         //TODO: Implement slashClaims
     }
 
-    /// @inheritdoc ICoverageManager
-    function totalCoverageByPool(address coveragePool) external view returns (uint256 amount) {
-        //TODO: Implement totalCoverageByPool
+    /// @inheritdoc ICoverageProvider
+    function totalCoverageByAgent(address coverageAgent) external view returns (uint256 amount) {
+        //TODO: Implement totalCoverageByAgent
     }
 
-    /// @inheritdoc ICoverageManager
+    /// @inheritdoc ICoverageProvider
     function position(uint256 positionId) external view returns (CoveragePosition memory) {
         return positions[positionId].data;
     }
 
-    /// @inheritdoc ICoverageManager
+    /// @inheritdoc ICoverageProvider
     function claim(uint256 claimId) external view returns (CoverageClaim memory data) {
         //TODO: Implement claim
     }
@@ -223,8 +223,8 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
     }
 
     /// @inheritdoc IEigenServiceManager
-    function getOperatorSetId(address coveragePool) external view returns (uint32) {
-        return coveragePoolToOperatorSetId[coveragePool];
+    function getOperatorSetId(address coverageAgent) external view returns (uint32) {
+        return coverageAgentToOperatorSetId[coverageAgent];
     }
 
     function eigenAddresses() external view returns (EigenAddresses memory) {
@@ -240,7 +240,7 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
     }
 
     function _registerPosition(
-        address coveragePool,
+        address coverageAgent,
         CoveragePosition memory data,
         CreatePositionAddtionalData memory createPositionAddtionalData
     ) private returns (uint256 positionId) {
@@ -249,15 +249,15 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
                 data: data,
                 operator: createPositionAddtionalData.operator,
                 strategy: createPositionAddtionalData.strategy,
-                coveragePool: coveragePool
+                coverageAgent: coverageAgent
             })
         );
         positionId = positions.length - 1;
 
         emit PositionCreated(positionId);
 
-        // Notify the coverage pool that the position has been registered
-        ICoveragePool(coveragePool).onRegisterPosition(positionId);
+        // Notify the coverage agent that the position has been registered
+        ICoverageAgent(coverageAgent).onRegisterPosition(positionId);
     }
 
     function _validatePositionData(CoveragePosition memory data) private view {

@@ -45,13 +45,13 @@ contract EigenOperatorProxy is IEigenOperatorProxy, Initializable {
     }
 
     /// @inheritdoc IEigenOperatorProxy
-    function registerCoveragePool(address serviceManager_, address coveragePool_, uint16 rewardsSplit_)
+    function registerCoverageAgent(address serviceManager_, address coverageAgent_, uint16 rewardsSplit_)
         external
         onlyHandler
     {
         // Build the register params
         uint32[] memory operatorSetIds = new uint32[](1);
-        operatorSetIds[0] = IEigenServiceManager(serviceManager_).getOperatorSetId(coveragePool_);
+        operatorSetIds[0] = IEigenServiceManager(serviceManager_).getOperatorSetId(coverageAgent_);
 
         IAllocationManager.RegisterParams memory params =
             IAllocationManagerTypes.RegisterParams({avs: serviceManager_, operatorSetIds: operatorSetIds, data: ""});
@@ -67,11 +67,11 @@ contract EigenOperatorProxy is IEigenOperatorProxy, Initializable {
     /// @inheritdoc IEigenOperatorProxy
     function allocate(
         address serviceManager_,
-        address coveragePool_,
+        address coverageAgent_,
         address[] calldata _strategyAddresses,
         uint64[] calldata _magnitudes
     ) external onlyHandler {
-        uint32 operatorSetId = IEigenServiceManager(serviceManager_).getOperatorSetId(coveragePool_);
+        uint32 operatorSetId = IEigenServiceManager(serviceManager_).getOperatorSetId(coverageAgent_);
 
         // The strategy that the restakers capital is deployed to
         IStrategy[] memory strategies = new IStrategy[](_strategyAddresses.length);

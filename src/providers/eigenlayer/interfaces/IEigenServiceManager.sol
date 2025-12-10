@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 import {EigenAddresses} from "../Types.sol";
-import {CoveragePosition} from "../../../interfaces/ICoverageManager.sol";
+import {CoveragePosition} from "../../../interfaces/ICoverageProvider.sol";
 
 struct CreatePositionAddtionalData {
     address operator;
@@ -12,15 +12,15 @@ struct EigenCoveragePosition {
     CoveragePosition data;
     address operator;
     address strategy;
-    address coveragePool;
+    address coverageAgent;
 }
 
 struct OperatorData {
-    mapping(address => uint256) coveragePoolAmount;
+    mapping(address => uint256) coverageAgentAmount;
     bool active;
 }
 
-/// @notice An interface for the Eigen coverage manager.
+/// @notice An interface for the Eigen coverage provider.
 interface IEigenServiceManager {
     function eigenAddresses() external view returns (EigenAddresses memory);
 
@@ -41,8 +41,8 @@ interface IEigenServiceManager {
     /// @return The whitelisted strategies
     function isStrategyWhitelisted(address strategy) external view returns (bool);
 
-    /// @notice Returns the operator set for a coverage pool
-    /// @param coveragePool The coverage pool to get the operator set for
-    /// @return operatorSetId The operator set id for the coverage pool
-    function getOperatorSetId(address coveragePool) external view returns (uint32 operatorSetId);
+    /// @notice Returns the operator set for a coverage agent
+    /// @param coverageAgent The coverage agent to get the operator set for
+    /// @return operatorSetId The operator set id for the coverage agent
+    function getOperatorSetId(address coverageAgent) external view returns (uint32 operatorSetId);
 }

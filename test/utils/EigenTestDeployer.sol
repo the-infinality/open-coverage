@@ -3,9 +3,9 @@ pragma solidity ^0.8.24;
 
 import {TestDeployer} from "./TestDeployer.sol";
 import {EigenAddresses} from "src/providers/eigenlayer/Types.sol";
-import {EigenCoverageManager} from "src/providers/eigenlayer/EigenCoverageManager.sol";
+import {EigenCoverageProvider} from "src/providers/eigenlayer/EigenCoverageProvider.sol";
 import {EigenHelper, EigenAddressbook} from "../../utils/EigenHelper.sol";
-import {CoveragePool} from "src/CoveragePool.sol";
+import {CoverageAgent} from "src/CoverageAgent.sol";
 import {ERC1967Proxy} from "@openzeppelin-v5/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UpgradeableBeacon} from "@openzeppelin-v5/contracts/proxy/beacon/UpgradeableBeacon.sol";
 
@@ -15,18 +15,18 @@ contract EigenTestDeployer is TestDeployer, EigenHelper {
     address public eigenOperatorInstance;
 
     // *** Deployed Contracts *** //
-    CoveragePool coveragePool;
-    EigenCoverageManager eigenCoverageManager;
+    CoverageAgent coverageAgent;
+    EigenCoverageProvider eigenCoverageProvider;
 
     function setUp() public virtual override {
         super.setUp();
 
         EigenAddressbook memory eigenAddressBook = _getAddressBook();
 
-        // Deploy EigenCoverageManager via proxy
-        EigenCoverageManager implementation = new EigenCoverageManager();
+        // Deploy EigenCoverageProvider via proxy
+        EigenCoverageProvider implementation = new EigenCoverageProvider();
         bytes memory initData = abi.encodeWithSelector(
-            EigenCoverageManager.initialize.selector,
+            EigenCoverageProvider.initialize.selector,
             owner,
             EigenAddresses({
                 allocationManager: eigenAddressBook.eigenAddresses.allocationManager,
@@ -37,10 +37,10 @@ contract EigenTestDeployer is TestDeployer, EigenHelper {
             }),
             ""
         );
-        eigenCoverageManager = EigenCoverageManager(address(new ERC1967Proxy(address(implementation), initData)));
+        eigenCoverageProvider = EigenCoverageProvider(address(new ERC1967Proxy(address(implementation), initData)));
 
-        // Deploy coverage pool and allow this address to be the operator
-        coveragePool = new CoveragePool(address(this), USDC);
+        // Deploy coverage agent and allow this address to be the operator
+        coverageAgent = new CoverageAgent(address(this), USDC);
 
         // Deploy a instance for the upgradeable beacon proxies
         UpgradeableBeacon beacon = new UpgradeableBeacon(address(new EigenOperatorProxy()), address(this));
