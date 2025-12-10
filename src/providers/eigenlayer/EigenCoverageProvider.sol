@@ -8,13 +8,17 @@ import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
 import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
 import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermissionController.sol";
 
-import {EigenAddresses} from "./Types.sol";
+import {EigenAddresses, ClaimReward, OperatorRewards} from "./Types.sol";
 import {
     CoverageAgentAlreadyRegistered,
     InvalidAVS,
     NotOperatorAuthorized,
     InvalidAsset,
-    NotAllocated
+    NotAllocated,
+    NoRewardsToClaim,
+    ClaimNotFound,
+    InvalidClaimStatus,
+    ClaimAlreadyLiquidated
 } from "./Errors.sol";
 import {
     IEigenServiceManager,
@@ -26,7 +30,8 @@ import {
     ICoverageProvider,
     CoveragePosition,
     CoverageClaim,
-    CoverageClaimStatus
+    CoverageClaimStatus,
+    Refundable
 } from "../../interfaces/ICoverageProvider.sol";
 import {ICoverageAgent} from "../../interfaces/ICoverageAgent.sol";
 
@@ -35,6 +40,9 @@ import {ICoverageAgent} from "../../interfaces/ICoverageAgent.sol";
 /// @notice A provider for Eigen delegations
 /// @dev Manage delegation strategies to whitelist strategies, distribute rewards and slash operators.
 contract EigenCoverageProvider is IEigenServiceManager, ICoverageProvider, UUPSUpgradeable, OwnableUpgradeable {
+    /// @notice Emitted when an operator claims rewards
+    event RewardsClaimed(address indexed operator, address indexed coverageAgent, uint256 amount);
+    
     EigenAddresses private _eigenAddresses;
 
     uint32 private _operatorSetCount = 0;
@@ -47,6 +55,12 @@ contract EigenCoverageProvider is IEigenServiceManager, ICoverageProvider, UUPSU
     mapping(address => bool) public strategyWhitelist;
 
     mapping(address => OperatorData) public operators;
+
+    // Reward tracking: claimId => ClaimReward
+    mapping(uint256 => ClaimReward) public claimRewardData;
+
+    // Operator rewards: operator => coverageAgent => OperatorRewards
+    mapping(address => mapping(address => OperatorRewards)) public operatorRewards;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -157,28 +171,138 @@ contract EigenCoverageProvider is IEigenServiceManager, ICoverageProvider, UUPSU
         }
 
         // paymentAmount check can be enforced if required
-        require(premiumInPositionAsset < minimumPremium, "Insufficient payment amount for premium");
+        require(premiumInPositionAsset >= minimumPremium, "Insufficient payment amount for premium");
 
-        // Placeholder for rest of the logic: minting claim, storing claim, transferring payment, etc.
-        // TODO: Implement full issueCoverage logic
+        // Create the claim
         claims.push(
             CoverageClaim({
-                positionId: positionId, amount: amount, duration: duration, status: CoverageClaimStatus.Issued
+                positionId: positionId, 
+                amount: amount, 
+                duration: duration, 
+                status: CoverageClaimStatus.Issued
             })
         );
+        claimId = claims.length - 1;
+        
         operators[positionData.operator].coverageAgentAmount[positionData.coverageAgent] += premiumInPositionAsset;
 
-        return claims.length - 1;
+        // Track rewards based on refundable status
+        uint256 startTime = block.timestamp;
+        uint256 endTime = startTime + duration;
+        
+        // Initialize claim reward tracking
+        claimRewardData[claimId] = ClaimReward({
+            totalReward: premiumInPositionAsset,
+            distributedReward: 0,
+            startTime: startTime,
+            endTime: endTime,
+            liquidationTime: 0
+        });
+
+        // Handle immediate distribution for Refundable.None
+        if (positionData.data.refundable == Refundable.None) {
+            // Distribute rewards immediately to operator
+            operatorRewards[positionData.operator][positionData.coverageAgent].pendingRewards += premiumInPositionAsset;
+            claimRewardData[claimId].distributedReward = premiumInPositionAsset;
+        }
+        // For Refundable.TimeWeighted and Refundable.Full, rewards are tracked but not distributed yet
+
+        emit ClaimIssued(positionId, claimId, amount, duration);
     }
 
     /// @inheritdoc ICoverageProvider
     function liquidateClaim(uint256 claimId) external {
-        //TODO: Implement liquidateClaim
+        if (claimId >= claims.length) revert ClaimNotFound(claimId);
+        
+        CoverageClaim storage claimData = claims[claimId];
+        
+        // Validate claim status
+        if (claimData.status == CoverageClaimStatus.Liquidated) {
+            revert ClaimAlreadyLiquidated(claimId);
+        }
+        if (claimData.status != CoverageClaimStatus.Issued) {
+            revert InvalidClaimStatus(claimId, claimData.status);
+        }
+
+        // Get position and operator info
+        EigenCoveragePosition storage position = positions[claimData.positionId];
+        ClaimReward storage reward = claimRewardData[claimId];
+        
+        // Mark liquidation time
+        reward.liquidationTime = block.timestamp;
+        claimData.status = CoverageClaimStatus.Liquidated;
+
+        // Calculate rewards up to liquidation point based on refundable status
+        if (position.data.refundable == Refundable.TimeWeighted) {
+            // Calculate time-weighted reward up to liquidation
+            uint256 timeElapsed = block.timestamp - reward.startTime;
+            uint256 totalDuration = reward.endTime - reward.startTime;
+            
+            // Calculate proportional reward earned up to liquidation
+            uint256 earnedReward = (reward.totalReward * timeElapsed) / totalDuration;
+            
+            // Distribute earned reward to operator
+            uint256 rewardToDistribute = earnedReward - reward.distributedReward;
+            if (rewardToDistribute > 0) {
+                operatorRewards[position.operator][position.coverageAgent].pendingRewards += rewardToDistribute;
+                reward.distributedReward = earnedReward;
+            }
+        } else if (position.data.refundable == Refundable.None) {
+            // For Refundable.None, rewards were already distributed at issuance
+            // No additional action needed
+        }
+        // For Refundable.Full, no rewards are distributed on liquidation
+
+        emit Liquidated(claimId);
     }
 
     /// @inheritdoc ICoverageProvider
     function completeClaims(uint256 claimId) external {
-        //TODO: Implement completeClaims
+        if (claimId >= claims.length) revert ClaimNotFound(claimId);
+        
+        CoverageClaim storage claimData = claims[claimId];
+        
+        // Validate claim can be completed
+        if (claimData.status == CoverageClaimStatus.Completed) {
+            revert InvalidClaimStatus(claimId, claimData.status);
+        }
+        if (claimData.status == CoverageClaimStatus.PendingSlash) {
+            revert InvalidClaimStatus(claimId, claimData.status);
+        }
+
+        // Get position and operator info
+        EigenCoveragePosition storage position = positions[claimData.positionId];
+        ClaimReward storage reward = claimRewardData[claimId];
+
+        // Handle reward distribution based on refundable status and claim status
+        if (claimData.status == CoverageClaimStatus.Issued) {
+            // Claim completed successfully without liquidation
+            
+            if (position.data.refundable == Refundable.Full) {
+                // For Refundable.Full, distribute all rewards on completion
+                uint256 rewardToDistribute = reward.totalReward - reward.distributedReward;
+                if (rewardToDistribute > 0) {
+                    operatorRewards[position.operator][position.coverageAgent].pendingRewards += rewardToDistribute;
+                    reward.distributedReward = reward.totalReward;
+                }
+            } else if (position.data.refundable == Refundable.TimeWeighted) {
+                // For time-weighted, distribute remaining rewards
+                uint256 rewardToDistribute = reward.totalReward - reward.distributedReward;
+                if (rewardToDistribute > 0) {
+                    operatorRewards[position.operator][position.coverageAgent].pendingRewards += rewardToDistribute;
+                    reward.distributedReward = reward.totalReward;
+                }
+            }
+            // For Refundable.None, rewards were already distributed at issuance
+        } else if (claimData.status == CoverageClaimStatus.Liquidated) {
+            // Claim was liquidated, rewards were already handled in liquidateClaim
+            // No additional reward distribution needed
+        }
+
+        // Mark claim as completed
+        claimData.status = CoverageClaimStatus.Completed;
+        
+        emit ClaimCompleted(claimId);
     }
 
     /// @inheritdoc ICoverageProvider
@@ -187,6 +311,49 @@ contract EigenCoverageProvider is IEigenServiceManager, ICoverageProvider, UUPSU
         returns (CoverageClaimStatus[] memory slashStatuses)
     {
         //TODO: Implement slashClaims
+    }
+
+    /// @notice Claim rewards for an operator from a coverage agent
+    /// @dev Only callable by authorized handlers for the operator
+    /// @param operator The operator to claim rewards for
+    /// @param coverageAgent The coverage agent to claim rewards from
+    function claimRewards(address operator, address coverageAgent) external returns (uint256 rewardAmount) {
+        // Check operator permissions
+        if (!_checkOperatorPermissions(
+                operator,
+                _eigenAddresses.rewardsCoordinator,
+                bytes4(keccak256("processRewardClaim(address,address)"))
+            )) revert NotOperatorAuthorized(operator, msg.sender);
+
+        OperatorRewards storage rewards = operatorRewards[operator][coverageAgent];
+        rewardAmount = rewards.pendingRewards;
+        
+        if (rewardAmount == 0) revert NoRewardsToClaim();
+
+        // Update reward tracking
+        rewards.pendingRewards = 0;
+        rewards.claimedRewards += rewardAmount;
+
+        emit RewardsClaimed(operator, coverageAgent, rewardAmount);
+
+        // Transfer rewards to operator
+        // TODO: Implement actual token transfer based on the asset
+    }
+
+    /// @notice Get pending rewards for an operator from a coverage agent
+    /// @param operator The operator address
+    /// @param coverageAgent The coverage agent address
+    /// @return pendingRewards Amount of pending rewards
+    function getPendingRewards(address operator, address coverageAgent) external view returns (uint256 pendingRewards) {
+        return operatorRewards[operator][coverageAgent].pendingRewards;
+    }
+
+    /// @notice Get total claimed rewards for an operator from a coverage agent
+    /// @param operator The operator address
+    /// @param coverageAgent The coverage agent address
+    /// @return claimedRewards Amount of claimed rewards
+    function getClaimedRewards(address operator, address coverageAgent) external view returns (uint256 claimedRewards) {
+        return operatorRewards[operator][coverageAgent].claimedRewards;
     }
 
     /// @inheritdoc ICoverageProvider
