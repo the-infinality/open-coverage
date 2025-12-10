@@ -15,19 +15,14 @@ interface IPriceOracle {
     function name() external view returns (string memory);
 
     /// @return outAmount The amount of `quote` that is equivalent to `inAmount` of `base`.
-    function getQuote(
-        uint256 inAmount,
-        address base,
-        address quote
-    ) external view returns (uint256 outAmount);
+    function getQuote(uint256 inAmount, address base, address quote) external view returns (uint256 outAmount);
 
     /// @return bidOutAmount The amount of `quote` you would get for selling `inAmount` of `base`.
     /// @return askOutAmount The amount of `quote` you would spend for buying `inAmount` of `base`.
-    function getQuotes(
-        uint256 inAmount,
-        address base,
-        address quote
-    ) external view returns (uint256 bidOutAmount, uint256 askOutAmount);
+    function getQuotes(uint256 inAmount, address base, address quote)
+        external
+        view
+        returns (uint256 bidOutAmount, uint256 askOutAmount);
 }
 
 enum SwapEngine {
@@ -59,7 +54,6 @@ struct AssetPair {
     SwapParams swapParams;
 }
 
-
 abstract contract AssetPriceOracleAndSwapper {
     error InvalidSwapEngine();
     error AssetPairNotRegistered();
@@ -72,29 +66,19 @@ abstract contract AssetPriceOracleAndSwapper {
 
     mapping(bytes32 => AssetPair) public assetPairs;
 
-    constructor(
-        address universalRouter_,
-        address permit2_
-    ) {
+    constructor(address universalRouter_, address permit2_) {
         universalRouter = IUniversalRouter(universalRouter_);
         permit2 = IPermit2(permit2_);
     }
 
-    function registerPriceAdaptor(
-        address priceOracle,
-        address asset1,
-        address asset2,
-        SwapParams calldata swapParams
-    ) external {
-        if(priceOracle == address(0)) revert InvalidPriceOracle();
-        if(asset1 == address(0) || asset2 == address(0)) revert InvalidAssetPair();
+    function registerPriceAdaptor(address priceOracle, address asset1, address asset2, SwapParams calldata swapParams)
+        external
+    {
+        if (priceOracle == address(0)) revert InvalidPriceOracle();
+        if (asset1 == address(0) || asset2 == address(0)) revert InvalidAssetPair();
 
-        AssetPair memory _assetPair = AssetPair({
-            priceOracle: priceOracle,
-            asset1: asset1,
-            asset2: asset2,
-            swapParams: swapParams
-        });
+        AssetPair memory _assetPair =
+            AssetPair({priceOracle: priceOracle, asset1: asset1, asset2: asset2, swapParams: swapParams});
 
         assetPairs[keccak256(abi.encode(asset1, asset2))] = _assetPair;
 
@@ -102,13 +86,13 @@ abstract contract AssetPriceOracleAndSwapper {
         IERC20(asset1).approve(address(permit2), type(uint256).max);
         // TODO: Validate that the pool path is valid
     }
-    
+
     /// =========== Swap Functions ===========
 
     function swap(uint128 amountOut, address asset1, address asset2) external {
         AssetPair memory _assetPair = assetPairs[keccak256(abi.encode(asset1, asset2))];
 
-        if(address(_assetPair.priceOracle) == address(0)) revert AssetPairNotRegistered();
+        if (address(_assetPair.priceOracle) == address(0)) revert AssetPairNotRegistered();
 
         if (_assetPair.swapParams.swapEngine == SwapEngine.UNISWAP_V3) {
             _swapV3(amountOut, _assetPair.swapParams.poolInfo);
@@ -122,7 +106,6 @@ abstract contract AssetPriceOracleAndSwapper {
     function _swapV3(uint128 amountOut, bytes memory poolInfo) internal {
         bytes[] memory inputs = new bytes[](1);
         bytes memory commands = abi.encodePacked(uint8(Commands.V3_SWAP_EXACT_OUT));
-
 
         // Extract input token (token1) from V3 poolInfo path (at offset 23 in data, after length prefix)
         address inputToken;
@@ -152,11 +135,8 @@ abstract contract AssetPriceOracleAndSwapper {
         bytes memory commands = abi.encodePacked(uint8(Commands.V4_SWAP));
         bytes[] memory inputs = new bytes[](1);
 
-        bytes memory actions = abi.encodePacked(
-            uint8(Actions.SWAP_EXACT_OUT_SINGLE),
-            uint8(Actions.SETTLE_ALL),
-            uint8(Actions.TAKE_ALL)
-        );
+        bytes memory actions =
+            abi.encodePacked(uint8(Actions.SWAP_EXACT_OUT_SINGLE), uint8(Actions.SETTLE_ALL), uint8(Actions.TAKE_ALL));
 
         bytes[] memory params = new bytes[](3);
 
@@ -164,10 +144,10 @@ abstract contract AssetPriceOracleAndSwapper {
         params[0] = abi.encode(
             IV4Router.ExactOutputSingleParams({
                 poolKey: uniswapV4PoolInfo.poolKey,
-                zeroForOne: uniswapV4PoolInfo.zeroForOne,            // true if we're swapping token0 for token1
-                amountOut: amountOut,          // amount of tokens we're swapping
+                zeroForOne: uniswapV4PoolInfo.zeroForOne, // true if we're swapping token0 for token1
+                amountOut: amountOut, // amount of tokens we're swapping
                 amountInMaximum: type(uint128).max, // minimum amount we expect to receive
-                hookData: bytes("")             // no hook data needed
+                hookData: bytes("") // no hook data needed
             })
         );
 
@@ -203,9 +183,9 @@ abstract contract AssetPriceOracleAndSwapper {
         AssetPair memory _assetPair = assetPairs[keccak256(abi.encode(asset1, asset2))];
 
         // Should flip around since the price oracle works both ways
-        if(address(_assetPair.priceOracle) == address(0)) {
+        if (address(_assetPair.priceOracle) == address(0)) {
             _assetPair = assetPairs[keccak256(abi.encode(asset2, asset1))];
-            if(address(_assetPair.priceOracle) == address(0)) {
+            if (address(_assetPair.priceOracle) == address(0)) {
                 revert AssetPairNotRegistered();
             }
         }

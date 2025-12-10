@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+/// @notice Refund policy for coverage positions on liquidation
+/// @dev None - No premium refund
+/// @dev TimeWeighted - Refund premium based on time position has been open
+/// @dev Full - Full refund of premium on liquidation
+enum Refundable {
+    None,
+    TimeWeighted,
+    Full
+}
+
 struct CoveragePosition {
     /// @notice The minimum rate for any delegation locking.
     /// @dev Rate is in basis points per annum
@@ -17,10 +27,12 @@ struct CoveragePosition {
     /// @notice The asset that the coverage position is denominated in.
     address asset;
 
-    /// @notice Whether the coverage position is refundable if the coverage pool can not meet its obligations.
-    /// @dev If true, the coverage manager must provide contingencies to fully refund the premium to allow the coverage pool to 
-    /// purchase coverage for the remaining duration of the coverage position.
-    bool refundable;
+    /// @notice The refund policy if the coverage pool cannot meet its obligations.
+    /// @dev The coverage manager must provide contingencies based on the refund policy:
+    /// - None: No refund required
+    /// - TimeWeighted: Refund proportional to remaining duration (e.g., 50% refund if 6 months remain of 12 month position)
+    /// - Full: Complete refund of premium to allow coverage pool to purchase coverage for remaining duration
+    Refundable refundable;
 
     /// @notice The address of the slash coordinator for the coverage position.
     /// @dev The slash coordinator is responsible for initiating the slashing process for the coverage position.
@@ -58,14 +70,12 @@ interface ICoverageManager {
     error TimestampInvalid(uint256 timestamp);
     error MinRateInvalid(uint16 minRate);
 
-
     /// ============ Hooks ============
 
     /// @notice Triggered when a coverage pool is registered by the coverage pool.
     /// @dev Can only be called by the coverage pool. This hook should always be called by
     /// the coverage pool and can be used for activities such as whitelisting the coverage pool.
     function onIsRegistered() external;
-
 
     /// ============ Coverage Positions ============
 
@@ -75,14 +85,15 @@ interface ICoverageManager {
     /// @param data The coverage position data to create.
     /// @param additionalData Any extra data to be used when creating the position
     /// @return positionId The id of the created coverage position.
-    function createPosition(address coveragePool, CoveragePosition memory data, bytes calldata additionalData) external returns (uint256 positionId);
+    function createPosition(address coveragePool, CoveragePosition memory data, bytes calldata additionalData)
+        external
+        returns (uint256 positionId);
 
     /// @notice Update a coverage position.
     /// @dev This can be called without notifying the coverage pool because it is assumed that they are already aware via events emitted.
     /// @param positionId The id of the coverage position to update.
     /// @param data The coverage position data to update.
     function updatePosition(uint256 positionId, CoveragePosition memory data) external;
-
 
     /// ============ Coverage Claims ============
 
@@ -94,7 +105,13 @@ interface ICoverageManager {
     /// @param paymentAsset The asset to pay the coverage premium in.
     /// @param paymentAmount The amount of the coverage premium to pay in the payment asset.
     /// @return claimId ID of the coverage claim on success.
-    function issueCoverage(uint256 positionId, uint256 amount, uint256 duration, address paymentAsset, uint256 paymentAmount) external returns (uint256 claimId);
+    function issueCoverage(
+        uint256 positionId,
+        uint256 amount,
+        uint256 duration,
+        address paymentAsset,
+        uint256 paymentAmount
+    ) external returns (uint256 claimId);
 
     /// @notice Liquidate a coverage claim if it doesn't meet its obligations.
     /// @dev This should be called by the coverage pool if the coverage position doesn't meet its obligations.
@@ -111,8 +128,9 @@ interface ICoverageManager {
     /// @dev Can only be called by a coverage pool. Should take a slash coordinator into account if set.
     /// @param claimIds The ids of the coverage claims to slash.
     /// @param amounts The amounts of the slashes.
-    function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts) external returns (CoverageClaimStatus[] memory slashStatuses);
-
+    function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts)
+        external
+        returns (CoverageClaimStatus[] memory slashStatuses);
 
     /// ============ Discovery ============
 

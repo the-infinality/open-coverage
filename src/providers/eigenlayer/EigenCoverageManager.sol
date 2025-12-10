@@ -9,11 +9,26 @@ import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
 import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermissionController.sol";
 
 import {EigenAddresses} from "./Types.sol";
-import {CoveragePoolAlreadyRegistered, InvalidAVS, NotOperatorAuthorized, InvalidAsset, NotAllocated} from "./Errors.sol";
-import {IEigenServiceManager, CreatePositionAddtionalData, EigenCoveragePosition, OperatorData} from "./interfaces/IEigenServiceManager.sol";
-import {ICoverageManager, CoveragePosition, CoverageClaim, CoverageClaimStatus} from "../../interfaces/ICoverageManager.sol";
+import {
+    CoveragePoolAlreadyRegistered,
+    InvalidAVS,
+    NotOperatorAuthorized,
+    InvalidAsset,
+    NotAllocated
+} from "./Errors.sol";
+import {
+    IEigenServiceManager,
+    CreatePositionAddtionalData,
+    EigenCoveragePosition,
+    OperatorData
+} from "./interfaces/IEigenServiceManager.sol";
+import {
+    ICoverageManager,
+    CoveragePosition,
+    CoverageClaim,
+    CoverageClaimStatus
+} from "../../interfaces/ICoverageManager.sol";
 import {ICoveragePool} from "../../interfaces/ICoveragePool.sol";
-
 
 /// @title EigenCoverageManager
 /// @author p-dealwis, Infinality
@@ -33,16 +48,17 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
 
     mapping(address => OperatorData) public operators;
 
-
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
 
-
     /// ============ Upgradeability ============ //
 
-    function initialize(address _owner, EigenAddresses memory eigenAddresses_, string memory _metadataURI) external initializer {
+    function initialize(address _owner, EigenAddresses memory eigenAddresses_, string memory _metadataURI)
+        external
+        initializer
+    {
         __Ownable_init(_owner);
         _eigenAddresses = eigenAddresses_;
 
@@ -52,7 +68,6 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
         // Only owner can upgrade
     }
-
 
     /// ============ ICoverageManager implementations ============ //
 
@@ -79,21 +94,34 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
 
     /// @inheritdoc ICoverageManager
     /// @dev The caller must have the `modifyAllocations` permission for the operator
-    function createPosition(address coveragePool, CoveragePosition memory data, bytes calldata additionalData) external returns (uint256 positionId) {
+    function createPosition(address coveragePool, CoveragePosition memory data, bytes calldata additionalData)
+        external
+        returns (uint256 positionId)
+    {
         _validatePositionData(data);
 
-        CreatePositionAddtionalData memory createPositionAddtionalData = abi.decode(additionalData, (CreatePositionAddtionalData));
+        CreatePositionAddtionalData memory createPositionAddtionalData =
+            abi.decode(additionalData, (CreatePositionAddtionalData));
 
-        if(!_checkOperatorPermissions(createPositionAddtionalData.operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector)) revert NotOperatorAuthorized(createPositionAddtionalData.operator, msg.sender);
+        if (!_checkOperatorPermissions(
+                createPositionAddtionalData.operator,
+                _eigenAddresses.allocationManager,
+                IAllocationManager.modifyAllocations.selector
+            )) revert NotOperatorAuthorized(createPositionAddtionalData.operator, msg.sender);
 
-        if(address(IStrategy(createPositionAddtionalData.strategy).underlyingToken()) != data.asset) revert InvalidAsset(createPositionAddtionalData.strategy, data.asset);
+        if (address(IStrategy(createPositionAddtionalData.strategy).underlyingToken()) != data.asset) {
+            revert InvalidAsset(createPositionAddtionalData.strategy, data.asset);
+        }
 
         // Make sure operator has strategy allocations to the operator set for the coverage pool
         uint32 operatorSetId = coveragePoolToOperatorSetId[coveragePool];
         OperatorSet memory operatorSet = OperatorSet({avs: address(this), id: operatorSetId});
-        IAllocationManagerTypes.Allocation memory allocation = IAllocationManager(_eigenAddresses.allocationManager).getAllocation(createPositionAddtionalData.operator, operatorSet, IStrategy(createPositionAddtionalData.strategy));
+        IAllocationManagerTypes.Allocation memory allocation = IAllocationManager(_eigenAddresses.allocationManager)
+            .getAllocation(
+                createPositionAddtionalData.operator, operatorSet, IStrategy(createPositionAddtionalData.strategy)
+            );
 
-        if(allocation.currentMagnitude == 0) revert NotAllocated();
+        if (allocation.currentMagnitude == 0) revert NotAllocated();
 
         positionId = _registerPosition(coveragePool, data, createPositionAddtionalData);
     }
@@ -106,7 +134,13 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
     }
 
     /// @inheritdoc ICoverageManager
-    function issueCoverage(uint256 positionId, uint256 amount, uint256 duration, address paymentAsset, uint256 paymentAmount) external returns (uint256 claimId) {
+    function issueCoverage(
+        uint256 positionId,
+        uint256 amount,
+        uint256 duration,
+        address paymentAsset,
+        uint256 paymentAmount
+    ) external returns (uint256 claimId) {
         // Calculate the premium amount based on duration and min rate
         EigenCoveragePosition storage positionData = positions[positionId];
         uint16 minRate = positionData.data.minRate; // in basis points per annum (1e4 = 100%)
@@ -116,7 +150,7 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
         uint256 premiumInPositionAsset;
 
         // Skip conversion if the payment asset is the same as the position asset
-        if(positionData.data.asset != paymentAsset) {
+        if (positionData.data.asset != paymentAsset) {
             // TODO: get premium
         } else {
             premiumInPositionAsset = paymentAmount;
@@ -127,7 +161,11 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
 
         // Placeholder for rest of the logic: minting claim, storing claim, transferring payment, etc.
         // TODO: Implement full issueCoverage logic
-        claims.push(CoverageClaim({positionId: positionId, amount: amount, duration: duration, status: CoverageClaimStatus.Issued}));
+        claims.push(
+            CoverageClaim({
+                positionId: positionId, amount: amount, duration: duration, status: CoverageClaimStatus.Issued
+            })
+        );
         operators[positionData.operator].coveragePoolAmount[positionData.coveragePool] += premiumInPositionAsset;
 
         return claims.length - 1;
@@ -144,7 +182,10 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
     }
 
     /// @inheritdoc ICoverageManager
-    function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts) external returns (CoverageClaimStatus[] memory slashStatuses) {
+    function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts)
+        external
+        returns (CoverageClaimStatus[] memory slashStatuses)
+    {
         //TODO: Implement slashClaims
     }
 
@@ -198,8 +239,19 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
         IAllocationManager(_eigenAddresses.allocationManager).updateAVSMetadataURI(address(this), _metadataUri);
     }
 
-    function _registerPosition(address coveragePool, CoveragePosition memory data, CreatePositionAddtionalData memory createPositionAddtionalData) private returns (uint256 positionId) {
-        positions.push(EigenCoveragePosition({data: data, operator: createPositionAddtionalData.operator, strategy: createPositionAddtionalData.strategy, coveragePool: coveragePool}));
+    function _registerPosition(
+        address coveragePool,
+        CoveragePosition memory data,
+        CreatePositionAddtionalData memory createPositionAddtionalData
+    ) private returns (uint256 positionId) {
+        positions.push(
+            EigenCoveragePosition({
+                data: data,
+                operator: createPositionAddtionalData.operator,
+                strategy: createPositionAddtionalData.strategy,
+                coveragePool: coveragePool
+            })
+        );
         positionId = positions.length - 1;
 
         emit PositionCreated(positionId);
@@ -209,11 +261,12 @@ contract EigenCoverageManager is IEigenServiceManager, ICoverageManager, UUPSUpg
     }
 
     function _validatePositionData(CoveragePosition memory data) private view {
-        if(data.expiryTimestamp < block.timestamp) revert TimestampInvalid(data.expiryTimestamp);
-        if(data.minRate > 10000) revert MinRateInvalid(data.minRate);
+        if (data.expiryTimestamp < block.timestamp) revert TimestampInvalid(data.expiryTimestamp);
+        if (data.minRate > 10000) revert MinRateInvalid(data.minRate);
     }
 
     function _checkOperatorPermissions(address operator, address target, bytes4 selector) private returns (bool) {
-        return IPermissionController(_eigenAddresses.permissionController).canCall(operator, msg.sender, target, selector);
+        return
+            IPermissionController(_eigenAddresses.permissionController).canCall(operator, msg.sender, target, selector);
     }
 }

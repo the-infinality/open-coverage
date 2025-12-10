@@ -3,7 +3,14 @@ pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {TestDeployer} from "test/utils/TestDeployer.sol";
-import {AssetPriceOracleAndSwapper, IPriceOracle, SwapEngine, SwapParams, UniswapV4PoolInfo} from "../../src/mixins/AssetPriceOracleAndSwapper.sol";
+import {IUniversalRouter} from "@uniswap/universal-router/interfaces/IUniversalRouter.sol";
+import {
+    AssetPriceOracleAndSwapper,
+    IPriceOracle,
+    SwapEngine,
+    SwapParams,
+    UniswapV4PoolInfo
+} from "../../src/mixins/AssetPriceOracleAndSwapper.sol";
 import {UniswapHelper, UniswapAddressbook} from "utils/UniswapHelper.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
@@ -13,11 +20,16 @@ contract MockPriceOracle is IPriceOracle {
     function name() external pure returns (string memory) {
         return "MockPriceOracle";
     }
+
     function getQuote(uint256 amountIn, address, address) external pure returns (uint256) {
         return amountIn;
     }
 
-    function getQuotes(uint256 amountIn, address, address) external pure returns (uint256 bidOutAmount, uint256 askOutAmount) {
+    function getQuotes(uint256 amountIn, address, address)
+        external
+        pure
+        returns (uint256 bidOutAmount, uint256 askOutAmount)
+    {
         return (amountIn, amountIn);
     }
 }
@@ -38,10 +50,11 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         super.setUp();
 
         UniswapAddressbook memory uniswapAddressBook = _getUniswapAddressBook();
-        
-        mockContract = new MockContract(uniswapAddressBook.uniswapAddresses.universalRouter, uniswapAddressBook.uniswapAddresses.permit2);
-        mockPriceOracle = new MockPriceOracle();
 
+        mockContract = new MockContract(
+            uniswapAddressBook.uniswapAddresses.universalRouter, uniswapAddressBook.uniswapAddresses.permit2
+        );
+        mockPriceOracle = new MockPriceOracle();
 
         // Add V4 pool
         PoolKey memory poolKey = PoolKey({
@@ -52,15 +65,10 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
             hooks: IHooks(address(0))
         });
 
-        UniswapV4PoolInfo memory uniswapV4PoolInfo = UniswapV4PoolInfo({
-            poolKey: poolKey,
-            zeroForOne: true
-        });
+        UniswapV4PoolInfo memory uniswapV4PoolInfo = UniswapV4PoolInfo({poolKey: poolKey, zeroForOne: true});
 
-        SwapParams memory swapParams = SwapParams({
-            swapEngine: SwapEngine.UNISWAP_V4_SINGLE_HOP,
-            poolInfo: abi.encode(uniswapV4PoolInfo)
-        });
+        SwapParams memory swapParams =
+            SwapParams({swapEngine: SwapEngine.UNISWAP_V4_SINGLE_HOP, poolInfo: abi.encode(uniswapV4PoolInfo)});
         mockContract.registerPriceAdaptor(address(mockPriceOracle), USDC, USDT, swapParams);
     }
 
@@ -81,18 +89,14 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         uint128 amountOut = 1000e6;
         deal(USDC, address(mockContract), amountOut * 2);
 
-
         // Token 0 needs to be first for exact output
         bytes memory poolInfo = abi.encodePacked(
-            USDT,           // 20 bytes - output token first for exact output
-            uint24(100),    // 3 bytes - 0.01% fee for stablecoin pairs
-            USDC            // 20 bytes - input token last for exact output
+            USDT, // 20 bytes - output token first for exact output
+            uint24(100), // 3 bytes - 0.01% fee for stablecoin pairs
+            USDC // 20 bytes - input token last for exact output
         );
 
-        SwapParams memory swapParams = SwapParams({
-            swapEngine: SwapEngine.UNISWAP_V3,
-            poolInfo: poolInfo
-        });
+        SwapParams memory swapParams = SwapParams({swapEngine: SwapEngine.UNISWAP_V3, poolInfo: poolInfo});
         mockContract.registerPriceAdaptor(address(mockPriceOracle), USDC, USDT, swapParams);
 
         mockContract.swap(amountOut, USDC, USDT);
