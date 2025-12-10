@@ -68,5 +68,10 @@ interface ICoverageAgent {
     /// @notice Get the asset that the coverage agent requires coverage on
     /// @dev The asset must be an ERC20 token. Premiums will be paid in this asset.
     /// @return asset The asset address.
-    function coverageAsset() external view returns (address asset);
+    function asset() external view returns (address);
+
+    /// @notice Get the entity that the coverage agent is covering
+    /// @dev The entity must be represented by an address and could be a contract or an account.
+    /// @return entity The entity address.
+    function entity() external view returns (address);
 }

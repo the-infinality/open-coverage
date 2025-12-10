@@ -9,20 +9,20 @@ import {ICoverageProvider} from "./interfaces/ICoverageProvider.sol";
 /// @dev Each pool acts as a target contract for the restaking networks to delegate to e.g. for Eigen this will be the strategy.
 /// Delegators are whitelisted by the operators to ensure they are trusted.
 contract CoverageAgent is ICoverageAgent {
-    address public immutable HANDLER;
-    address public immutable COVERAGE_ASSET;
+    address private immutable _ENTITY;
+    address private immutable _ASSET;
     mapping(address => CoverageProviderData) private _coverageProviders;
     address[] private _coverageProviderAddresses;
 
     /// @notice The asset that the coverage agent will distribute as yield
     constructor(address _handler, address _coverageAsset) {
         if (_handler == address(0)) revert NotCoverageAgentHandler();
-        HANDLER = _handler;
-        COVERAGE_ASSET = _coverageAsset;
+        _ENTITY = _handler;
+        _ASSET = _coverageAsset;
     }
 
     /// @inheritdoc ICoverageAgent
-    function registerCoverageProvider(address coverageProvider) external onlyHandler {
+    function registerCoverageProvider(address coverageProvider) external onlyEntity {
         _coverageProviders[coverageProvider] = CoverageProviderData({active: true});
         _coverageProviderAddresses.push(coverageProvider);
 
@@ -59,16 +59,21 @@ contract CoverageAgent is ICoverageAgent {
     }
 
     /// @inheritdoc ICoverageAgent
-    function coverageAsset() external view returns (address) {
-        return COVERAGE_ASSET;
+    function asset() external view returns (address) {
+        return _ASSET;
     }
 
-    modifier onlyHandler() {
-        _onlyHandler();
+    /// @inheritdoc ICoverageAgent
+    function entity() external view returns (address) {
+        return _ENTITY;
+    }
+
+    modifier onlyEntity() {
+        _onlyEntity();
         _;
     }
 
-    function _onlyHandler() internal view {
-        if (msg.sender != HANDLER) revert NotCoverageAgentHandler();
+    function _onlyEntity() internal view {
+        if (msg.sender != _ENTITY) revert NotCoverageAgentHandler();
     }
 }
