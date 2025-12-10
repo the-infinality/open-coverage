@@ -27,11 +27,11 @@ struct CoveragePosition {
     /// @notice The asset that the coverage position is denominated in.
     address asset;
 
-    /// @notice The refund policy if the coverage pool cannot meet its obligations.
-    /// @dev The coverage manager must provide contingencies based on the refund policy:
+    /// @notice The refund policy if the coverage agent cannot meet its obligations.
+    /// @dev The coverage provider must provide contingencies based on the refund policy:
     /// - None: No refund required
     /// - TimeWeighted: Refund proportional to remaining duration (e.g., 50% refund if 6 months remain of 12 month position)
-    /// - Full: Complete refund of premium to allow coverage pool to purchase coverage for remaining duration
+    /// - Full: Complete refund of premium to allow coverage agent to purchase coverage for remaining duration
     Refundable refundable;
 
     /// @notice The address of the slash coordinator for the coverage position.

@@ -33,12 +33,11 @@ contract CoverageAgent is ICoverageAgent {
 
     /// @inheritdoc ICoverageAgent
     function onRegisterPosition(uint256 positionId) external {
-        if(!_coverageProviders[msg.sender].active){
+        if (!_coverageProviders[msg.sender].active) {
             revert CoverageProviderNotActive();
         }
         emit PositionRegistered(msg.sender, positionId);
     }
-
 
     /// @inheritdoc ICoverageAgent
     function purchaseCoverage(PurchaseCoverageRequest[] calldata requests) external returns (uint256 coverageId) {

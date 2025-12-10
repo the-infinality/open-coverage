@@ -30,21 +30,20 @@ contract EigenTest is EigenTestDeployer {
 
         operator = IEigenOperatorProxy(
             EigenProviderMethods.createOperatorProxy(
-                eigenOperatorInstance,
-                eigenCoverageProvider.eigenAddresses(),
-                address(this),
-                ""
+                eigenOperatorInstance, eigenCoverageProvider.eigenAddresses(), address(this), ""
             )
         );
 
-        IPermissionController(eigenCoverageProvider.eigenAddresses().permissionController).acceptAdmin(address(operator));
+        IPermissionController(eigenCoverageProvider.eigenAddresses().permissionController)
+            .acceptAdmin(address(operator));
 
         coverageAgent.registerCoverageProvider(address(eigenCoverageProvider));
         eigenCoverageProvider.setStrategyWhitelist(address(_getTestStrategy()), true);
     }
 
     function test_checkCoverageProviderRegistered() public view {
-        CoverageProviderData memory coverageProviderData = coverageAgent.coverageProviderData(address(eigenCoverageProvider));
+        CoverageProviderData memory coverageProviderData =
+            coverageAgent.coverageProviderData(address(eigenCoverageProvider));
         assertEq(coverageProviderData.active, true);
     }
 

@@ -20,7 +20,7 @@ struct OperatorData {
     bool active;
 }
 
-/// @notice An interface for the Eigen coverage manager.
+/// @notice An interface for the Eigen coverage provider.
 interface IEigenServiceManager {
     function eigenAddresses() external view returns (EigenAddresses memory);
 

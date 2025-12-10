@@ -29,7 +29,6 @@ interface ICoverageAgent {
     event CoverageProviderRegistered(address indexed coverageProvider);
     event PositionRegistered(address indexed coverageProvider, uint256 indexed positionId);
 
-
     /// ============ Coverage Providers ============
 
     /// @notice Register a coverage provider.
@@ -42,7 +41,6 @@ interface ICoverageAgent {
     /// @param positionId The coverage position to register.
     function onRegisterPosition(uint256 positionId) external;
 
-
     /// ============ Coverage ============
 
     /// @notice Purchase coverage from coverage providers.
@@ -50,7 +48,6 @@ interface ICoverageAgent {
     /// @param requests The requests to purchase coverage.
     /// @return coverageId The id of the coverage purchased.
     function purchaseCoverage(PurchaseCoverageRequest[] calldata requests) external returns (uint256 coverageId);
-
 
     /// ============ Discovery ============
 

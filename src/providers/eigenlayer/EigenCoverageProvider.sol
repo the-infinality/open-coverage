@@ -69,7 +69,6 @@ contract EigenCoverageProvider is IEigenServiceManager, ICoverageProvider, UUPSU
         // Only owner can upgrade
     }
 
-
     /// ============ ICoverageProvider implementations ============ //
 
     /// @inheritdoc ICoverageProvider
@@ -95,7 +94,10 @@ contract EigenCoverageProvider is IEigenServiceManager, ICoverageProvider, UUPSU
 
     /// @inheritdoc ICoverageProvider
     /// @dev The caller must have the `modifyAllocations` permission for the operator
-    function createPosition(address coverageAgent, CoveragePosition memory data, bytes calldata additionalData) external returns (uint256 positionId) {
+    function createPosition(address coverageAgent, CoveragePosition memory data, bytes calldata additionalData)
+        external
+        returns (uint256 positionId)
+    {
         _validatePositionData(data);
 
         CreatePositionAddtionalData memory createPositionAddtionalData =
@@ -132,7 +134,13 @@ contract EigenCoverageProvider is IEigenServiceManager, ICoverageProvider, UUPSU
     }
 
     /// @inheritdoc ICoverageProvider
-    function issueCoverage(uint256 positionId, uint256 amount, uint256 duration, address paymentAsset, uint256 paymentAmount) external returns (uint256 claimId) {
+    function issueCoverage(
+        uint256 positionId,
+        uint256 amount,
+        uint256 duration,
+        address paymentAsset,
+        uint256 paymentAmount
+    ) external returns (uint256 claimId) {
         // Calculate the premium amount based on duration and min rate
         EigenCoveragePosition storage positionData = positions[positionId];
         uint16 minRate = positionData.data.minRate; // in basis points per annum (1e4 = 100%)
@@ -153,7 +161,11 @@ contract EigenCoverageProvider is IEigenServiceManager, ICoverageProvider, UUPSU
 
         // Placeholder for rest of the logic: minting claim, storing claim, transferring payment, etc.
         // TODO: Implement full issueCoverage logic
-        claims.push(CoverageClaim({positionId: positionId, amount: amount, duration: duration, status: CoverageClaimStatus.Issued}));
+        claims.push(
+            CoverageClaim({
+                positionId: positionId, amount: amount, duration: duration, status: CoverageClaimStatus.Issued
+            })
+        );
         operators[positionData.operator].coverageAgentAmount[positionData.coverageAgent] += premiumInPositionAsset;
 
         return claims.length - 1;
@@ -170,7 +182,10 @@ contract EigenCoverageProvider is IEigenServiceManager, ICoverageProvider, UUPSU
     }
 
     /// @inheritdoc ICoverageProvider
-    function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts) external returns (CoverageClaimStatus[] memory slashStatuses) {
+    function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts)
+        external
+        returns (CoverageClaimStatus[] memory slashStatuses)
+    {
         //TODO: Implement slashClaims
     }
 
@@ -224,8 +239,19 @@ contract EigenCoverageProvider is IEigenServiceManager, ICoverageProvider, UUPSU
         IAllocationManager(_eigenAddresses.allocationManager).updateAVSMetadataURI(address(this), _metadataUri);
     }
 
-    function _registerPosition(address coverageAgent, CoveragePosition memory data, CreatePositionAddtionalData memory createPositionAddtionalData) private returns (uint256 positionId) {
-        positions.push(EigenCoveragePosition({data: data, operator: createPositionAddtionalData.operator, strategy: createPositionAddtionalData.strategy, coverageAgent: coverageAgent}));
+    function _registerPosition(
+        address coverageAgent,
+        CoveragePosition memory data,
+        CreatePositionAddtionalData memory createPositionAddtionalData
+    ) private returns (uint256 positionId) {
+        positions.push(
+            EigenCoveragePosition({
+                data: data,
+                operator: createPositionAddtionalData.operator,
+                strategy: createPositionAddtionalData.strategy,
+                coverageAgent: coverageAgent
+            })
+        );
         positionId = positions.length - 1;
 
         emit PositionCreated(positionId);
