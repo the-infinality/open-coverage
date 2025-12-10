@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-error CoveragePoolAlreadyRegistered();
+error CoverageAgentAlreadyRegistered();
 error InvalidRecipient();
 error StrategyNotWhitelisted(address strategy);
 error InvalidAVS();

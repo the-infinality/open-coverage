@@ -24,11 +24,11 @@ interface IEigenOperatorProxy {
     function initialize(EigenAddresses memory eigenAddresses_, address handler_, string calldata operatorMetadata_)
         external;
 
-    /// @notice Register a coverage pool to the operator
-    /// @param serviceManager_ The service manager to register the coverage pool to
-    /// @param coveragePool_ The coverage pool to register
-    /// @param rewardsSplit_ The rewards split to set for the coverage pool
-    function registerCoveragePool(address serviceManager_, address coveragePool_, uint16 rewardsSplit_) external;
+    /// @notice Register a coverage agent to the operator
+    /// @param serviceManager_ The service manager to register the coverage agent to
+    /// @param coverageAgent_ The coverage agent to register
+    /// @param rewardsSplit_ The rewards split to set for the coverage agent
+    function registerCoverageAgent(address serviceManager_, address coverageAgent_, uint16 rewardsSplit_) external;
 
     /// @notice Update the operator metadata URI
     /// @param _metadataUri The new metadata URI
@@ -37,11 +37,11 @@ interface IEigenOperatorProxy {
     /// @notice Allocate the operator set to the strategy, called by service manager.
     /// @dev Can only be called after ALLOCATION_CONFIGURATION_DELAY (approximately 17.5 days) has passed since registration.
     /// @param serviceManager_ The service manager to allocate to
-    /// @param coveragePool_ The coverage pool to allocate to
+    /// @param coverageAgent_ The coverage agent to allocate to
     /// @param _strategyAddresses Strategy addresses
     function allocate(
         address serviceManager_,
-        address coveragePool_,
+        address coverageAgent_,
         address[] calldata _strategyAddresses,
         uint64[] calldata _magnitudes
     ) external;

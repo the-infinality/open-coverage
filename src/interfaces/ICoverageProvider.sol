@@ -36,7 +36,7 @@ struct CoveragePosition {
 
     /// @notice The address of the slash coordinator for the coverage position.
     /// @dev The slash coordinator is responsible for initiating the slashing process for the coverage position.
-    /// If no slash coordinator is set, the coverage manager will instantly slash the coverage position.
+    /// If no slash coordinator is set, the coverage provider will instantly slash the coverage position.
     address slashCoordinator;
 }
 
@@ -55,10 +55,10 @@ struct CoverageClaim {
     CoverageClaimStatus status;
 }
 
-/// @title ICoverageManager
+/// @title ICoverageProvider
 /// @author p-dealwis, Infinality
-/// @notice An interface for a coverage manager that can slash a delegator and distribute rewards.
-interface ICoverageManager {
+/// @notice An interface for a coverage provider that can slash a delegator and distribute rewards.
+interface ICoverageProvider {
     event PositionCreated(uint256 indexed positionId);
     event PositionUpdated(uint256 indexed positionId);
     event ClaimIssued(uint256 indexed positionId, uint256 indexed claimId, uint256 amount, uint256 duration);
@@ -72,25 +72,25 @@ interface ICoverageManager {
 
     /// ============ Hooks ============
 
-    /// @notice Triggered when a coverage pool is registered by the coverage pool.
-    /// @dev Can only be called by the coverage pool. This hook should always be called by
-    /// the coverage pool and can be used for activities such as whitelisting the coverage pool.
+    /// @notice Triggered when a coverage agent is registered by the coverage agent.
+    /// @dev Can only be called by the coverage agent. This hook should always be called by
+    /// the coverage agent and can be used for activities such as whitelisting the coverage agent.
     function onIsRegistered() external;
 
     /// ============ Coverage Positions ============
 
-    /// @notice Create a new coverage position and register it with a coverage pool.
-    /// @dev Should call the `registerPosition` function of the coverage pool.
-    /// @param coveragePool The coverage pool to create the coverage position for.
+    /// @notice Create a new coverage position and register it with a coverage agent.
+    /// @dev Should call the `registerPosition` function of the coverage agent.
+    /// @param coverageAgent The coverage agent to create the coverage position for.
     /// @param data The coverage position data to create.
     /// @param additionalData Any extra data to be used when creating the position
     /// @return positionId The id of the created coverage position.
-    function createPosition(address coveragePool, CoveragePosition memory data, bytes calldata additionalData)
+    function createPosition(address coverageAgent, CoveragePosition memory data, bytes calldata additionalData)
         external
         returns (uint256 positionId);
 
     /// @notice Update a coverage position.
-    /// @dev This can be called without notifying the coverage pool because it is assumed that they are already aware via events emitted.
+    /// @dev This can be called without notifying the coverage agent because it is assumed that they are already aware via events emitted.
     /// @param positionId The id of the coverage position to update.
     /// @param data The coverage position data to update.
     function updatePosition(uint256 positionId, CoveragePosition memory data) external;
@@ -98,7 +98,7 @@ interface ICoverageManager {
     /// ============ Coverage Claims ============
 
     /// @notice Issue coverage for a coverage position.
-    /// @dev The purchaser of the coverage should approve the coverage manager to claim the coverage premium.
+    /// @dev The purchaser of the coverage should approve the coverage provider to claim the coverage premium.
     /// @param positionId ID of the coverage position to claim coverage from.
     /// @param amount The amount of coverage to claim.
     /// @param duration The duration of the coverage to claim.
@@ -114,7 +114,7 @@ interface ICoverageManager {
     ) external returns (uint256 claimId);
 
     /// @notice Liquidate a coverage claim if it doesn't meet its obligations.
-    /// @dev This should be called by the coverage pool if the coverage position doesn't meet its obligations.
+    /// @dev This should be called by the coverage agent if the coverage position doesn't meet its obligations.
     /// @param claimId The id of the coverage position to liquidate.
     function liquidateClaim(uint256 claimId) external;
 
@@ -125,7 +125,7 @@ interface ICoverageManager {
     function completeClaims(uint256 claimId) external;
 
     /// @notice Slash on coverage claims.
-    /// @dev Can only be called by a coverage pool. Should take a slash coordinator into account if set.
+    /// @dev Can only be called by a coverage agent. Should take a slash coordinator into account if set.
     /// @param claimIds The ids of the coverage claims to slash.
     /// @param amounts The amounts of the slashes.
     function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts)
@@ -134,10 +134,10 @@ interface ICoverageManager {
 
     /// ============ Discovery ============
 
-    /// @notice Get the amount of the delegation for a given coverage pool.
-    /// @param coveragePool The target of the delegation.
-    /// @return amount Total coverage issued to a pool.
-    function totalCoverageByPool(address coveragePool) external view returns (uint256 amount);
+    /// @notice Get the amount of the delegation for a given coverage agent.
+    /// @param coverageAgent The target of the delegation.
+    /// @return amount Total coverage issued to an agent.
+    function totalCoverageByAgent(address coverageAgent) external view returns (uint256 amount);
 
     /// @notice Get the coverage position for a given coverage id.
     /// @param positionId The position id to get the position for.
