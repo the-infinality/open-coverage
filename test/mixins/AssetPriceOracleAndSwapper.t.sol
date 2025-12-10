@@ -89,7 +89,6 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         uint128 amountOut = 1000e6;
         deal(USDC, address(mockContract), amountOut * 2);
 
-
         // Token 0 needs to be first for exact output
         bytes memory poolInfo = abi.encodePacked(
             USDT, // 20 bytes - output token first for exact output
@@ -97,10 +96,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
             USDC // 20 bytes - input token last for exact output
         );
 
-        SwapParams memory swapParams = SwapParams({
-            swapEngine: SwapEngine.UNISWAP_V3,
-            poolInfo: poolInfo
-        });
+        SwapParams memory swapParams = SwapParams({swapEngine: SwapEngine.UNISWAP_V3, poolInfo: poolInfo});
         mockContract.registerPriceAdaptor(address(mockPriceOracle), USDC, USDT, swapParams);
 
         mockContract.swap(amountOut, USDC, USDT);

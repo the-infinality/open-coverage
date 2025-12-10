@@ -183,9 +183,9 @@ abstract contract AssetPriceOracleAndSwapper {
         AssetPair memory _assetPair = assetPairs[keccak256(abi.encode(asset1, asset2))];
 
         // Should flip around since the price oracle works both ways
-        if(address(_assetPair.priceOracle) == address(0)) {
+        if (address(_assetPair.priceOracle) == address(0)) {
             _assetPair = assetPairs[keccak256(abi.encode(asset2, asset1))];
-            if(address(_assetPair.priceOracle) == address(0)) {
+            if (address(_assetPair.priceOracle) == address(0)) {
                 revert AssetPairNotRegistered();
             }
         }
