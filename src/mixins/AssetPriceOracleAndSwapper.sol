@@ -110,7 +110,7 @@ abstract contract AssetPriceOracleAndSwapper {
         // Extract input token (token1) from V3 poolInfo path (at offset 23 in data, after length prefix)
         address inputToken;
         assembly {
-            inputToken := shr(96, mload(add(add(poolInfo, 32), 23)))
+            inputToken := mload(add(poolInfo, 43)) // inputToken is at offset 43 in poolInfo
         }
 
         permit2.approve(inputToken, address(universalRouter), type(uint160).max, uint48(block.timestamp));
