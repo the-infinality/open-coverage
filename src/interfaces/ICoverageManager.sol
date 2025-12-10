@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+/// @notice Refund policy for coverage positions on liquidation
+/// @dev None - No premium refund
+/// @dev TimeWeighted - Refund premium based on time position has been open
+/// @dev Full - Full refund of premium on liquidation
+enum Refundable {
+    None,
+    TimeWeighted,
+    Full
+}
+
 struct CoveragePosition {
     /// @notice The minimum rate for any delegation locking.
     /// @dev Rate is in basis points per annum
@@ -17,10 +27,12 @@ struct CoveragePosition {
     /// @notice The asset that the coverage position is denominated in.
     address asset;
 
-    /// @notice Whether the coverage position is refundable if the coverage pool can not meet its obligations.
-    /// @dev If true, the coverage manager must provide contingencies to fully refund the premium to allow the coverage pool to 
-    /// purchase coverage for the remaining duration of the coverage position.
-    bool refundable;
+    /// @notice The refund policy if the coverage pool cannot meet its obligations.
+    /// @dev The coverage manager must provide contingencies based on the refund policy:
+    /// - None: No refund required
+    /// - TimeWeighted: Refund proportional to remaining duration (e.g., 50% refund if 6 months remain of 12 month position)
+    /// - Full: Complete refund of premium to allow coverage pool to purchase coverage for remaining duration
+    Refundable refundable;
 
     /// @notice The address of the slash coordinator for the coverage position.
     /// @dev The slash coordinator is responsible for initiating the slashing process for the coverage position.
