@@ -7,7 +7,7 @@ import {IV4Router} from "@uniswap/v4-periphery/src/interfaces/IV4Router.sol";
 import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20} from "@openzeppelin-v5/contracts/token/ERC20/IERC20.sol";
 import {IPermit2} from "@uniswap/permit2/src/interfaces/IPermit2.sol";
 
 interface IPriceOracle {
@@ -66,7 +66,9 @@ abstract contract AssetPriceOracleAndSwapper {
 
     mapping(bytes32 => AssetPair) public assetPairs;
 
-    constructor(address universalRouter_, address permit2_) {
+    constructor() {}
+
+    function __AssetPriceOracleAndSwapper_init(address universalRouter_, address permit2_) public virtual {
         universalRouter = IUniversalRouter(universalRouter_);
         permit2 = IPermit2(permit2_);
     }
@@ -89,7 +91,7 @@ abstract contract AssetPriceOracleAndSwapper {
 
     /// =========== Swap Functions ===========
 
-    function swap(uint128 amountOut, address asset1, address asset2) external {
+    function swap(uint128 amountOut, address asset1, address asset2) public {
         AssetPair memory _assetPair = assetPairs[keccak256(abi.encode(asset1, asset2))];
 
         if (address(_assetPair.priceOracle) == address(0)) revert AssetPairNotRegistered();
@@ -170,7 +172,7 @@ abstract contract AssetPriceOracleAndSwapper {
     /// @param asset1 The first asset
     /// @param asset2 The second asset
     /// @return The asset pair for the two assets
-    function assetPair(address asset1, address asset2) external view returns (AssetPair memory) {
+    function assetPair(address asset1, address asset2) public view returns (AssetPair memory) {
         return assetPairs[keccak256(abi.encode(asset1, asset2))];
     }
 
@@ -179,7 +181,7 @@ abstract contract AssetPriceOracleAndSwapper {
     /// @param asset1 The first asset
     /// @param asset2 The second asset
     /// @return The price of the first asset in terms of the second asset
-    function quote(uint256 amountIn, address asset1, address asset2) external view returns (uint256) {
+    function quote(uint256 amountIn, address asset1, address asset2) public view returns (uint256) {
         AssetPair memory _assetPair = assetPairs[keccak256(abi.encode(asset1, asset2))];
 
         // Should flip around since the price oracle works both ways

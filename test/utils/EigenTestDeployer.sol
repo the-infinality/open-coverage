@@ -8,10 +8,11 @@ import {EigenHelper, EigenAddressbook} from "../../utils/EigenHelper.sol";
 import {CoverageAgent} from "src/CoverageAgent.sol";
 import {ERC1967Proxy} from "@openzeppelin-v5/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UpgradeableBeacon} from "@openzeppelin-v5/contracts/proxy/beacon/UpgradeableBeacon.sol";
+import {UniswapHelper, UniswapAddressbook} from "../../utils/UniswapHelper.sol";
 
 import {EigenOperatorProxy} from "src/providers/eigenlayer/EigenOperatorProxy.sol";
 
-contract EigenTestDeployer is TestDeployer, EigenHelper {
+contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
     address public eigenOperatorInstance;
 
     // *** Deployed Contracts *** //
@@ -22,6 +23,7 @@ contract EigenTestDeployer is TestDeployer, EigenHelper {
         super.setUp();
 
         EigenAddressbook memory eigenAddressBook = _getAddressBook();
+        UniswapAddressbook memory uniswapAddressBook = _getUniswapAddressBook();
 
         // Deploy EigenCoverageProvider via proxy
         EigenCoverageProvider implementation = new EigenCoverageProvider();
@@ -35,7 +37,9 @@ contract EigenTestDeployer is TestDeployer, EigenHelper {
                 rewardsCoordinator: eigenAddressBook.eigenAddresses.rewardsCoordinator,
                 permissionController: eigenAddressBook.eigenAddresses.permissionController
             }),
-            ""
+            "",
+            uniswapAddressBook.uniswapAddresses.universalRouter,
+            uniswapAddressBook.uniswapAddresses.permit2
         );
         eigenCoverageProvider = EigenCoverageProvider(address(new ERC1967Proxy(address(implementation), initData)));
 

@@ -66,6 +66,7 @@ contract EigenTest is EigenTestDeployer {
         _setupwithAllocations();
 
         CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
             minRate: 100,
             maxDuration: 30 days,
             expiryTimestamp: block.timestamp + 365 days,
@@ -78,5 +79,25 @@ contract EigenTest is EigenTestDeployer {
         );
         uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
         assertEq(positionId, 0);
+    }
+
+    function test_closePosition() public {
+        _setupwithAllocations();
+
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0)
+        });
+        bytes memory additionalData = abi.encode(
+            CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
+        );
+        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        eigenCoverageProvider.closePosition(positionId);
+        assertEq(eigenCoverageProvider.position(positionId).expiryTimestamp, block.timestamp);
     }
 }

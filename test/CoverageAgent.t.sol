@@ -68,14 +68,13 @@ contract MockCoverageProvider is ICoverageProvider {
         emit PositionCreated(positionId);
     }
 
-    function updatePosition(uint256 positionId, CoveragePosition memory data) external override {
-        _positions[positionId] = data;
-        emit PositionUpdated(positionId);
+    function closePosition(uint256 positionId) external override {
+        _positions[positionId].expiryTimestamp = block.timestamp;
+        emit PositionClosed(positionId);
     }
 
-    function issueCoverage(uint256 positionId, uint256 amount, uint256 duration, address, uint256)
+    function claimCoverage(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
         external
-        override
         returns (uint256 claimId)
     {
         claimId = nextClaimId++;
@@ -83,7 +82,8 @@ contract MockCoverageProvider is ICoverageProvider {
             positionId: positionId,
             amount: amount,
             duration: duration,
-            status: CoverageClaimStatus.Issued
+            status: CoverageClaimStatus.Issued,
+            reward: reward
         });
         _totalCoverageByAgent[msg.sender] += amount;
         emit ClaimIssued(positionId, claimId, amount, duration);
@@ -131,8 +131,11 @@ contract MockCoverageProvider is ICoverageProvider {
 contract CoverageAgentWithSwapper is CoverageAgent, AssetPriceOracleAndSwapper {
     constructor(address _handler, address _coverageAsset, address universalRouter, address permit2)
         CoverageAgent(_handler, _coverageAsset)
-        AssetPriceOracleAndSwapper(universalRouter, permit2)
-    {}
+        AssetPriceOracleAndSwapper()
+    {
+        // Initialize the swapper functionality
+        __AssetPriceOracleAndSwapper_init(universalRouter, permit2);
+    }
 }
 
 /// @notice Test suite for CoverageAgent
@@ -281,6 +284,7 @@ contract CoverageAgentTest is TestDeployer, UniswapHelper {
         coverageAgent.registerCoverageProvider(address(mockProvider));
 
         CoveragePosition memory position = CoveragePosition({
+            coverageAgent: address(coverageAgent),
             minRate: 100,
             maxDuration: 30 days,
             expiryTimestamp: block.timestamp + 365 days,
@@ -378,6 +382,7 @@ contract CoverageAgentTest is TestDeployer, UniswapHelper {
 
         // Step 2: Create position through provider
         CoveragePosition memory position = CoveragePosition({
+            coverageAgent: address(coverageAgent),
             minRate: 100,
             maxDuration: 30 days,
             expiryTimestamp: block.timestamp + 365 days,
@@ -394,8 +399,8 @@ contract CoverageAgentTest is TestDeployer, UniswapHelper {
         assertEq(createdPosition.maxDuration, 30 days);
         assertEq(createdPosition.asset, USDC);
 
-        // Step 4: Issue coverage
-        uint256 claimId = mockProvider.issueCoverage(positionId, 1000e6, 30 days, USDC, 10e6);
+        // Step 4: Claim coverage
+        uint256 claimId = mockProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
 
         // Step 5: Verify claim
         CoverageClaim memory coverageClaim = mockProvider.claim(claimId);
@@ -413,6 +418,7 @@ contract CoverageAgentTest is TestDeployer, UniswapHelper {
 
         // Create positions on both providers
         CoveragePosition memory position1 = CoveragePosition({
+            coverageAgent: address(coverageAgent),
             minRate: 100,
             maxDuration: 30 days,
             expiryTimestamp: block.timestamp + 365 days,
@@ -422,6 +428,7 @@ contract CoverageAgentTest is TestDeployer, UniswapHelper {
         });
 
         CoveragePosition memory position2 = CoveragePosition({
+            coverageAgent: address(coverageAgent),
             minRate: 200,
             maxDuration: 60 days,
             expiryTimestamp: block.timestamp + 180 days,

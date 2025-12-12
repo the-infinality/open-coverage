@@ -14,6 +14,7 @@ import {UniswapHelper, UniswapAddressbook} from "utils/UniswapHelper.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 contract MockPriceOracle is IPriceOracle {
     function name() external pure returns (string memory) {
@@ -33,8 +34,17 @@ contract MockPriceOracle is IPriceOracle {
     }
 }
 
-contract MockContract is AssetPriceOracleAndSwapper {
-    constructor(address universalRouter, address permit2) AssetPriceOracleAndSwapper(universalRouter, permit2) {}
+contract MockContract is AssetPriceOracleAndSwapper, Initializable {
+    constructor() {}
+
+    function initialize(
+        address universalRouter_,
+        address permit2_
+    ) public initializer {
+        __AssetPriceOracleAndSwapper_init(
+            universalRouter_, permit2_
+        );
+    }
 }
 
 contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
@@ -50,8 +60,10 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
 
         UniswapAddressbook memory uniswapAddressBook = _getUniswapAddressBook();
 
-        mockContract = new MockContract(
-            uniswapAddressBook.uniswapAddresses.universalRouter, uniswapAddressBook.uniswapAddresses.permit2
+        mockContract = new MockContract();
+        mockContract.initialize(
+            uniswapAddressBook.uniswapAddresses.universalRouter, 
+            uniswapAddressBook.uniswapAddresses.permit2
         );
         mockPriceOracle = new MockPriceOracle();
 

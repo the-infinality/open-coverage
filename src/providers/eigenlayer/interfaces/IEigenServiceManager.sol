@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
+
+import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/EnumerableMap.sol";
 import {EigenAddresses} from "../Types.sol";
 import {CoveragePosition} from "../../../interfaces/ICoverageProvider.sol";
 
@@ -12,16 +14,21 @@ struct EigenCoveragePosition {
     CoveragePosition data;
     address operator;
     address strategy;
-    address coverageAgent;
 }
 
 struct OperatorData {
-    mapping(address => uint256) coverageAgentAmount;
+    /// @notice The amount of coverage issued by an operator per strategy
+    /// @dev The key is the strategy providing coverage
+    /// @dev The keys of the EnumerableMap is the coverage agent being covered.
+    mapping(address => EnumerableMap.AddressToUintMap) coverageStrategies;
     bool active;
 }
 
 /// @notice An interface for the Eigen coverage provider.
 interface IEigenServiceManager {
+    error StrategyAssetAlreadyRegistered(address asset);
+    error StrategyNotWhitelisted(address strategy);
+
     function eigenAddresses() external view returns (EigenAddresses memory);
 
     /// @notice Registers an operator to the AVS, called by the Allocation Manager contract (access control set for the allocation manager).

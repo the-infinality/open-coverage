@@ -5,11 +5,16 @@ struct CoverageProviderData {
     bool active;
 }
 
-struct PurchaseCoverageRequest {
+struct ClaimCoverageRequest {
+    /// @notice Address of the coverage provider to claim coverage from.
     address coverageProvider;
+    /// @notice The coverage position to claim coverage from.
     uint256 positionId;
+    /// @notice The amount of coverage to claim in the units of the agent's asset.
     uint256 amount;
-    uint256 premium;
+    /// @notice The reward for the coverage provider
+    uint256 reward;
+    /// @notice The duration of the coverage to claim.
     uint256 duration;
 }
 
@@ -47,7 +52,7 @@ interface ICoverageAgent {
     /// @dev Can only be called by the coverage agent coordinator. Should track the amount of coverage purchased for future slashing purposes.
     /// @param requests The requests to purchase coverage.
     /// @return coverageId The id of the coverage purchased.
-    function purchaseCoverage(PurchaseCoverageRequest[] calldata requests) external returns (uint256 coverageId);
+    function purchaseCoverage(ClaimCoverageRequest[] calldata requests) external returns (uint256 coverageId);
 
     /// ============ Discovery ============
 
@@ -66,7 +71,7 @@ interface ICoverageAgent {
     function coverage(uint256 coverageId) external view returns (Coverage memory coverage);
 
     /// @notice Get the asset that the coverage agent requires coverage on
-    /// @dev The asset must be an ERC20 token. Premiums will be paid in this asset.
+    /// @dev The asset must be an ERC20 token. Rewards will be paid in this asset.
     /// @return asset The asset address.
     function asset() external view returns (address);
 
