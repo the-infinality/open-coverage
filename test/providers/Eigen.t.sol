@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {console} from "forge-std/console.sol";
 import {EigenTestDeployer} from "../utils/EigenTestDeployer.sol";
 import {CoveragePosition, Refundable} from "src/interfaces/ICoverageProvider.sol";
 import {CreatePositionAddtionalData} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
