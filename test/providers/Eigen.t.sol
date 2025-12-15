@@ -21,6 +21,8 @@ import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {UniswapV4PoolInfo, SwapParams, SwapEngine} from "src/mixins/AssetPriceOracleAndSwapper.sol";
 import {MockPriceOracle} from "../utils/MockPriceOracle.sol";
 
+import {CoverageClaim, CoverageClaimStatus} from "src/interfaces/ICoverageProvider.sol";
+
 contract EigenTest is EigenTestDeployer {
     IEigenOperatorProxy public operator;
     MockPriceOracle public mockPriceOracle;
@@ -192,6 +194,13 @@ contract EigenTest is EigenTestDeployer {
         vm.prank(address(coverageAgent));
         uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
         assertEq(claimId, 0);
+
+        CoverageClaim memory claim = eigenCoverageProvider.claim(claimId);
+        assertEq(claim.amount, 1000e6);
+        assertEq(claim.duration, 30 days);
+        assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Issued));
+        assertEq(claim.reward, 10e6);
+        assertEq(claim.positionId, positionId);
     }
 
     function test_RevertWhen_claimPosition_insufficientCoverageOnClaim() public {

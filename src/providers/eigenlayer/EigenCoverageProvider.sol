@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {NotImplemented} from "./Errors.sol";
 import {ERC20} from "@openzeppelin-v5/contracts/token/ERC20/ERC20.sol";
 import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/EnumerableMap.sol";
 import {UUPSUpgradeable} from "@openzeppelin-v5/contracts/proxy/utils/UUPSUpgradeable.sol";
@@ -183,11 +184,21 @@ contract EigenCoverageProvider is AssetPriceOracleAndSwapper, IEigenServiceManag
                 reward: reward
             })
         );
+
+        // TODO: Rewards Logic
+
+        // IF refundable is None, then distribute reward to coverage agent straight away
+        // IF refundable is TimeWeighted, then operator must capture rewards manually or they will be transferring
+        // autoamtically on slash.
+        // IF refundable is Full, then the rewards will only be distributed on completion of the claim, or slashing.
+
+        emit ClaimIssued(positionId, claimId, amount, duration);
     }
 
     /// @inheritdoc ICoverageProvider
-    function liquidateClaim(uint256 claimId) external {
+    function liquidateClaim(uint256) pure external {
         //TODO: Implement liquidateClaim
+        revert NotImplemented();
     }
 
     /// @inheritdoc ICoverageProvider
