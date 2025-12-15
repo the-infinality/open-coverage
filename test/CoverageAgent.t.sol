@@ -114,16 +114,20 @@ contract MockCoverageProvider is ICoverageProvider {
         }
     }
 
-    function totalCoverageByAgent(address coverageAgent) external view override returns (uint256 amount) {
-        return _totalCoverageByAgent[coverageAgent];
-    }
-
     function position(uint256 positionId) external view override returns (CoveragePosition memory) {
         return _positions[positionId];
     }
 
+    function positionMaxAmount(uint256) external pure override returns (uint256) {
+        return 1000e6;
+    }
+
     function claim(uint256 claimId) external view override returns (CoverageClaim memory) {
         return _claims[claimId];
+    }
+
+    function claimDeficit(uint256) external pure override returns (uint256) {
+        return 0;
     }
 }
 

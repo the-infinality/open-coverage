@@ -76,7 +76,7 @@ interface ICoverageProvider {
     error MinRateInvalid(uint16 minRate);
     error NotCoverageAgent(address caller, address required);
     error InsufficientReward(uint256 minimumReward, uint256 reward);
-    error InsufficientCoverageAvailable(uint256 totalRequiredCoverage, uint256 totalAvailableCoverage);
+    error InsufficientCoverageAvailable(uint256 deficit);
 
     /// ============ Hooks ============
 
@@ -138,18 +138,24 @@ interface ICoverageProvider {
 
     /// ============ Discovery ============
 
-    /// @notice Get the amount of the delegation for a given coverage agent.
-    /// @param coverageAgent The target of the delegation.
-    /// @return amount Total coverage issued to an agent.
-    function totalCoverageByAgent(address coverageAgent) external view returns (uint256 amount);
-
     /// @notice Get the coverage position for a given coverage id.
     /// @param positionId The position id to get the position for.
     /// @return position The coverage position.
     function position(uint256 positionId) external view returns (CoveragePosition memory position);
 
+    /// @notice Get the maximum amount of coverage available for a given position.
+    /// @param positionId The position id to get the maximum amount for.
+    /// @return maxAmount The maximum amount of coverage for the position.
+    function positionMaxAmount(uint256 positionId) external view returns (uint256 maxAmount);
+
     /// @notice Get the coverage claim for a given claim id.
     /// @param claimId The claim id
     /// @return claim The coverage claim.
     function claim(uint256 claimId) external view returns (CoverageClaim memory claim);
+
+    /// @notice Check if a claim is covered.
+    /// @dev If the deficit is anything above 0 the claim should be considered for liquidation.
+    /// @param claimId The claim id to check if it is covered.
+    /// @return deficit The deficit of coverage for the claim.
+    function claimDeficit(uint256 claimId) external view returns (uint256 deficit);
 }

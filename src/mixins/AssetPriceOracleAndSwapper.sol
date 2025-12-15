@@ -80,7 +80,12 @@ abstract contract AssetPriceOracleAndSwapper {
         if (asset1 == address(0) || asset2 == address(0)) revert InvalidAssetPair();
 
         AssetPair memory _assetPair =
-            AssetPair({priceOracle: priceOracle, asset1: asset1, asset2: asset2, swapParams: swapParams});
+            AssetPair({
+                priceOracle: priceOracle, 
+                asset1: asset1, 
+                asset2: asset2, 
+                swapParams: swapParams
+            });
 
         assetPairs[keccak256(abi.encode(asset1, asset2))] = _assetPair;
 

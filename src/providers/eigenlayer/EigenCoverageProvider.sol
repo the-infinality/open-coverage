@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {ERC20} from "@openzeppelin-v5/contracts/token/ERC20/ERC20.sol";
 import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/EnumerableMap.sol";
 import {UUPSUpgradeable} from "@openzeppelin-v5/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {OwnableUpgradeable} from "@openzeppelin-v5/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -166,32 +167,18 @@ contract EigenCoverageProvider is AssetPriceOracleAndSwapper, IEigenServiceManag
         EigenCoveragePosition storage positionData = positions[positionId];
         if(msg.sender != positionData.data.coverageAgent) revert NotCoverageAgent(msg.sender, positionData.data.coverageAgent);
 
-        // Check whether the rewards meets the minimum reward rate
-        uint256 minimumReward = (amount * positionData.data.minRate * duration) / (10000 * 365 days);
-        if(minimumReward > reward) revert InsufficientReward(minimumReward, reward);
+        _validateReward(amount, positionData.data.minRate, duration, reward);
 
-        // Add the total coverage to the operator's strategy by coverage agent for tracking coverage obligations.
         address strategy = assetToStrategy[positionData.data.asset];
-        operators[positionData.operator].coverageStrategies[strategy].set(
-            positionData.data.coverageAgent, 
-            operators[positionData.operator].coverageStrategies[strategy].get(positionData.data.coverageAgent) + amount
-        );
-
-        // Check to see whether the operator has enough coverage available to cover the claim.
-        if(_totalAllocatedOperatorStrategyToCoverageAgent(positionData.operator, strategy, positionData.data.coverageAgent) < 
-            _totalCoverageByOperatorStrategy(positionData.operator, strategy)) {
-            revert InsufficientCoverageAvailable(
-                _totalCoverageByOperatorStrategy(positionData.operator, strategy), 
-                _totalAllocatedOperatorStrategyToCoverageAgent(positionData.operator, strategy, positionData.data.coverageAgent)
-            );
-        }
+        _updateCoverageMap(positionData.operator, strategy, positionData.data.coverageAgent, amount);
+        _checkCoverage(positionData.operator, strategy, positionData.data.coverageAgent);
 
         claimId = claims.length;
         claims.push(
             CoverageClaim({
-                positionId: positionId, 
-                amount: amount, 
-                duration: duration, 
+                positionId: positionId,
+                amount: amount,
+                duration: duration,
                 status: CoverageClaimStatus.Issued,
                 reward: reward
             })
@@ -217,18 +204,30 @@ contract EigenCoverageProvider is AssetPriceOracleAndSwapper, IEigenServiceManag
     }
 
     /// @inheritdoc ICoverageProvider
-    function totalCoverageByAgent(address coverageAgent) external view returns (uint256 amount) {
-        //TODO: Implement totalCoverageByAgent
-    }
-
-    /// @inheritdoc ICoverageProvider
     function position(uint256 positionId) external view returns (CoveragePosition memory) {
         return positions[positionId].data;
     }
 
     /// @inheritdoc ICoverageProvider
+    function positionMaxAmount(uint256 positionId) external view returns (uint256 maxAmount) {
+        EigenCoveragePosition memory _position = positions[positionId];
+
+        uint256 allocatedCoverage = _totalAllocatedValueToCoverageAgent(_position.operator, _position.strategy, _position.data.coverageAgent);
+        uint256 totalCoverageByOperator = _totalCoverageByOperatorStrategy(_position.operator, _position.strategy, _position.data.coverageAgent);
+        if(allocatedCoverage > totalCoverageByOperator) {
+            maxAmount = allocatedCoverage - totalCoverageByOperator;
+        }
+    }
+
+    /// @inheritdoc ICoverageProvider
     function claim(uint256 claimId) external view returns (CoverageClaim memory data) {
-        //TODO: Implement claim
+        return claims[claimId];
+    }
+
+    /// @inheritdoc ICoverageProvider
+    function claimDeficit(uint256 claimId) external view returns (uint256 deficit) {
+        EigenCoveragePosition memory _position = positions[claims[claimId].positionId];
+        return _coverageDeficitAmount(_position.operator, _position.strategy, _position.data.coverageAgent);
     }
 
     // ============ IEigenServiceManager implementations ============ //
@@ -265,6 +264,11 @@ contract EigenCoverageProvider is AssetPriceOracleAndSwapper, IEigenServiceManag
         return _eigenAddresses;
     }
 
+    /// @inheritdoc IEigenServiceManager
+    function coverageAllocated(address operator, address strategy, address coverageAgent) external view returns (uint256) {
+        return _totalAllocatedValueToCoverageAgent(operator, strategy, coverageAgent);
+    }
+
     /// ============ Internal functions ============ //
 
     /// @notice Updates the metadata URI for the AVS
@@ -273,21 +277,73 @@ contract EigenCoverageProvider is AssetPriceOracleAndSwapper, IEigenServiceManag
         IAllocationManager(_eigenAddresses.allocationManager).updateAVSMetadataURI(address(this), _metadataUri);
     }
 
-    function _totalCoverageByOperatorStrategy(address operator, address strategy) private view returns (uint256 total) {
-        for (uint256 i = 0; i < operators[operator].coverageStrategies[strategy].length(); i++) {
-            (address key, uint256 value) = operators[operator].coverageStrategies[strategy].at(i);
-            total += quote(value, ICoverageAgent(key).asset(), address(IStrategy(strategy).underlyingToken()));
+    /// @notice Validates that the reward meets the minimum rate requirement
+    function _validateReward(uint256 amount, uint16 minRate, uint256 duration, uint256 reward) private pure {
+        uint256 minimumReward = (amount * minRate * duration) / (10000 * 365 days);
+        if(minimumReward > reward) revert InsufficientReward(minimumReward, reward);
+    }
+
+    /// @notice Updates the operator's coverage tracking map for a strategy and coverage agent
+    function _updateCoverageMap(address operator, address strategy, address coverageAgent, uint256 amount) private {
+        EnumerableMap.AddressToUintMap storage coverageMap = operators[operator].coverageStrategies[strategy];
+
+        // Get the current value, or 0 if the key doesn't exist
+        (bool exists, uint256 currentValue) = coverageMap.tryGet(coverageAgent);
+        uint256 newValue = (exists ? currentValue : 0) + amount;
+
+        coverageMap.set(coverageAgent, newValue);
+    }
+
+    /// @notice Checks if the operator has sufficient coverage available for the coverage agent
+    /// @dev Reverts only if the operator does not have enough allocated to safely cover the agent.
+    function _checkCoverage(address operator, address strategy, address coverageAgent) private view {
+        uint256 deficit = _coverageDeficitAmount(operator, strategy, coverageAgent);
+        // Check to see if agent has a deficit of coverage
+        if(deficit > 0) {
+            revert InsufficientCoverageAvailable(
+                deficit
+            );
         }
     }
 
-    function _totalAllocatedOperatorStrategyToCoverageAgent(address operator, address strategy, address coverageAgent) private view returns (uint256 total) {
+    function _coverageDeficitAmount(address operator, address strategy, address coverageAgent) private view returns (uint256 deficit) {
+        uint256 totalAllocatedCoverage = _totalAllocatedValueToCoverageAgent(operator, strategy, coverageAgent);
+        uint256 totalCoverageByOperator = _totalCoverageByOperatorStrategy(operator, strategy, coverageAgent);
+
+        if(totalAllocatedCoverage < totalCoverageByOperator) {
+            deficit = totalCoverageByOperator - totalAllocatedCoverage;
+        }
+    }
+
+    /// @notice Returns the total coverage by an operator for a strategy in the operators asset
+    function _totalCoverageByOperatorStrategy(address operator, address strategy, address coverageAgent) private view returns (uint256) {
+        (bool exists, uint256 value) = operators[operator].coverageStrategies[strategy].tryGet(coverageAgent);
+        if(exists) {
+            return value;
+        }
+        return 0;
+    }
+
+    /// @notice Returns the total coverage allocated to a coverage agent for a strategy in the operators asset
+    function _totalAllocatedValueToCoverageAgent(address operator, address strategy, address coverageAgent) private view returns (uint256 total) {
         address[] memory _operators = new address[](1);
         _operators[0] = operator;
         IStrategy[] memory strategies = new IStrategy[](1);
         strategies[0] = IStrategy(strategy);
+        address strategyAsset = address(IStrategy(strategy).underlyingToken());
+        address coverageAsset = address(ICoverageAgent(coverageAgent).asset());
         uint256[][] memory allocatedStake = IAllocationManager(_eigenAddresses.allocationManager)
             .getAllocatedStake(OperatorSet({avs: address(this), id: coverageAgentToOperatorSetId[coverageAgent]}), _operators, strategies);
-        return allocatedStake[0][0];
+        uint256 quotedPrice = quote(allocatedStake[0][0], strategyAsset, coverageAsset);
+
+        uint8 strategyDecimals = ERC20(strategyAsset).decimals();
+        uint8 coverageDecimals = ERC20(coverageAsset).decimals();
+
+        if(strategyDecimals > coverageDecimals) {
+            return quotedPrice / (10 ** (strategyDecimals - coverageDecimals));
+        } else {
+            return quotedPrice * (10 ** (coverageDecimals - strategyDecimals));
+        }
     }
 
     function _registerPosition(

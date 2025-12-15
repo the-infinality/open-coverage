@@ -5,7 +5,6 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {TestDeployer} from "test/utils/TestDeployer.sol";
 import {
     AssetPriceOracleAndSwapper,
-    IPriceOracle,
     SwapEngine,
     SwapParams,
     UniswapV4PoolInfo
@@ -15,24 +14,7 @@ import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-
-contract MockPriceOracle is IPriceOracle {
-    function name() external pure returns (string memory) {
-        return "MockPriceOracle";
-    }
-
-    function getQuote(uint256 amountIn, address, address) external pure returns (uint256) {
-        return amountIn;
-    }
-
-    function getQuotes(uint256 amountIn, address, address)
-        external
-        pure
-        returns (uint256 bidOutAmount, uint256 askOutAmount)
-    {
-        return (amountIn, amountIn);
-    }
-}
+import {MockPriceOracle} from "../utils/MockPriceOracle.sol";
 
 contract MockContract is AssetPriceOracleAndSwapper, Initializable {
     constructor() {}
@@ -65,7 +47,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
             uniswapAddressBook.uniswapAddresses.universalRouter, 
             uniswapAddressBook.uniswapAddresses.permit2
         );
-        mockPriceOracle = new MockPriceOracle();
+        mockPriceOracle = new MockPriceOracle(1e18, USDC, USDT);
 
         // Add V4 pool
         PoolKey memory poolKey = PoolKey({
