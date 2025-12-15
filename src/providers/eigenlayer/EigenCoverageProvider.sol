@@ -38,7 +38,13 @@ import {AssetPriceOracleAndSwapper} from "../../mixins/AssetPriceOracleAndSwappe
 /// @author p-dealwis, Infinality
 /// @notice A provider for Eigen delegations
 /// @dev Manage delegation strategies to whitelist strategies, distribute rewards and slash operators.
-contract EigenCoverageProvider is AssetPriceOracleAndSwapper, IEigenServiceManager, ICoverageProvider, UUPSUpgradeable, OwnableUpgradeable {
+contract EigenCoverageProvider is
+    AssetPriceOracleAndSwapper,
+    IEigenServiceManager,
+    ICoverageProvider,
+    UUPSUpgradeable,
+    OwnableUpgradeable
+{
     using EnumerableMap for EnumerableMap.AddressToUintMap;
 
     EigenAddresses private _eigenAddresses;
@@ -68,10 +74,7 @@ contract EigenCoverageProvider is AssetPriceOracleAndSwapper, IEigenServiceManag
         string memory _metadataURI,
         address universalRouter_,
         address permit2_
-    )
-        external
-        initializer
-    {
+    ) external initializer {
         __Ownable_init(_owner);
         __AssetPriceOracleAndSwapper_init(universalRouter_, permit2_);
         _eigenAddresses = eigenAddresses_;
@@ -124,7 +127,9 @@ contract EigenCoverageProvider is AssetPriceOracleAndSwapper, IEigenServiceManag
                 IAllocationManager.modifyAllocations.selector
             )) revert NotOperatorAuthorized(createPositionAddtionalData.operator, msg.sender);
 
-        if(!strategyWhitelist[createPositionAddtionalData.strategy]) revert StrategyNotWhitelisted(createPositionAddtionalData.strategy);
+        if (!strategyWhitelist[createPositionAddtionalData.strategy]) {
+            revert StrategyNotWhitelisted(createPositionAddtionalData.strategy);
+        }
 
         if (address(IStrategy(createPositionAddtionalData.strategy).underlyingToken()) != data.asset) {
             revert InvalidAsset(createPositionAddtionalData.strategy, data.asset);
@@ -149,9 +154,7 @@ contract EigenCoverageProvider is AssetPriceOracleAndSwapper, IEigenServiceManag
         EigenCoveragePosition storage positionData = positions[positionId];
 
         if (!_checkOperatorPermissions(
-                positionData.operator,
-                _eigenAddresses.allocationManager,
-                IAllocationManager.modifyAllocations.selector
+                positionData.operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector
             )) revert NotOperatorAuthorized(positionData.operator, msg.sender);
 
         positions[positionId].data.expiryTimestamp = block.timestamp;
@@ -159,14 +162,14 @@ contract EigenCoverageProvider is AssetPriceOracleAndSwapper, IEigenServiceManag
     }
 
     /// @inheritdoc ICoverageProvider
-    function claimCoverage(
-        uint256 positionId,
-        uint256 amount,
-        uint256 duration,
-        uint256 reward
-    ) external returns (uint256 claimId) {
+    function claimCoverage(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
+        external
+        returns (uint256 claimId)
+    {
         EigenCoveragePosition storage positionData = positions[positionId];
-        if(msg.sender != positionData.data.coverageAgent) revert NotCoverageAgent(msg.sender, positionData.data.coverageAgent);
+        if (msg.sender != positionData.data.coverageAgent) {
+            revert NotCoverageAgent(msg.sender, positionData.data.coverageAgent);
+        }
 
         _validateReward(amount, positionData.data.minRate, duration, reward);
 
@@ -196,7 +199,7 @@ contract EigenCoverageProvider is AssetPriceOracleAndSwapper, IEigenServiceManag
     }
 
     /// @inheritdoc ICoverageProvider
-    function liquidateClaim(uint256) pure external {
+    function liquidateClaim(uint256) external pure {
         //TODO: Implement liquidateClaim
         revert NotImplemented();
     }
@@ -223,9 +226,11 @@ contract EigenCoverageProvider is AssetPriceOracleAndSwapper, IEigenServiceManag
     function positionMaxAmount(uint256 positionId) external view returns (uint256 maxAmount) {
         EigenCoveragePosition memory _position = positions[positionId];
 
-        uint256 allocatedCoverage = _totalAllocatedValueToCoverageAgent(_position.operator, _position.strategy, _position.data.coverageAgent);
-        uint256 totalCoverageByOperator = _totalCoverageByOperatorStrategy(_position.operator, _position.strategy, _position.data.coverageAgent);
-        if(allocatedCoverage > totalCoverageByOperator) {
+        uint256 allocatedCoverage =
+            _totalAllocatedValueToCoverageAgent(_position.operator, _position.strategy, _position.data.coverageAgent);
+        uint256 totalCoverageByOperator =
+            _totalCoverageByOperatorStrategy(_position.operator, _position.strategy, _position.data.coverageAgent);
+        if (allocatedCoverage > totalCoverageByOperator) {
             maxAmount = allocatedCoverage - totalCoverageByOperator;
         }
     }
@@ -251,9 +256,10 @@ contract EigenCoverageProvider is AssetPriceOracleAndSwapper, IEigenServiceManag
 
     /// @inheritdoc IEigenServiceManager
     function setStrategyWhitelist(address strategyAddress, bool whitelisted) external onlyOwner {
-        if(assetToStrategy[address(IStrategy(strategyAddress).underlyingToken())] != address(0)) 
+        if (assetToStrategy[address(IStrategy(strategyAddress).underlyingToken())] != address(0)) {
             revert StrategyAssetAlreadyRegistered(address(IStrategy(strategyAddress).underlyingToken()));
-        if(whitelisted) {
+        }
+        if (whitelisted) {
             assetToStrategy[address(IStrategy(strategyAddress).underlyingToken())] = strategyAddress;
         } else {
             delete assetToStrategy[address(IStrategy(strategyAddress).underlyingToken())];
@@ -276,7 +282,11 @@ contract EigenCoverageProvider is AssetPriceOracleAndSwapper, IEigenServiceManag
     }
 
     /// @inheritdoc IEigenServiceManager
-    function coverageAllocated(address operator, address strategy, address coverageAgent) external view returns (uint256) {
+    function coverageAllocated(address operator, address strategy, address coverageAgent)
+        external
+        view
+        returns (uint256)
+    {
         return _totalAllocatedValueToCoverageAgent(operator, strategy, coverageAgent);
     }
 
@@ -291,7 +301,7 @@ contract EigenCoverageProvider is AssetPriceOracleAndSwapper, IEigenServiceManag
     /// @notice Validates that the reward meets the minimum rate requirement
     function _validateReward(uint256 amount, uint16 minRate, uint256 duration, uint256 reward) private pure {
         uint256 minimumReward = (amount * minRate * duration) / (10000 * 365 days);
-        if(minimumReward > reward) revert InsufficientReward(minimumReward, reward);
+        if (minimumReward > reward) revert InsufficientReward(minimumReward, reward);
     }
 
     /// @notice Updates the operator's coverage tracking map for a strategy and coverage agent
@@ -310,33 +320,43 @@ contract EigenCoverageProvider is AssetPriceOracleAndSwapper, IEigenServiceManag
     function _checkCoverage(address operator, address strategy, address coverageAgent) private view {
         uint256 deficit = _coverageDeficitAmount(operator, strategy, coverageAgent);
         // Check to see if agent has a deficit of coverage
-        if(deficit > 0) {
-            revert InsufficientCoverageAvailable(
-                deficit
-            );
+        if (deficit > 0) {
+            revert InsufficientCoverageAvailable(deficit);
         }
     }
 
-    function _coverageDeficitAmount(address operator, address strategy, address coverageAgent) private view returns (uint256 deficit) {
+    function _coverageDeficitAmount(address operator, address strategy, address coverageAgent)
+        private
+        view
+        returns (uint256 deficit)
+    {
         uint256 totalAllocatedCoverage = _totalAllocatedValueToCoverageAgent(operator, strategy, coverageAgent);
         uint256 totalCoverageByOperator = _totalCoverageByOperatorStrategy(operator, strategy, coverageAgent);
 
-        if(totalAllocatedCoverage < totalCoverageByOperator) {
+        if (totalAllocatedCoverage < totalCoverageByOperator) {
             deficit = totalCoverageByOperator - totalAllocatedCoverage;
         }
     }
 
     /// @notice Returns the total coverage by an operator for a strategy in the operators asset
-    function _totalCoverageByOperatorStrategy(address operator, address strategy, address coverageAgent) private view returns (uint256) {
+    function _totalCoverageByOperatorStrategy(address operator, address strategy, address coverageAgent)
+        private
+        view
+        returns (uint256)
+    {
         (bool exists, uint256 value) = operators[operator].coverageStrategies[strategy].tryGet(coverageAgent);
-        if(exists) {
+        if (exists) {
             return value;
         }
         return 0;
     }
 
     /// @notice Returns the total coverage allocated to a coverage agent for a strategy in the operators asset
-    function _totalAllocatedValueToCoverageAgent(address operator, address strategy, address coverageAgent) private view returns (uint256 total) {
+    function _totalAllocatedValueToCoverageAgent(address operator, address strategy, address coverageAgent)
+        private
+        view
+        returns (uint256 total)
+    {
         address[] memory _operators = new address[](1);
         _operators[0] = operator;
         IStrategy[] memory strategies = new IStrategy[](1);
@@ -344,13 +364,17 @@ contract EigenCoverageProvider is AssetPriceOracleAndSwapper, IEigenServiceManag
         address strategyAsset = address(IStrategy(strategy).underlyingToken());
         address coverageAsset = address(ICoverageAgent(coverageAgent).asset());
         uint256[][] memory allocatedStake = IAllocationManager(_eigenAddresses.allocationManager)
-            .getAllocatedStake(OperatorSet({avs: address(this), id: coverageAgentToOperatorSetId[coverageAgent]}), _operators, strategies);
+            .getAllocatedStake(
+                OperatorSet({avs: address(this), id: coverageAgentToOperatorSetId[coverageAgent]}),
+                _operators,
+                strategies
+            );
         uint256 quotedPrice = quote(allocatedStake[0][0], strategyAsset, coverageAsset);
 
         uint8 strategyDecimals = ERC20(strategyAsset).decimals();
         uint8 coverageDecimals = ERC20(coverageAsset).decimals();
 
-        if(strategyDecimals > coverageDecimals) {
+        if (strategyDecimals > coverageDecimals) {
             return quotedPrice / (10 ** (strategyDecimals - coverageDecimals));
         } else {
             return quotedPrice * (10 ** (coverageDecimals - strategyDecimals));

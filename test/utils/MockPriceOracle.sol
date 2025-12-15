@@ -35,9 +35,9 @@ contract MockPriceOracle is IPriceOracle {
     }
 
     function multiply(uint256 amount, address base_) private view returns (uint256) {
-        if(base_ == asset1) {
+        if (base_ == asset1) {
             return amount * (multiplier / 1e18);
-        } else if(base_ == asset2) {
+        } else if (base_ == asset2) {
             return amount * 1e18 / multiplier;
         } else {
             revert("Invalid asset");

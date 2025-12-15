@@ -58,5 +58,8 @@ interface IEigenServiceManager {
     /// @param strategy The strategy to get the coverage allocated for
     /// @param coverageAgent The coverage agent to get the coverage allocated for
     /// @return coverageAllocated The coverage allocated in the units of the coverage agent's asset
-    function coverageAllocated(address operator, address strategy, address coverageAgent) external view returns (uint256);
+    function coverageAllocated(address operator, address strategy, address coverageAgent)
+        external
+        view
+        returns (uint256);
 }

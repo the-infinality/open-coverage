@@ -110,12 +110,9 @@ interface ICoverageProvider {
     /// @param duration The duration of the coverage to claim.
     /// @param reward The amount of the coverage reward to pay.
     /// @return claimId ID of the coverage claim on success.
-    function claimCoverage(
-        uint256 positionId,
-        uint256 amount,
-        uint256 duration,
-        uint256 reward
-    ) external returns (uint256 claimId);
+    function claimCoverage(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
+        external
+        returns (uint256 claimId);
 
     /// @notice Liquidate a coverage claim if it doesn't meet its obligations.
     /// @dev This should be called by the coverage agent if the coverage position doesn't meet its obligations.

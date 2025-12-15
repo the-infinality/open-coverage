@@ -20,7 +20,6 @@ import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {UniswapV4PoolInfo, SwapParams, SwapEngine} from "src/mixins/AssetPriceOracleAndSwapper.sol";
 import {MockPriceOracle} from "../utils/MockPriceOracle.sol";
-
 import {CoverageClaim, CoverageClaimStatus} from "src/interfaces/ICoverageProvider.sol";
 
 contract EigenTest is EigenTestDeployer {
@@ -39,20 +38,18 @@ contract EigenTest is EigenTestDeployer {
     }
 
     function _stakeAndDelegateToOperator(uint256 stakeAmount) internal {
-                vm.startPrank(staker);
+        vm.startPrank(staker);
         IStrategyManager strategyManager = _getStrategyManager();
-        
+
         // Approve strategy to spend tokens
         _getTestStrategy().underlyingToken().approve(address(strategyManager), stakeAmount);
-        
+
         // Deposit into strategy
         strategyManager.depositIntoStrategy(_getTestStrategy(), _getTestStrategy().underlyingToken(), stakeAmount);
 
         // Delegate to operator (empty signature since no delegationApprover)
-        ISignatureUtilsMixinTypes.SignatureWithExpiry memory emptySignature = ISignatureUtilsMixinTypes.SignatureWithExpiry({
-            signature: "",
-            expiry: 0
-        });
+        ISignatureUtilsMixinTypes.SignatureWithExpiry memory emptySignature =
+            ISignatureUtilsMixinTypes.SignatureWithExpiry({signature: "", expiry: 0});
         _getDelegationManager().delegateTo(address(operator), emptySignature, bytes32(0));
 
         vm.stopPrank();
@@ -79,7 +76,7 @@ contract EigenTest is EigenTestDeployer {
 
         mockPriceOracle = new MockPriceOracle(100000e18, cbBTC, USDC);
 
-                // Add V4 pool
+        // Add V4 pool
         PoolKey memory poolKey = PoolKey({
             currency0: Currency.wrap(cbBTC),
             currency1: Currency.wrap(USDC),
@@ -223,12 +220,13 @@ contract EigenTest is EigenTestDeployer {
         );
         uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
 
-        uint256 coverageAllocated = eigenCoverageProvider.coverageAllocated(address(operator), address(_getTestStrategy()), address(coverageAgent));
+        uint256 coverageAllocated = eigenCoverageProvider.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
 
-        vm.expectRevert(abi.encodeWithSelector(
-            ICoverageProvider.InsufficientCoverageAvailable.selector,
-            1000e6 - coverageAllocated
-        ));
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.InsufficientCoverageAvailable.selector, 1000e6 - coverageAllocated)
+        );
         vm.prank(address(coverageAgent));
         eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
     }
@@ -252,7 +250,9 @@ contract EigenTest is EigenTestDeployer {
 
         uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
         vm.prank(staker);
-        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.NotCoverageAgent.selector, staker, address(coverageAgent)));
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.NotCoverageAgent.selector, staker, address(coverageAgent))
+        );
         eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
     }
 

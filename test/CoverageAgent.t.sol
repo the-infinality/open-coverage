@@ -199,7 +199,7 @@ contract CoverageAgentTest is TestDeployer, UniswapHelper {
         // Verify handler is set correctly by testing access control
         // Handler (address(this)) should be able to register providers
         coverageAgent.registerCoverageProvider(address(mockProvider));
-        
+
         // Non-handler should not be able to register providers
         vm.prank(nonHandler);
         vm.expectRevert(NotCoverageAgentHandler.selector);

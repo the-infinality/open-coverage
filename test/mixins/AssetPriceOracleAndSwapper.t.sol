@@ -19,13 +19,8 @@ import {MockPriceOracle} from "../utils/MockPriceOracle.sol";
 contract MockContract is AssetPriceOracleAndSwapper, Initializable {
     constructor() {}
 
-    function initialize(
-        address universalRouter_,
-        address permit2_
-    ) public initializer {
-        __AssetPriceOracleAndSwapper_init(
-            universalRouter_, permit2_
-        );
+    function initialize(address universalRouter_, address permit2_) public initializer {
+        __AssetPriceOracleAndSwapper_init(universalRouter_, permit2_);
     }
 }
 
@@ -44,8 +39,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
 
         mockContract = new MockContract();
         mockContract.initialize(
-            uniswapAddressBook.uniswapAddresses.universalRouter, 
-            uniswapAddressBook.uniswapAddresses.permit2
+            uniswapAddressBook.uniswapAddresses.universalRouter, uniswapAddressBook.uniswapAddresses.permit2
         );
         mockPriceOracle = new MockPriceOracle(1e18, USDC, USDT);
 
