@@ -82,6 +82,7 @@ contract MockCoverageProvider is ICoverageProvider {
             positionId: positionId,
             amount: amount,
             duration: duration,
+            createdAt: block.timestamp,
             status: CoverageClaimStatus.Issued,
             reward: reward
         });

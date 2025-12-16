@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {NotImplemented} from "./Errors.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20} from "@openzeppelin-v5/contracts/token/ERC20/ERC20.sol";
 import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/EnumerableMap.sol";
 import {UUPSUpgradeable} from "@openzeppelin-v5/contracts/proxy/utils/UUPSUpgradeable.sol";
@@ -10,6 +11,9 @@ import {IAllocationManager, IAllocationManagerTypes} from "eigenlayer-contracts/
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
 import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
 import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermissionController.sol";
+import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
+import {IRewardsCoordinatorTypes} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
+import {Refundable} from "src/interfaces/ICoverageProvider.sol";
 
 import {EigenAddresses} from "./Types.sol";
 import {
@@ -33,6 +37,11 @@ import {
 } from "../../interfaces/ICoverageProvider.sol";
 import {ICoverageAgent} from "../../interfaces/ICoverageAgent.sol";
 import {AssetPriceOracleAndSwapper} from "../../mixins/AssetPriceOracleAndSwapper.sol";
+
+struct ClaimRewardDistribution {
+    uint256 amount;
+    uint32 lastDistributedTimestamp;
+}
 
 /// @title EigenCoverageProvider
 /// @author p-dealwis, Infinality
@@ -60,6 +69,9 @@ contract EigenCoverageProvider is
     mapping(address => address) public assetToStrategy;
 
     mapping(address => OperatorData) public operators;
+
+    /// @notice The amount of reward distributed to the operator for a given claim
+    mapping(uint256 claimId => ClaimRewardDistribution) public claimRewardDistributions;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -171,7 +183,12 @@ contract EigenCoverageProvider is
             revert NotCoverageAgent(msg.sender, positionData.data.coverageAgent);
         }
 
-        _validateReward(amount, positionData.data.minRate, duration, reward);
+        _validatePosition(positionData.data, amount, duration, reward);
+
+        // Capture rewards funds from covereage agent
+        bool success = IERC20(ICoverageAgent(positionData.data.coverageAgent).asset())
+            .transferFrom(msg.sender, address(this), reward);
+        if (!success) revert RewardTransferFailed();
 
         address strategy = assetToStrategy[positionData.data.asset];
         _updateCoverageMap(positionData.operator, strategy, positionData.data.coverageAgent, amount);
@@ -183,17 +200,17 @@ contract EigenCoverageProvider is
                 positionId: positionId,
                 amount: amount,
                 duration: duration,
+                createdAt: block.timestamp,
                 status: CoverageClaimStatus.Issued,
                 reward: reward
             })
         );
 
-        // TODO: Rewards Logic
-
-        // IF refundable is None, then distribute reward to coverage agent straight away
-        // IF refundable is TimeWeighted, then operator must capture rewards manually or they will be transferring
-        // autoamtically on slash.
-        // IF refundable is Full, then the rewards will only be distributed on completion of the claim, or slashing.
+        // Initialize the claim reward distribution
+        if (positionData.data.refundable != Refundable.Full) {
+            claimRewardDistributions[claimId] =
+                ClaimRewardDistribution({amount: 0, lastDistributedTimestamp: uint32(block.timestamp)});
+        }
 
         emit ClaimIssued(positionId, claimId, amount, duration);
     }
@@ -244,6 +261,70 @@ contract EigenCoverageProvider is
     function claimDeficit(uint256 claimId) external view returns (uint256 deficit) {
         EigenCoveragePosition memory _position = positions[claims[claimId].positionId];
         return _coverageDeficitAmount(_position.operator, _position.strategy, _position.data.coverageAgent);
+    }
+
+    /// @inheritdoc IEigenServiceManager
+    function captureRewards(uint256 claimId)
+        public
+        returns (uint256 amount, uint32 duration, uint32 distributionStartTime)
+    {
+        IRewardsCoordinator rewardsCoordinator = IRewardsCoordinator(_eigenAddresses.rewardsCoordinator);
+
+        CoverageClaim memory _claim = claims[claimId];
+        EigenCoveragePosition memory _position = positions[_claim.positionId];
+        ClaimRewardDistribution memory _claimRewardDistribution = claimRewardDistributions[claimId];
+
+        uint32 calculationInterval = rewardsCoordinator.CALCULATION_INTERVAL_SECONDS();
+        distributionStartTime =
+            uint32(_claimRewardDistribution.lastDistributedTimestamp / calculationInterval) * calculationInterval;
+
+        duration = uint32(
+            min(
+                min(block.timestamp - distributionStartTime, rewardsCoordinator.MAX_REWARDS_DURATION()),
+                _claim.duration + _claim.createdAt - distributionStartTime
+            ) / calculationInterval * calculationInterval
+        );
+
+        if (duration == 0) {
+            return (0, 0, distributionStartTime);
+        }
+
+        if (_position.data.refundable == Refundable.TimeWeighted || _position.data.refundable == Refundable.None) {
+            uint256 claimableReward =
+                min(block.timestamp - _claim.createdAt, _claim.duration) * _claim.reward / _claim.duration;
+            amount = claimableReward - _claimRewardDistribution.amount;
+            claimRewardDistributions[claimId].amount += amount;
+            claimRewardDistributions[claimId].lastDistributedTimestamp = uint32(block.timestamp);
+        } else if (_position.data.refundable == Refundable.Full && _claim.status == CoverageClaimStatus.Completed) {
+            amount = _claim.reward;
+        } else {
+            return (0, 0, distributionStartTime);
+        }
+
+        IERC20 coverageAsset = IERC20(ICoverageAgent(_position.data.coverageAgent).asset());
+        coverageAsset.approve(address(rewardsCoordinator), amount);
+
+        IRewardsCoordinatorTypes.StrategyAndMultiplier[] memory strategiesAndMultipliers =
+            new IRewardsCoordinatorTypes.StrategyAndMultiplier[](1);
+        strategiesAndMultipliers[0] =
+            IRewardsCoordinatorTypes.StrategyAndMultiplier({strategy: IStrategy(_position.strategy), multiplier: 1});
+
+        IRewardsCoordinatorTypes.OperatorReward[] memory operatorRewards =
+            new IRewardsCoordinatorTypes.OperatorReward[](1);
+        operatorRewards[0] = IRewardsCoordinatorTypes.OperatorReward({operator: _position.operator, amount: amount});
+
+        IRewardsCoordinatorTypes.OperatorDirectedRewardsSubmission[] memory operatorDirectedRewardsSubmissions =
+            new IRewardsCoordinatorTypes.OperatorDirectedRewardsSubmission[](1);
+        operatorDirectedRewardsSubmissions[0] = IRewardsCoordinatorTypes.OperatorDirectedRewardsSubmission({
+            strategiesAndMultipliers: strategiesAndMultipliers,
+            token: coverageAsset,
+            operatorRewards: operatorRewards,
+            startTimestamp: distributionStartTime, // Start distributing from the last distributed timestamp
+            duration: duration,
+            description: "Coverage reward"
+        });
+
+        rewardsCoordinator.createOperatorDirectedAVSRewardsSubmission(address(this), operatorDirectedRewardsSubmissions);
     }
 
     // ============ IEigenServiceManager implementations ============ //
@@ -298,10 +379,31 @@ contract EigenCoverageProvider is
         IAllocationManager(_eigenAddresses.allocationManager).updateAVSMetadataURI(address(this), _metadataUri);
     }
 
-    /// @notice Validates that the reward meets the minimum rate requirement
-    function _validateReward(uint256 amount, uint16 minRate, uint256 duration, uint256 reward) private pure {
-        uint256 minimumReward = (amount * minRate * duration) / (10000 * 365 days);
+    /// @notice Returns the maximum of two uint256 values
+    /// @param a First value
+    /// @param b Second value
+    /// @return The maximum of a and b
+    function max(uint256 a, uint256 b) private pure returns (uint256) {
+        return a > b ? a : b;
+    }
+
+    /// @notice Returns the minimum of two uint32 values
+    /// @param a First value
+    /// @param b Second value
+    /// @return The minimum of a and b
+    function min(uint256 a, uint256 b) private pure returns (uint256) {
+        return a < b ? a : b;
+    }
+
+    /// @notice Validates the claim parameters meet the position requirements
+    function _validatePosition(CoveragePosition memory data, uint256 amount, uint256 duration, uint256 reward)
+        private
+        pure
+    {
+        uint256 minimumReward = (amount * data.minRate * duration) / (10000 * 365 days);
         if (minimumReward > reward) revert InsufficientReward(minimumReward, reward);
+
+        if (data.maxDuration > 0 && duration > data.maxDuration) revert DurationExceedsMax(data.maxDuration, duration);
     }
 
     /// @notice Updates the operator's coverage tracking map for a strategy and coverage agent

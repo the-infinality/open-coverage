@@ -9,11 +9,14 @@ import {CoverageAgent} from "src/CoverageAgent.sol";
 import {ERC1967Proxy} from "@openzeppelin-v5/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UpgradeableBeacon} from "@openzeppelin-v5/contracts/proxy/beacon/UpgradeableBeacon.sol";
 import {UniswapHelper, UniswapAddressbook} from "../../utils/UniswapHelper.sol";
+import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
 
 import {EigenOperatorProxy} from "src/providers/eigenlayer/EigenOperatorProxy.sol";
 
 contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
     address public eigenOperatorInstance;
+    uint32 public CALCULATION_INTERVAL_SECONDS;
+    uint32 public MAX_REWARDS_DURATION;
 
     // *** Deployed Contracts *** //
     CoverageAgent coverageAgent;
@@ -24,6 +27,10 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
 
         EigenAddressbook memory eigenAddressBook = _getAddressBook();
         UniswapAddressbook memory uniswapAddressBook = _getUniswapAddressBook();
+
+        IRewardsCoordinator rewardsCoordinator = _getRewardsCoordinator();
+        CALCULATION_INTERVAL_SECONDS = rewardsCoordinator.CALCULATION_INTERVAL_SECONDS();
+        MAX_REWARDS_DURATION = rewardsCoordinator.MAX_REWARDS_DURATION();
 
         // Deploy EigenCoverageProvider via proxy
         EigenCoverageProvider implementation = new EigenCoverageProvider();
@@ -49,5 +56,9 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
         // Deploy a instance for the upgradeable beacon proxies
         UpgradeableBeacon beacon = new UpgradeableBeacon(address(new EigenOperatorProxy()), address(this));
         eigenOperatorInstance = address(beacon);
+    }
+
+    function toRewardsInterval(uint256 timestamp) public view returns (uint32) {
+        return uint32(timestamp / CALCULATION_INTERVAL_SECONDS * CALCULATION_INTERVAL_SECONDS);
     }
 }

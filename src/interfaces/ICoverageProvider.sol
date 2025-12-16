@@ -55,6 +55,7 @@ struct CoverageClaim {
     uint256 positionId;
     uint256 amount;
     uint256 duration;
+    uint256 createdAt;
     CoverageClaimStatus status;
     uint256 reward;
 }
@@ -76,7 +77,9 @@ interface ICoverageProvider {
     error MinRateInvalid(uint16 minRate);
     error NotCoverageAgent(address caller, address required);
     error InsufficientReward(uint256 minimumReward, uint256 reward);
+    error RewardTransferFailed();
     error InsufficientCoverageAvailable(uint256 deficit);
+    error DurationExceedsMax(uint256 maxDuration, uint256 duration);
 
     /// ============ Hooks ============
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EigenTestDeployer} from "../utils/EigenTestDeployer.sol";
 import {CoveragePosition, Refundable} from "src/interfaces/ICoverageProvider.sol";
 import {CreatePositionAddtionalData} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
@@ -50,6 +51,8 @@ contract EigenTest is EigenTestDeployer {
         ISignatureUtilsMixinTypes.SignatureWithExpiry memory emptySignature =
             ISignatureUtilsMixinTypes.SignatureWithExpiry({signature: "", expiry: 0});
         _getDelegationManager().delegateTo(address(operator), emptySignature, bytes32(0));
+
+        deal(coverageAgent.asset(), address(coverageAgent), 100e6);
 
         vm.stopPrank();
     }
@@ -187,8 +190,11 @@ contract EigenTest is EigenTestDeployer {
         );
         uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
 
-        vm.prank(address(coverageAgent));
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageProvider), 10e6);
         uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+
         assertEq(claimId, 0);
 
         CoverageClaim memory claim = eigenCoverageProvider.claim(claimId);
@@ -223,10 +229,12 @@ contract EigenTest is EigenTestDeployer {
             address(operator), address(_getTestStrategy()), address(coverageAgent)
         );
 
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageProvider), 10e6);
+
         vm.expectRevert(
             abi.encodeWithSelector(ICoverageProvider.InsufficientCoverageAvailable.selector, 1000e6 - coverageAllocated)
         );
-        vm.prank(address(coverageAgent));
         eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
     }
 
@@ -274,5 +282,139 @@ contract EigenTest is EigenTestDeployer {
         );
         uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
         assertApproxEqAbs(eigenCoverageProvider.positionMaxAmount(positionId), 1000e6, 4e5);
+    }
+
+    function test_RevertWhen_claimPosition_durationExceedsMax() public {
+        _setupwithAllocations();
+
+        _stakeAndDelegateToOperator(1000e18);
+
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0)
+        });
+
+        bytes memory additionalData = abi.encode(
+            CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
+        );
+        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+
+        vm.startPrank(address(coverageAgent));
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.DurationExceedsMax.selector, 30 days, 365 days));
+        eigenCoverageProvider.claimCoverage(positionId, 1000e6, 365 days, 10e6);
+        vm.stopPrank();
+    }
+
+    function test_RevertWhen_claimPosition_insufficientReward() public {
+        _setupwithAllocations();
+
+        _stakeAndDelegateToOperator(1000e18);
+
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0)
+        });
+        bytes memory additionalData = abi.encode(
+            CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
+        );
+        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+
+        vm.startPrank(address(coverageAgent));
+        uint256 amount = 1000e6;
+        uint256 duration = 30 days;
+        uint256 minimumReward = (amount * data.minRate * duration) / (10000 * 365 days);
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.InsufficientReward.selector, minimumReward, 10));
+        eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10);
+        vm.stopPrank();
+    }
+
+    function test_captureRewards_refundableNone() public {
+        _setupwithAllocations();
+
+        _stakeAndDelegateToOperator(1000e18);
+
+        // Create the position
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0)
+        });
+        bytes memory additionalData = abi.encode(
+            CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
+        );
+        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageProvider), 10e6);
+        uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+
+        (uint256 amount, uint32 duration, uint32 distributionStartTime) = eigenCoverageProvider.captureRewards(claimId);
+        assertEq(amount, 0);
+        assertEq(duration, 0);
+        assertEq(distributionStartTime, toRewardsInterval(block.timestamp));
+
+        vm.warp(block.timestamp + 40 days);
+        (amount, duration, distributionStartTime) = eigenCoverageProvider.captureRewards(claimId);
+        assertEq(amount, 10e6);
+        assertEq(duration, 30 days);
+        assertEq(distributionStartTime, toRewardsInterval(block.timestamp - 40 days));
+    }
+
+    function test_captureRewards_refundableTimeWeighted() public {
+        _setupwithAllocations();
+
+        _stakeAndDelegateToOperator(1000e18);
+
+        // Create the position
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.TimeWeighted,
+            slashCoordinator: address(0)
+        });
+        bytes memory additionalData = abi.encode(
+            CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
+        );
+        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageProvider), 10e6);
+        uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+
+        (uint256 amount, uint32 duration, uint32 distributionStartTime) = eigenCoverageProvider.captureRewards(claimId);
+        assertEq(amount, 0);
+        assertEq(duration, 0);
+        assertEq(distributionStartTime, block.timestamp / CALCULATION_INTERVAL_SECONDS * CALCULATION_INTERVAL_SECONDS);
+
+        vm.warp(block.timestamp + 15 days);
+        (amount, duration, distributionStartTime) = eigenCoverageProvider.captureRewards(claimId);
+        assertEq(amount, 5e6);
+        assertEq(duration, 15 days);
+        assertEq(distributionStartTime, toRewardsInterval(block.timestamp - 15 days));
+
+        vm.warp(block.timestamp + 25 days);
+        (amount, duration, distributionStartTime) = eigenCoverageProvider.captureRewards(claimId);
+        assertEq(amount, 5e6);
+        assertEq(duration, 15 days);
+        assertEq(distributionStartTime, toRewardsInterval(block.timestamp - 25 days));
     }
 }
