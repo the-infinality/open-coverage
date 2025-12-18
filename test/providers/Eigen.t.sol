@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EigenTestDeployer} from "../utils/EigenTestDeployer.sol";
 import {CoveragePosition, Refundable} from "src/interfaces/ICoverageProvider.sol";
-import {CreatePositionAddtionalData} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
+import {CreatePositionAddtionalData, IEigenServiceManager} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
 import {IAllocationManager} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {IAllocationManagerTypes} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermissionController.sol";
@@ -18,7 +18,7 @@ import {ISignatureUtilsMixinTypes} from "eigenlayer-contracts/interfaces/ISignat
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
-import {UniswapV4PoolInfo, SwapParams, SwapEngine} from "src/mixins/AssetPriceOracleAndSwapper.sol";
+import {UniswapV4PoolInfo, SwapParams, SwapEngine, AssetPriceOracleAndSwapper} from "src/mixins/AssetPriceOracleAndSwapper.sol";
 import {MockPriceOracle} from "../utils/MockPriceOracle.sol";
 import {CoverageClaim, CoverageClaimStatus} from "src/interfaces/ICoverageProvider.sol";
 
@@ -27,14 +27,19 @@ contract EigenTest is EigenTestDeployer {
     MockPriceOracle public mockPriceOracle;
     address public staker;
 
+    // Cast the diamond to the interfaces for easier access
+    IEigenServiceManager eigenServiceManager;
+    ICoverageProvider eigenCoverageProvider;
+    AssetPriceOracleAndSwapper eigenPriceOracle;
+
     function _setupwithAllocations() internal {
         vm.roll(block.number + 126001);
-        operator.registerCoverageAgent(address(eigenCoverageProvider), address(coverageAgent), 0);
+        operator.registerCoverageAgent(address(eigenCoverageDiamond), address(coverageAgent), 0);
         address[] memory strategyAddresses = new address[](1);
         strategyAddresses[0] = address(_getTestStrategy());
         uint64[] memory magnitudes = new uint64[](1);
         magnitudes[0] = 1e18;
-        operator.allocate(address(eigenCoverageProvider), address(coverageAgent), strategyAddresses, magnitudes);
+        operator.allocate(address(eigenCoverageDiamond), address(coverageAgent), strategyAddresses, magnitudes);
     }
 
     function _stakeAndDelegateToOperator(uint256 stakeAmount) internal {
@@ -64,17 +69,21 @@ contract EigenTest is EigenTestDeployer {
 
         deal(cbBTC, staker, 1000e18);
 
+        // Cast diamond to interfaces
+        eigenServiceManager = IEigenServiceManager(address(eigenCoverageDiamond));
+        eigenCoverageProvider = ICoverageProvider(address(eigenCoverageDiamond));
+        eigenPriceOracle = AssetPriceOracleAndSwapper(address(eigenCoverageDiamond));
+
         operator = IEigenOperatorProxy(
             EigenProviderMethods.createOperatorProxy(
-                eigenOperatorInstance, eigenCoverageProvider.eigenAddresses(), address(this), ""
+                eigenOperatorInstance, eigenServiceManager.eigenAddresses(), address(this), ""
             )
         );
 
-        IPermissionController(eigenCoverageProvider.eigenAddresses().permissionController)
-            .acceptAdmin(address(operator));
+        IPermissionController(eigenServiceManager.eigenAddresses().permissionController).acceptAdmin(address(operator));
 
-        coverageAgent.registerCoverageProvider(address(eigenCoverageProvider));
-        eigenCoverageProvider.setStrategyWhitelist(address(_getTestStrategy()), true);
+        coverageAgent.registerCoverageProvider(address(eigenCoverageDiamond));
+        eigenServiceManager.setStrategyWhitelist(address(_getTestStrategy()), true);
 
         mockPriceOracle = new MockPriceOracle(100000e18, cbBTC, USDC);
 
@@ -91,27 +100,29 @@ contract EigenTest is EigenTestDeployer {
 
         SwapParams memory swapParams =
             SwapParams({swapEngine: SwapEngine.UNISWAP_V4_SINGLE_HOP, poolInfo: abi.encode(uniswapV4PoolInfo)});
-        eigenCoverageProvider.registerPriceAdaptor(address(mockPriceOracle), cbBTC, USDC, swapParams);
+        eigenPriceOracle.registerPriceAdaptor(address(mockPriceOracle), cbBTC, USDC, swapParams);
     }
 
     function test_checkCoverageProviderRegistered() public view {
         CoverageProviderData memory coverageProviderData =
-            coverageAgent.coverageProviderData(address(eigenCoverageProvider));
+            coverageAgent.coverageProviderData(address(eigenCoverageDiamond));
         assertEq(coverageProviderData.active, true);
     }
 
     function test_registerCoverageAgent() public {
-        operator.registerCoverageAgent(address(eigenCoverageProvider), address(coverageAgent), 10000);
+        operator.registerCoverageAgent(address(eigenCoverageDiamond), address(coverageAgent), 10000);
     }
 
     function test_allocate() public {
         _setupwithAllocations();
         OperatorSet memory operatorSet = OperatorSet({
-            avs: address(eigenCoverageProvider), id: eigenCoverageProvider.getOperatorSetId(address(coverageAgent))
+            avs: address(eigenCoverageDiamond),
+            id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
         });
-        IAllocationManagerTypes.Allocation memory allocation = IAllocationManager(
-                eigenCoverageProvider.eigenAddresses().allocationManager
-            ).getAllocation(address(operator), operatorSet, _getTestStrategy());
+        IAllocationManagerTypes.Allocation memory allocation =
+            IAllocationManager(eigenServiceManager.eigenAddresses().allocationManager).getAllocation(
+                address(operator), operatorSet, _getTestStrategy()
+            );
         assertEq(allocation.currentMagnitude, 1e18);
     }
 
@@ -191,7 +202,7 @@ contract EigenTest is EigenTestDeployer {
         uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
 
         vm.startPrank(address(coverageAgent));
-        IERC20(coverageAgent.asset()).approve(address(eigenCoverageProvider), 10e6);
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
         uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
         vm.stopPrank();
 
@@ -225,12 +236,11 @@ contract EigenTest is EigenTestDeployer {
         );
         uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
 
-        uint256 coverageAllocated = eigenCoverageProvider.coverageAllocated(
-            address(operator), address(_getTestStrategy()), address(coverageAgent)
-        );
+        uint256 coverageAllocated =
+            eigenServiceManager.coverageAllocated(address(operator), address(_getTestStrategy()), address(coverageAgent));
 
         vm.startPrank(address(coverageAgent));
-        IERC20(coverageAgent.asset()).approve(address(eigenCoverageProvider), 10e6);
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
 
         vm.expectRevert(
             abi.encodeWithSelector(ICoverageProvider.InsufficientCoverageAvailable.selector, 1000e6 - coverageAllocated)
@@ -359,17 +369,17 @@ contract EigenTest is EigenTestDeployer {
         uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
 
         vm.startPrank(address(coverageAgent));
-        IERC20(coverageAgent.asset()).approve(address(eigenCoverageProvider), 10e6);
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
         uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
         vm.stopPrank();
 
-        (uint256 amount, uint32 duration, uint32 distributionStartTime) = eigenCoverageProvider.captureRewards(claimId);
+        (uint256 amount, uint32 duration, uint32 distributionStartTime) = eigenServiceManager.captureRewards(claimId);
         assertEq(amount, 0);
         assertEq(duration, 0);
         assertEq(distributionStartTime, toRewardsInterval(block.timestamp));
 
         vm.warp(block.timestamp + 40 days);
-        (amount, duration, distributionStartTime) = eigenCoverageProvider.captureRewards(claimId);
+        (amount, duration, distributionStartTime) = eigenServiceManager.captureRewards(claimId);
         assertEq(amount, 10e6);
         assertEq(duration, 30 days);
         assertEq(distributionStartTime, toRewardsInterval(block.timestamp - 40 days));
@@ -396,23 +406,23 @@ contract EigenTest is EigenTestDeployer {
         uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
 
         vm.startPrank(address(coverageAgent));
-        IERC20(coverageAgent.asset()).approve(address(eigenCoverageProvider), 10e6);
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
         uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
         vm.stopPrank();
 
-        (uint256 amount, uint32 duration, uint32 distributionStartTime) = eigenCoverageProvider.captureRewards(claimId);
+        (uint256 amount, uint32 duration, uint32 distributionStartTime) = eigenServiceManager.captureRewards(claimId);
         assertEq(amount, 0);
         assertEq(duration, 0);
         assertEq(distributionStartTime, block.timestamp / CALCULATION_INTERVAL_SECONDS * CALCULATION_INTERVAL_SECONDS);
 
         vm.warp(block.timestamp + 15 days);
-        (amount, duration, distributionStartTime) = eigenCoverageProvider.captureRewards(claimId);
+        (amount, duration, distributionStartTime) = eigenServiceManager.captureRewards(claimId);
         assertEq(amount, 5e6);
         assertEq(duration, 15 days);
         assertEq(distributionStartTime, toRewardsInterval(block.timestamp - 15 days));
 
         vm.warp(block.timestamp + 25 days);
-        (amount, duration, distributionStartTime) = eigenCoverageProvider.captureRewards(claimId);
+        (amount, duration, distributionStartTime) = eigenServiceManager.captureRewards(claimId);
         assertEq(amount, 5e6);
         assertEq(duration, 15 days);
         assertEq(distributionStartTime, toRewardsInterval(block.timestamp - 25 days));

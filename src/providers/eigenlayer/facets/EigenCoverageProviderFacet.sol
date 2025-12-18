@@ -1,104 +1,29 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {NotImplemented} from "./Errors.sol";
+import {NotImplemented} from "../Errors.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20} from "@openzeppelin-v5/contracts/token/ERC20/ERC20.sol";
 import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/EnumerableMap.sol";
-import {UUPSUpgradeable} from "@openzeppelin-v5/contracts/proxy/utils/UUPSUpgradeable.sol";
-import {OwnableUpgradeable} from "@openzeppelin-v5/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {IAllocationManager, IAllocationManagerTypes} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
 import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
 import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermissionController.sol";
-import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
-import {IRewardsCoordinatorTypes} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
 import {Refundable} from "src/interfaces/ICoverageProvider.sol";
 
-import {EigenAddresses} from "./Types.sol";
-import {
-    CoverageAgentAlreadyRegistered,
-    InvalidAVS,
-    NotOperatorAuthorized,
-    InvalidAsset,
-    NotAllocated
-} from "./Errors.sol";
-import {
-    IEigenServiceManager,
-    CreatePositionAddtionalData,
-    EigenCoveragePosition,
-    OperatorData
-} from "./interfaces/IEigenServiceManager.sol";
-import {
-    ICoverageProvider,
-    CoveragePosition,
-    CoverageClaim,
-    CoverageClaimStatus
-} from "../../interfaces/ICoverageProvider.sol";
-import {ICoverageAgent} from "../../interfaces/ICoverageAgent.sol";
-import {AssetPriceOracleAndSwapper} from "../../mixins/AssetPriceOracleAndSwapper.sol";
+import {CoverageAgentAlreadyRegistered, NotOperatorAuthorized, InvalidAsset, NotAllocated} from "../Errors.sol";
+import {IEigenServiceManager, CreatePositionAddtionalData, EigenCoveragePosition} from "../interfaces/IEigenServiceManager.sol";
+import {ICoverageProvider, CoveragePosition, CoverageClaim, CoverageClaimStatus} from "../../../interfaces/ICoverageProvider.sol";
+import {ICoverageAgent} from "../../../interfaces/ICoverageAgent.sol";
+import {AssetPriceOracleAndSwapper} from "../../../mixins/AssetPriceOracleAndSwapper.sol";
+import {EigenCoverageStorage, ClaimRewardDistribution} from "../EigenCoverageStorage.sol";
 
-struct ClaimRewardDistribution {
-    uint256 amount;
-    uint32 lastDistributedTimestamp;
-}
-
-/// @title EigenCoverageProvider
+/// @title EigenCoverageProviderFacet
 /// @author p-dealwis, Infinality
-/// @notice A provider for Eigen delegations
-/// @dev Manage delegation strategies to whitelist strategies, distribute rewards and slash operators.
-contract EigenCoverageProvider is
-    AssetPriceOracleAndSwapper,
-    IEigenServiceManager,
-    ICoverageProvider,
-    UUPSUpgradeable,
-    OwnableUpgradeable
-{
+/// @notice Facet contract implementing ICoverageProvider interface
+/// @dev This contract is designed to be called via delegatecall from EigenCoverageDiamond
+contract EigenCoverageProviderFacet is EigenCoverageStorage, AssetPriceOracleAndSwapper, ICoverageProvider {
     using EnumerableMap for EnumerableMap.AddressToUintMap;
-
-    EigenAddresses private _eigenAddresses;
-
-    uint32 private _operatorSetCount = 0;
-
-    EigenCoveragePosition[] public positions;
-    CoverageClaim[] public claims;
-
-    mapping(address => uint32) public coverageAgentToOperatorSetId;
-
-    mapping(address => bool) public strategyWhitelist;
-    mapping(address => address) public assetToStrategy;
-
-    mapping(address => OperatorData) public operators;
-
-    /// @notice The amount of reward distributed to the operator for a given claim
-    mapping(uint256 claimId => ClaimRewardDistribution) public claimRewardDistributions;
-
-    /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
-        _disableInitializers();
-    }
-
-    /// ============ Upgradeability ============ //
-
-    function initialize(
-        address _owner,
-        EigenAddresses memory eigenAddresses_,
-        string memory _metadataURI,
-        address universalRouter_,
-        address permit2_
-    ) external initializer {
-        __Ownable_init(_owner);
-        __AssetPriceOracleAndSwapper_init(universalRouter_, permit2_);
-        _eigenAddresses = eigenAddresses_;
-
-        _updateAVSMetadataURI(_metadataURI);
-    }
-
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
-        // Only owner can upgrade
-    }
-
-    /// ============ ICoverageProvider implementations ============ //
 
     /// @inheritdoc ICoverageProvider
     function onIsRegistered() external {
@@ -115,8 +40,9 @@ contract EigenCoverageProvider is
         address[] memory redistributionRecipients = new address[](1);
         redistributionRecipients[0] = msg.sender;
 
-        IAllocationManager(_eigenAddresses.allocationManager)
-            .createRedistributingOperatorSets(address(this), params, redistributionRecipients);
+        IAllocationManager(_eigenAddresses.allocationManager).createRedistributingOperatorSets(
+            address(this), params, redistributionRecipients
+        );
 
         coverageAgentToOperatorSetId[msg.sender] = operatorSetId;
     }
@@ -133,14 +59,16 @@ contract EigenCoverageProvider is
         CreatePositionAddtionalData memory createPositionAddtionalData =
             abi.decode(additionalData, (CreatePositionAddtionalData));
 
-        if (!_checkOperatorPermissions(
+        if (
+            !_checkOperatorPermissions(
                 createPositionAddtionalData.operator,
                 _eigenAddresses.allocationManager,
                 IAllocationManager.modifyAllocations.selector
-            )) revert NotOperatorAuthorized(createPositionAddtionalData.operator, msg.sender);
+            )
+        ) revert NotOperatorAuthorized(createPositionAddtionalData.operator, msg.sender);
 
         if (!strategyWhitelist[createPositionAddtionalData.strategy]) {
-            revert StrategyNotWhitelisted(createPositionAddtionalData.strategy);
+            revert IEigenServiceManager.StrategyNotWhitelisted(createPositionAddtionalData.strategy);
         }
 
         if (address(IStrategy(createPositionAddtionalData.strategy).underlyingToken()) != data.asset) {
@@ -151,9 +79,7 @@ contract EigenCoverageProvider is
         uint32 operatorSetId = coverageAgentToOperatorSetId[coverageAgent];
         OperatorSet memory operatorSet = OperatorSet({avs: address(this), id: operatorSetId});
         IAllocationManagerTypes.Allocation memory allocation = IAllocationManager(_eigenAddresses.allocationManager)
-            .getAllocation(
-                createPositionAddtionalData.operator, operatorSet, IStrategy(createPositionAddtionalData.strategy)
-            );
+            .getAllocation(createPositionAddtionalData.operator, operatorSet, IStrategy(createPositionAddtionalData.strategy));
 
         if (allocation.currentMagnitude == 0) revert NotAllocated();
 
@@ -165,9 +91,11 @@ contract EigenCoverageProvider is
     function closePosition(uint256 positionId) external {
         EigenCoveragePosition storage positionData = positions[positionId];
 
-        if (!_checkOperatorPermissions(
+        if (
+            !_checkOperatorPermissions(
                 positionData.operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector
-            )) revert NotOperatorAuthorized(positionData.operator, msg.sender);
+            )
+        ) revert NotOperatorAuthorized(positionData.operator, msg.sender);
 
         positions[positionId].data.expiryTimestamp = block.timestamp;
         emit PositionClosed(positionId);
@@ -185,9 +113,9 @@ contract EigenCoverageProvider is
 
         _validatePosition(positionData.data, amount, duration, reward);
 
-        // Capture rewards funds from covereage agent
-        bool success = IERC20(ICoverageAgent(positionData.data.coverageAgent).asset())
-            .transferFrom(msg.sender, address(this), reward);
+        // Capture rewards funds from coverage agent
+        bool success =
+            IERC20(ICoverageAgent(positionData.data.coverageAgent).asset()).transferFrom(msg.sender, address(this), reward);
         if (!success) revert RewardTransferFailed();
 
         address strategy = assetToStrategy[positionData.data.asset];
@@ -263,137 +191,7 @@ contract EigenCoverageProvider is
         return _coverageDeficitAmount(_position.operator, _position.strategy, _position.data.coverageAgent);
     }
 
-    /// @inheritdoc IEigenServiceManager
-    function captureRewards(uint256 claimId)
-        public
-        returns (uint256 amount, uint32 duration, uint32 distributionStartTime)
-    {
-        IRewardsCoordinator rewardsCoordinator = IRewardsCoordinator(_eigenAddresses.rewardsCoordinator);
-
-        CoverageClaim memory _claim = claims[claimId];
-        EigenCoveragePosition memory _position = positions[_claim.positionId];
-        ClaimRewardDistribution memory _claimRewardDistribution = claimRewardDistributions[claimId];
-
-        uint32 calculationInterval = rewardsCoordinator.CALCULATION_INTERVAL_SECONDS();
-        distributionStartTime =
-            uint32(_claimRewardDistribution.lastDistributedTimestamp / calculationInterval) * calculationInterval;
-
-        duration = uint32(
-            min(
-                min(block.timestamp - distributionStartTime, rewardsCoordinator.MAX_REWARDS_DURATION()),
-                _claim.duration + _claim.createdAt - distributionStartTime
-            ) / calculationInterval * calculationInterval
-        );
-
-        if (duration == 0) {
-            return (0, 0, distributionStartTime);
-        }
-
-        if (_position.data.refundable == Refundable.TimeWeighted || _position.data.refundable == Refundable.None) {
-            uint256 claimableReward =
-                min(block.timestamp - _claim.createdAt, _claim.duration) * _claim.reward / _claim.duration;
-            amount = claimableReward - _claimRewardDistribution.amount;
-            claimRewardDistributions[claimId].amount += amount;
-            claimRewardDistributions[claimId].lastDistributedTimestamp = uint32(block.timestamp);
-        } else if (_position.data.refundable == Refundable.Full && _claim.status == CoverageClaimStatus.Completed) {
-            amount = _claim.reward;
-        } else {
-            return (0, 0, distributionStartTime);
-        }
-
-        IERC20 coverageAsset = IERC20(ICoverageAgent(_position.data.coverageAgent).asset());
-        coverageAsset.approve(address(rewardsCoordinator), amount);
-
-        IRewardsCoordinatorTypes.StrategyAndMultiplier[] memory strategiesAndMultipliers =
-            new IRewardsCoordinatorTypes.StrategyAndMultiplier[](1);
-        strategiesAndMultipliers[0] =
-            IRewardsCoordinatorTypes.StrategyAndMultiplier({strategy: IStrategy(_position.strategy), multiplier: 1});
-
-        IRewardsCoordinatorTypes.OperatorReward[] memory operatorRewards =
-            new IRewardsCoordinatorTypes.OperatorReward[](1);
-        operatorRewards[0] = IRewardsCoordinatorTypes.OperatorReward({operator: _position.operator, amount: amount});
-
-        IRewardsCoordinatorTypes.OperatorDirectedRewardsSubmission[] memory operatorDirectedRewardsSubmissions =
-            new IRewardsCoordinatorTypes.OperatorDirectedRewardsSubmission[](1);
-        operatorDirectedRewardsSubmissions[0] = IRewardsCoordinatorTypes.OperatorDirectedRewardsSubmission({
-            strategiesAndMultipliers: strategiesAndMultipliers,
-            token: coverageAsset,
-            operatorRewards: operatorRewards,
-            startTimestamp: distributionStartTime, // Start distributing from the last distributed timestamp
-            duration: duration,
-            description: "Coverage reward"
-        });
-
-        rewardsCoordinator.createOperatorDirectedAVSRewardsSubmission(address(this), operatorDirectedRewardsSubmissions);
-    }
-
-    // ============ IEigenServiceManager implementations ============ //
-
-    /// @inheritdoc IEigenServiceManager
-    function registerOperator(address, address _avs, uint32[] calldata, bytes calldata) external view {
-        require(msg.sender != _eigenAddresses.delegationManager, "Not delegation manager");
-        if (_avs != address(this)) revert InvalidAVS();
-    }
-
-    /// @inheritdoc IEigenServiceManager
-    function setStrategyWhitelist(address strategyAddress, bool whitelisted) external onlyOwner {
-        if (assetToStrategy[address(IStrategy(strategyAddress).underlyingToken())] != address(0)) {
-            revert StrategyAssetAlreadyRegistered(address(IStrategy(strategyAddress).underlyingToken()));
-        }
-        if (whitelisted) {
-            assetToStrategy[address(IStrategy(strategyAddress).underlyingToken())] = strategyAddress;
-        } else {
-            delete assetToStrategy[address(IStrategy(strategyAddress).underlyingToken())];
-        }
-        strategyWhitelist[strategyAddress] = whitelisted;
-    }
-
-    /// @inheritdoc IEigenServiceManager
-    function isStrategyWhitelisted(address strategy) external view returns (bool) {
-        return strategyWhitelist[strategy];
-    }
-
-    /// @inheritdoc IEigenServiceManager
-    function getOperatorSetId(address coverageAgent) external view returns (uint32) {
-        return coverageAgentToOperatorSetId[coverageAgent];
-    }
-
-    function eigenAddresses() external view returns (EigenAddresses memory) {
-        return _eigenAddresses;
-    }
-
-    /// @inheritdoc IEigenServiceManager
-    function coverageAllocated(address operator, address strategy, address coverageAgent)
-        external
-        view
-        returns (uint256)
-    {
-        return _totalAllocatedValueToCoverageAgent(operator, strategy, coverageAgent);
-    }
-
     /// ============ Internal functions ============ //
-
-    /// @notice Updates the metadata URI for the AVS
-    /// @param _metadataUri is the metadata URI for the AVS
-    function _updateAVSMetadataURI(string memory _metadataUri) private {
-        IAllocationManager(_eigenAddresses.allocationManager).updateAVSMetadataURI(address(this), _metadataUri);
-    }
-
-    /// @notice Returns the maximum of two uint256 values
-    /// @param a First value
-    /// @param b Second value
-    /// @return The maximum of a and b
-    function max(uint256 a, uint256 b) private pure returns (uint256) {
-        return a > b ? a : b;
-    }
-
-    /// @notice Returns the minimum of two uint32 values
-    /// @param a First value
-    /// @param b Second value
-    /// @return The minimum of a and b
-    function min(uint256 a, uint256 b) private pure returns (uint256) {
-        return a < b ? a : b;
-    }
 
     /// @notice Validates the claim parameters meet the position requirements
     function _validatePosition(CoveragePosition memory data, uint256 amount, uint256 duration, uint256 reward)
@@ -465,12 +263,9 @@ contract EigenCoverageProvider is
         strategies[0] = IStrategy(strategy);
         address strategyAsset = address(IStrategy(strategy).underlyingToken());
         address coverageAsset = address(ICoverageAgent(coverageAgent).asset());
-        uint256[][] memory allocatedStake = IAllocationManager(_eigenAddresses.allocationManager)
-            .getAllocatedStake(
-                OperatorSet({avs: address(this), id: coverageAgentToOperatorSetId[coverageAgent]}),
-                _operators,
-                strategies
-            );
+        uint256[][] memory allocatedStake = IAllocationManager(_eigenAddresses.allocationManager).getAllocatedStake(
+            OperatorSet({avs: address(this), id: coverageAgentToOperatorSetId[coverageAgent]}), _operators, strategies
+        );
         uint256 quotedPrice = quote(allocatedStake[0][0], strategyAsset, coverageAsset);
 
         uint8 strategyDecimals = ERC20(strategyAsset).decimals();
@@ -504,7 +299,7 @@ contract EigenCoverageProvider is
     }
 
     function _checkOperatorPermissions(address operator, address target, bytes4 selector) private returns (bool) {
-        return
-            IPermissionController(_eigenAddresses.permissionController).canCall(operator, msg.sender, target, selector);
+        return IPermissionController(_eigenAddresses.permissionController).canCall(operator, msg.sender, target, selector);
     }
 }
+

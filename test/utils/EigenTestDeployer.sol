@@ -3,10 +3,18 @@ pragma solidity ^0.8.24;
 
 import {TestDeployer} from "./TestDeployer.sol";
 import {EigenAddresses} from "src/providers/eigenlayer/Types.sol";
-import {EigenCoverageProvider} from "src/providers/eigenlayer/EigenCoverageProvider.sol";
+import {EigenCoverageDiamond} from "src/providers/eigenlayer/EigenCoverageDiamond.sol";
+import {EigenServiceManagerFacet} from "src/providers/eigenlayer/facets/EigenServiceManagerFacet.sol";
+import {EigenCoverageProviderFacet} from "src/providers/eigenlayer/facets/EigenCoverageProviderFacet.sol";
+import {DiamondCutFacet} from "src/diamond/facets/DiamondCutFacet.sol";
+import {DiamondLoupeFacet} from "src/diamond/facets/DiamondLoupeFacet.sol";
+import {IDiamondCut} from "src/diamond/interfaces/IDiamondCut.sol";
+import {IDiamondLoupe} from "src/diamond/interfaces/IDiamondLoupe.sol";
+import {IERC165} from "src/diamond/interfaces/IERC165.sol";
+import {IEigenServiceManager} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
+import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
 import {EigenHelper, EigenAddressbook} from "../../utils/EigenHelper.sol";
 import {CoverageAgent} from "src/CoverageAgent.sol";
-import {ERC1967Proxy} from "@openzeppelin-v5/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {UpgradeableBeacon} from "@openzeppelin-v5/contracts/proxy/beacon/UpgradeableBeacon.sol";
 import {UniswapHelper, UniswapAddressbook} from "../../utils/UniswapHelper.sol";
 import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
@@ -20,7 +28,13 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
 
     // *** Deployed Contracts *** //
     CoverageAgent coverageAgent;
-    EigenCoverageProvider eigenCoverageProvider;
+    EigenCoverageDiamond eigenCoverageDiamond;
+
+    // Facets
+    DiamondCutFacet diamondCutFacet;
+    DiamondLoupeFacet diamondLoupeFacet;
+    EigenServiceManagerFacet eigenServiceManagerFacet;
+    EigenCoverageProviderFacet eigenCoverageProviderFacet;
 
     function setUp() public virtual override {
         super.setUp();
@@ -32,23 +46,59 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
         CALCULATION_INTERVAL_SECONDS = rewardsCoordinator.CALCULATION_INTERVAL_SECONDS();
         MAX_REWARDS_DURATION = rewardsCoordinator.MAX_REWARDS_DURATION();
 
-        // Deploy EigenCoverageProvider via proxy
-        EigenCoverageProvider implementation = new EigenCoverageProvider();
-        bytes memory initData = abi.encodeWithSelector(
-            EigenCoverageProvider.initialize.selector,
-            owner,
-            EigenAddresses({
+        // Deploy all facets
+        diamondCutFacet = new DiamondCutFacet();
+        diamondLoupeFacet = new DiamondLoupeFacet();
+        eigenServiceManagerFacet = new EigenServiceManagerFacet();
+        eigenCoverageProviderFacet = new EigenCoverageProviderFacet();
+
+        // Prepare diamond cut with all facets
+        IDiamondCut.FacetCut[] memory cuts = new IDiamondCut.FacetCut[](4);
+
+        // DiamondCutFacet
+        cuts[0] = IDiamondCut.FacetCut({
+            facetAddress: address(diamondCutFacet),
+            action: IDiamondCut.FacetCutAction.Add,
+            functionSelectors: _getDiamondCutSelectors()
+        });
+
+        // DiamondLoupeFacet
+        cuts[1] = IDiamondCut.FacetCut({
+            facetAddress: address(diamondLoupeFacet),
+            action: IDiamondCut.FacetCutAction.Add,
+            functionSelectors: _getDiamondLoupeSelectors()
+        });
+
+        // EigenServiceManagerFacet
+        cuts[2] = IDiamondCut.FacetCut({
+            facetAddress: address(eigenServiceManagerFacet),
+            action: IDiamondCut.FacetCutAction.Add,
+            functionSelectors: _getEigenServiceManagerSelectors()
+        });
+
+        // EigenCoverageProviderFacet
+        cuts[3] = IDiamondCut.FacetCut({
+            facetAddress: address(eigenCoverageProviderFacet),
+            action: IDiamondCut.FacetCutAction.Add,
+            functionSelectors: _getEigenCoverageProviderSelectors()
+        });
+
+        // Deploy diamond with all facets
+        EigenCoverageDiamond.DiamondArgs memory args = EigenCoverageDiamond.DiamondArgs({
+            owner: owner,
+            eigenAddresses: EigenAddresses({
                 allocationManager: eigenAddressBook.eigenAddresses.allocationManager,
                 delegationManager: eigenAddressBook.eigenAddresses.delegationManager,
                 strategyManager: eigenAddressBook.eigenAddresses.strategyManager,
                 rewardsCoordinator: eigenAddressBook.eigenAddresses.rewardsCoordinator,
                 permissionController: eigenAddressBook.eigenAddresses.permissionController
             }),
-            "",
-            uniswapAddressBook.uniswapAddresses.universalRouter,
-            uniswapAddressBook.uniswapAddresses.permit2
-        );
-        eigenCoverageProvider = EigenCoverageProvider(address(new ERC1967Proxy(address(implementation), initData)));
+            metadataURI: "https://coverage.example.com/metadata.json",
+            universalRouter: uniswapAddressBook.uniswapAddresses.universalRouter,
+            permit2: uniswapAddressBook.uniswapAddresses.permit2
+        });
+
+        eigenCoverageDiamond = new EigenCoverageDiamond(cuts, args);
 
         // Deploy coverage agent and allow this address to be the operator
         coverageAgent = new CoverageAgent(address(this), USDC);
@@ -59,6 +109,54 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
     }
 
     function toRewardsInterval(uint256 timestamp) public view returns (uint32) {
+        // casting to 'uint32' is safe because timestamp is always less than the length of the CALCULATION_INTERVAL_SECONDS
+        // forge-lint: disable-next-line(unsafe-typecast)
         return uint32(timestamp / CALCULATION_INTERVAL_SECONDS * CALCULATION_INTERVAL_SECONDS);
+    }
+
+    // ============ Selector Helper Functions ============ //
+
+    function _getDiamondCutSelectors() internal pure returns (bytes4[] memory) {
+        bytes4[] memory selectors = new bytes4[](1);
+        selectors[0] = IDiamondCut.diamondCut.selector;
+        return selectors;
+    }
+
+    function _getDiamondLoupeSelectors() internal pure returns (bytes4[] memory) {
+        bytes4[] memory selectors = new bytes4[](5);
+        selectors[0] = IDiamondLoupe.facets.selector;
+        selectors[1] = IDiamondLoupe.facetFunctionSelectors.selector;
+        selectors[2] = IDiamondLoupe.facetAddresses.selector;
+        selectors[3] = IDiamondLoupe.facetAddress.selector;
+        selectors[4] = IERC165.supportsInterface.selector;
+        return selectors;
+    }
+
+    function _getEigenServiceManagerSelectors() internal pure returns (bytes4[] memory) {
+        bytes4[] memory selectors = new bytes4[](7);
+        selectors[0] = IEigenServiceManager.eigenAddresses.selector;
+        selectors[1] = IEigenServiceManager.registerOperator.selector;
+        selectors[2] = IEigenServiceManager.setStrategyWhitelist.selector;
+        selectors[3] = IEigenServiceManager.isStrategyWhitelisted.selector;
+        selectors[4] = IEigenServiceManager.getOperatorSetId.selector;
+        selectors[5] = IEigenServiceManager.coverageAllocated.selector;
+        selectors[6] = IEigenServiceManager.captureRewards.selector;
+        return selectors;
+    }
+
+    function _getEigenCoverageProviderSelectors() internal pure returns (bytes4[] memory) {
+        bytes4[] memory selectors = new bytes4[](11);
+        selectors[0] = ICoverageProvider.onIsRegistered.selector;
+        selectors[1] = ICoverageProvider.createPosition.selector;
+        selectors[2] = ICoverageProvider.closePosition.selector;
+        selectors[3] = ICoverageProvider.claimCoverage.selector;
+        selectors[4] = ICoverageProvider.liquidateClaim.selector;
+        selectors[5] = ICoverageProvider.completeClaims.selector;
+        selectors[6] = ICoverageProvider.slashClaims.selector;
+        selectors[7] = ICoverageProvider.position.selector;
+        selectors[8] = ICoverageProvider.positionMaxAmount.selector;
+        selectors[9] = ICoverageProvider.claim.selector;
+        selectors[10] = ICoverageProvider.claimDeficit.selector;
+        return selectors;
     }
 }

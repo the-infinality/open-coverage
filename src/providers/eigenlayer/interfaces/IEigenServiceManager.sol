@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/EnumerableMap.sol";
 import {EigenAddresses} from "../Types.sol";
 import {CoveragePosition} from "../../../interfaces/ICoverageProvider.sol";
 
@@ -14,14 +13,6 @@ struct EigenCoveragePosition {
     CoveragePosition data;
     address operator;
     address strategy;
-}
-
-struct OperatorData {
-    /// @notice The amount of coverage issued by an operator per strategy
-    /// @dev The key is the strategy providing coverage
-    /// @dev The keys of the EnumerableMap is the coverage agent being covered.
-    mapping(address => EnumerableMap.AddressToUintMap) coverageStrategies;
-    bool active;
 }
 
 /// @notice An interface for the Eigen coverage provider.
