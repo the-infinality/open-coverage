@@ -18,7 +18,7 @@ import {CoverageProviderData} from "src/interfaces/ICoverageAgent.sol";
 import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
 import {IStrategyManager} from "eigenlayer-contracts/interfaces/IStrategyManager.sol";
 import {ISignatureUtilsMixinTypes} from "eigenlayer-contracts/interfaces/ISignatureUtilsMixin.sol";
-import {SwapParams, SwapEngine, AssetPriceOracleAndSwapper} from "src/mixins/AssetPriceOracleAndSwapper.sol";
+import {SwapParams, SwapEngine, IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {MockPriceOracle} from "../utils/MockPriceOracle.sol";
 import {CoverageClaim, CoverageClaimStatus} from "src/interfaces/ICoverageProvider.sol";
 
@@ -30,7 +30,7 @@ contract EigenTest is EigenTestDeployer {
     // Cast the diamond to the interfaces for easier access
     IEigenServiceManager eigenServiceManager;
     ICoverageProvider eigenCoverageProvider;
-    AssetPriceOracleAndSwapper eigenPriceOracle;
+    IAssetPriceOracleAndSwapper eigenPriceOracle;
 
     function _setupwithAllocations() internal {
         vm.roll(block.number + 126001);
@@ -72,7 +72,7 @@ contract EigenTest is EigenTestDeployer {
         // Cast diamond to interfaces
         eigenServiceManager = IEigenServiceManager(address(eigenCoverageDiamond));
         eigenCoverageProvider = ICoverageProvider(address(eigenCoverageDiamond));
-        eigenPriceOracle = AssetPriceOracleAndSwapper(address(eigenCoverageDiamond));
+        eigenPriceOracle = IAssetPriceOracleAndSwapper(address(eigenCoverageDiamond));
 
         operator = IEigenOperatorProxy(
             EigenProviderMethods.createOperatorProxy(

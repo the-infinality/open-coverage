@@ -12,13 +12,9 @@ import {
     CoverageClaimStatus,
     Refundable
 } from "src/interfaces/ICoverageProvider.sol";
-import {
-    AssetPriceOracleAndSwapper,
-    IPriceOracle,
-    SwapEngine,
-    SwapParams,
-    UniswapV4PoolInfo
-} from "src/mixins/AssetPriceOracleAndSwapper.sol";
+import {IPriceOracle} from "src/interfaces/IPriceOracle.sol";
+import {IAssetPriceOracleAndSwapper, SwapEngine, SwapParams, UniswapV4PoolInfo} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {AssetPriceOracleAndSwapper} from "src/mixins/AssetPriceOracleAndSwapper.sol";
 import {UniswapHelper, UniswapAddressbook} from "utils/UniswapHelper.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
@@ -379,13 +375,13 @@ contract CoverageAgentTest is TestDeployer, UniswapHelper {
         uint128 amountOut = 1000e6;
         deal(USDC, address(coverageAgent), amountOut * 2);
 
-        vm.expectRevert(AssetPriceOracleAndSwapper.AssetPairNotRegistered.selector);
+        vm.expectRevert(IAssetPriceOracleAndSwapper.AssetPairNotRegistered.selector);
         coverageAgent.swap(amountOut, USDC, address(0x999));
     }
 
     function test_RevertWhen_quote_assetPairNotRegistered() public {
         uint256 amountIn = 1000e6;
-        vm.expectRevert(AssetPriceOracleAndSwapper.AssetPairNotRegistered.selector);
+        vm.expectRevert(IAssetPriceOracleAndSwapper.AssetPairNotRegistered.selector);
         coverageAgent.quote(amountIn, USDC, address(0x999));
     }
 

@@ -6,12 +6,14 @@ import {EigenAddresses} from "src/providers/eigenlayer/Types.sol";
 import {EigenCoverageDiamond} from "src/providers/eigenlayer/EigenCoverageDiamond.sol";
 import {EigenServiceManagerFacet} from "src/providers/eigenlayer/facets/EigenServiceManagerFacet.sol";
 import {EigenCoverageProviderFacet} from "src/providers/eigenlayer/facets/EigenCoverageProviderFacet.sol";
+import {AssetPriceOracleAndSwapperFacet} from "src/facets/AssetPriceOracleAndSwapperFacet.sol";
 import {DiamondCutFacet} from "src/diamond/facets/DiamondCutFacet.sol";
 import {DiamondLoupeFacet} from "src/diamond/facets/DiamondLoupeFacet.sol";
 import {IDiamondCut} from "src/diamond/interfaces/IDiamondCut.sol";
 import {IDiamondLoupe} from "src/diamond/interfaces/IDiamondLoupe.sol";
 import {IERC165} from "src/diamond/interfaces/IERC165.sol";
 import {IEigenServiceManager} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
+import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
 import {EigenHelper, EigenAddressbook} from "../../utils/EigenHelper.sol";
 import {CoverageAgent} from "src/CoverageAgent.sol";
@@ -35,6 +37,7 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
     DiamondLoupeFacet diamondLoupeFacet;
     EigenServiceManagerFacet eigenServiceManagerFacet;
     EigenCoverageProviderFacet eigenCoverageProviderFacet;
+    AssetPriceOracleAndSwapperFacet assetPriceOracleAndSwapperFacet;
 
     function setUp() public virtual override {
         super.setUp();
@@ -51,9 +54,10 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
         diamondLoupeFacet = new DiamondLoupeFacet();
         eigenServiceManagerFacet = new EigenServiceManagerFacet();
         eigenCoverageProviderFacet = new EigenCoverageProviderFacet();
+        assetPriceOracleAndSwapperFacet = new AssetPriceOracleAndSwapperFacet();
 
         // Prepare diamond cut with all facets
-        IDiamondCut.FacetCut[] memory cuts = new IDiamondCut.FacetCut[](4);
+        IDiamondCut.FacetCut[] memory cuts = new IDiamondCut.FacetCut[](5);
 
         // DiamondCutFacet
         cuts[0] = IDiamondCut.FacetCut({
@@ -81,6 +85,13 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
             facetAddress: address(eigenCoverageProviderFacet),
             action: IDiamondCut.FacetCutAction.Add,
             functionSelectors: _getEigenCoverageProviderSelectors()
+        });
+
+        // AssetPriceOracleAndSwapperFacet
+        cuts[4] = IDiamondCut.FacetCut({
+            facetAddress: address(assetPriceOracleAndSwapperFacet),
+            action: IDiamondCut.FacetCutAction.Add,
+            functionSelectors: _getAssetPriceOracleAndSwapperSelectors()
         });
 
         // Deploy diamond with all facets
@@ -161,6 +172,17 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
         selectors[9] = ICoverageProvider.positionMaxAmount.selector;
         selectors[10] = ICoverageProvider.claim.selector;
         selectors[11] = ICoverageProvider.claimDeficit.selector;
+        return selectors;
+    }
+
+    function _getAssetPriceOracleAndSwapperSelectors() internal pure returns (bytes4[] memory) {
+        bytes4[] memory selectors = new bytes4[](6);
+        selectors[0] = IAssetPriceOracleAndSwapper.registerPriceAdaptor.selector;
+        selectors[1] = IAssetPriceOracleAndSwapper.swap.selector;
+        selectors[2] = IAssetPriceOracleAndSwapper.assetPair.selector;
+        selectors[3] = IAssetPriceOracleAndSwapper.quote.selector;
+        selectors[4] = IAssetPriceOracleAndSwapper.universalRouter.selector;
+        selectors[5] = IAssetPriceOracleAndSwapper.permit2.selector;
         return selectors;
     }
 }

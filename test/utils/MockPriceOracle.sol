@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IPriceOracle} from "../../src/mixins/AssetPriceOracleAndSwapper.sol";
+import {IPriceOracle} from "../../src/interfaces/IPriceOracle.sol";
 
 contract MockPriceOracle is IPriceOracle {
     uint256 public multiplier;

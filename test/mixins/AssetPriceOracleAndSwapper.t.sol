@@ -3,12 +3,8 @@ pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {TestDeployer} from "test/utils/TestDeployer.sol";
-import {
-    AssetPriceOracleAndSwapper,
-    SwapEngine,
-    SwapParams,
-    UniswapV4PoolInfo
-} from "../../src/mixins/AssetPriceOracleAndSwapper.sol";
+import {AssetPriceOracleAndSwapper} from "../../src/mixins/AssetPriceOracleAndSwapper.sol";
+import {IAssetPriceOracleAndSwapper, SwapEngine, SwapParams, UniswapV4PoolInfo} from "../../src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {UniswapHelper, UniswapAddressbook} from "utils/UniswapHelper.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
@@ -118,7 +114,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         uint128 amountOut = 1000e6;
         deal(USDC, address(mockContract), amountOut * 2);
 
-        vm.expectRevert(abi.encodeWithSelector(AssetPriceOracleAndSwapper.AssetPairNotRegistered.selector));
+        vm.expectRevert(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.AssetPairNotRegistered.selector));
         mockContract.swap(amountOut, USDC, address(0));
     }
 
@@ -133,7 +129,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
 
     function test_RevertWhen_quote_asset_pair_not_registered() public {
         uint256 amountIn = 1000e6;
-        vm.expectRevert(abi.encodeWithSelector(AssetPriceOracleAndSwapper.AssetPairNotRegistered.selector));
+        vm.expectRevert(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.AssetPairNotRegistered.selector));
         mockContract.quote(amountIn, USDC, address(0));
     }
 }

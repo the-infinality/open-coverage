@@ -9,16 +9,19 @@ import {IERC165} from "../../diamond/interfaces/IERC165.sol";
 import {LibDiamond} from "../../diamond/libraries/LibDiamond.sol";
 import {EigenAddresses} from "./Types.sol";
 import {EigenCoverageStorage} from "./EigenCoverageStorage.sol";
-import {AssetPriceOracleAndSwapper} from "../../mixins/AssetPriceOracleAndSwapper.sol";
+import {AssetPriceOracleAndSwapperStorage} from "../../storage/AssetPriceOracleAndSwapperStorage.sol";
 import {IEigenServiceManager} from "./interfaces/IEigenServiceManager.sol";
+import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
+import {IUniversalRouter} from "@uniswap/universal-router/interfaces/IUniversalRouter.sol";
+import {IPermit2} from "@uniswap/permit2/src/interfaces/IPermit2.sol";
 
 /// @title EigenCoverageDiamond
 /// @author p-dealwis, Infinality
 /// @notice EIP-2535 Diamond proxy for Eigen coverage management
 /// @dev Uses the diamond pattern with fallback-based selector routing.
 ///      All function calls are routed to the appropriate facet via delegatecall.
-contract EigenCoverageDiamond is EigenCoverageStorage, AssetPriceOracleAndSwapper {
+contract EigenCoverageDiamond is EigenCoverageStorage, AssetPriceOracleAndSwapperStorage {
     /// @notice Error when function selector is not found in any facet
     error FunctionNotFound(bytes4 _functionSelector);
 
@@ -47,13 +50,16 @@ contract EigenCoverageDiamond is EigenCoverageStorage, AssetPriceOracleAndSwappe
         ds.supportedInterfaces[type(IDiamondLoupe).interfaceId] = true;
         ds.supportedInterfaces[type(IERC165).interfaceId] = true;
         ds.supportedInterfaces[type(IEigenServiceManager).interfaceId] = true;
+        ds.supportedInterfaces[type(IAssetPriceOracleAndSwapper).interfaceId] = true;
         ds.supportedInterfaces[type(ICoverageProvider).interfaceId] = true;
 
         // Initialize app-specific storage
         _eigenAddresses = _args.eigenAddresses;
 
-        // Initialize the AssetPriceOracleAndSwapper mixin
-        __AssetPriceOracleAndSwapper_init(_args.universalRouter, _args.permit2);
+        // Initialize the AssetPriceOracleAndSwapper storage
+        SwapperStorage storage ss = _swapperStorage();
+        ss.universalRouter = IUniversalRouter(_args.universalRouter);
+        ss.permit2 = IPermit2(_args.permit2);
 
         // Update AVS metadata URI (required for AVS registration)
         // Note: This is called directly during construction; post-deployment updates should use
