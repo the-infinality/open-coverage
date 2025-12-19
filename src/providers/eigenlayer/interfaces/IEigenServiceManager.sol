@@ -60,4 +60,9 @@ interface IEigenServiceManager {
     function captureRewards(uint256 claimId)
         external
         returns (uint256 amount, uint32 duration, uint32 distributionStartTime);
+
+    /// @notice Updates the metadata URI for this AVS
+    /// @dev Only callable by the contract owner
+    /// @param metadataURI The new metadata URI
+    function updateAVSMetadataURI(string calldata metadataURI) external;
 }

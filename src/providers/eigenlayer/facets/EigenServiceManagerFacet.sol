@@ -136,6 +136,12 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, AssetPriceOracleAndSw
         rewardsCoordinator.createOperatorDirectedAVSRewardsSubmission(address(this), operatorDirectedRewardsSubmissions);
     }
 
+    /// @inheritdoc IEigenServiceManager
+    function updateAVSMetadataURI(string calldata metadataURI) external {
+        LibDiamond.enforceIsContractOwner();
+        IAllocationManager(_eigenAddresses.allocationManager).updateAVSMetadataURI(address(this), metadataURI);
+    }
+
     /// ============ Internal functions ============ //
 
     /// @notice Returns the minimum of two uint256 values

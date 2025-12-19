@@ -52,7 +52,9 @@ contract EigenCoverageDiamond is EigenCoverageStorage, AssetPriceOracleAndSwappe
         __AssetPriceOracleAndSwapper_init(_args.universalRouter, _args.permit2);
 
         // Update AVS metadata URI (required for AVS registration)
-        _updateAVSMetadataURI(_args.metadataURI);
+        // Note: This is called directly during construction; post-deployment updates should use
+        // IEigenServiceManager.updateAVSMetadataURI() via the facet
+        _initializeAVSMetadataURI(_args.metadataURI);
     }
 
     /// @notice Fallback function that delegates calls to facets based on function selector
@@ -87,9 +89,10 @@ contract EigenCoverageDiamond is EigenCoverageStorage, AssetPriceOracleAndSwappe
     /// @notice Receive function to accept ETH
     receive() external payable {}
 
-    /// @notice Updates the metadata URI for the AVS
+    /// @notice Updates the metadata URI for the AVS during initialization
+    /// @dev This is only used during construction before facets are callable
     /// @param _metadataUri is the metadata URI for the AVS
-    function _updateAVSMetadataURI(string memory _metadataUri) private {
+    function _initializeAVSMetadataURI(string memory _metadataUri) private {
         IAllocationManager(_eigenAddresses.allocationManager).updateAVSMetadataURI(address(this), _metadataUri);
     }
 }
