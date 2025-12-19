@@ -10,6 +10,8 @@ import {LibDiamond} from "../../diamond/libraries/LibDiamond.sol";
 import {EigenAddresses} from "./Types.sol";
 import {EigenCoverageStorage} from "./EigenCoverageStorage.sol";
 import {AssetPriceOracleAndSwapper} from "../../mixins/AssetPriceOracleAndSwapper.sol";
+import {IEigenServiceManager} from "./interfaces/IEigenServiceManager.sol";
+import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
 
 /// @title EigenCoverageDiamond
 /// @author p-dealwis, Infinality
@@ -44,6 +46,8 @@ contract EigenCoverageDiamond is EigenCoverageStorage, AssetPriceOracleAndSwappe
         ds.supportedInterfaces[type(IDiamondCut).interfaceId] = true;
         ds.supportedInterfaces[type(IDiamondLoupe).interfaceId] = true;
         ds.supportedInterfaces[type(IERC165).interfaceId] = true;
+        ds.supportedInterfaces[type(IEigenServiceManager).interfaceId] = true;
+        ds.supportedInterfaces[type(ICoverageProvider).interfaceId] = true;
 
         // Initialize app-specific storage
         _eigenAddresses = _args.eigenAddresses;

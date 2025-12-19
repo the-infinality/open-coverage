@@ -91,6 +91,29 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         assertEq(IERC20(USDT).balanceOf(address(mockContract)), amountOut);
     }
 
+    function test_swap_uniswap_v3_multihop() public {
+        uint128 amountOut = 1000e6;
+        deal(rETH, address(mockContract), 1e18);
+
+        // V3 multi-hop path: rETH -> WETH (fee: 100) -> USDC (fee: 500)
+        // For EXACT_OUT, path is reversed: output -> fee -> intermediate -> fee -> input
+        bytes memory poolInfo = abi.encodePacked(
+            USDC, // output token (20 bytes)
+            uint24(500), // fee for WETH->USDC pool (3 bytes)
+            WETH, // intermediate token (20 bytes)
+            uint24(100), // fee for rETH->WETH pool (3 bytes)
+            rETH // input token (20 bytes)
+        );
+
+        MockPriceOracle rethUsdcOracle = new MockPriceOracle(3300e6, rETH, USDC);
+        SwapParams memory swapParams = SwapParams({swapEngine: SwapEngine.UNISWAP_V3, poolInfo: poolInfo});
+        mockContract.registerPriceAdaptor(address(rethUsdcOracle), rETH, USDC, swapParams);
+
+        mockContract.swap(amountOut, rETH, USDC);
+
+        assertEq(IERC20(USDC).balanceOf(address(mockContract)), amountOut);
+    }
+
     function test_RevertWhen_swap_asset_pair_not_registered() public {
         uint128 amountOut = 1000e6;
         deal(USDC, address(mockContract), amountOut * 2);

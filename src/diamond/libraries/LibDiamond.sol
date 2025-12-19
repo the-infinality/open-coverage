@@ -231,12 +231,9 @@ library LibDiamond {
     /// @param _selector The function selector
     /// @param _selectorPosition The position of the selector in the facet's selectors array
     /// @param _facetAddress The address of the facet
-    function addFunction(
-        DiamondStorage storage ds,
-        bytes4 _selector,
-        uint96 _selectorPosition,
-        address _facetAddress
-    ) internal {
+    function addFunction(DiamondStorage storage ds, bytes4 _selector, uint96 _selectorPosition, address _facetAddress)
+        internal
+    {
         ds.selectorToFacetAndPosition[_selector].functionSelectorPosition = _selectorPosition;
         ds.selectorToFacetAndPosition[_selector].facetAddress = _facetAddress;
         ds.facetFunctionSelectors[_facetAddress].functionSelectors.push(_selector);

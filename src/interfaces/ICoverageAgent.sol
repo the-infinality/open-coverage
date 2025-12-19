@@ -46,6 +46,11 @@ interface ICoverageAgent {
     /// @param positionId The coverage position to register.
     function onRegisterPosition(uint256 positionId) external;
 
+    /// @notice Triggered when a coverage claim has been slashed.
+    /// @dev Can only be called by the coverage provider that issued the claim.
+    /// @param claimId The claim id slashed.
+    function onSlashCompleted(uint256 claimId) external;
+
     /// ============ Coverage ============
 
     /// @notice Purchase coverage from coverage providers.

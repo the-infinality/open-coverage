@@ -40,6 +40,13 @@ contract CoverageAgent is ICoverageAgent {
     }
 
     /// @inheritdoc ICoverageAgent
+    function onSlashCompleted(uint256) external view {
+        if (!_coverageProviders[msg.sender].active) {
+            revert CoverageProviderNotActive();
+        }
+    }
+
+    /// @inheritdoc ICoverageAgent
     function purchaseCoverage(ClaimCoverageRequest[] calldata requests) external returns (uint256 coverageId) {
         //TODO: Implement purchaseCoverage
     }

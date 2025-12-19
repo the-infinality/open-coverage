@@ -52,6 +52,7 @@ contract MockCoverageProvider is ICoverageProvider {
     mapping(uint256 => CoveragePosition) private _positions;
     mapping(uint256 => CoverageClaim) private _claims;
     mapping(address => uint256) private _totalCoverageByAgent;
+    mapping(uint256 => uint256) private _claimSlashAmounts;
 
     function onIsRegistered() external override {
         isRegistered = true;
@@ -109,10 +110,19 @@ contract MockCoverageProvider is ICoverageProvider {
     {
         slashStatuses = new CoverageClaimStatus[](claimIds.length);
         for (uint256 i = 0; i < claimIds.length; i++) {
+            _claimSlashAmounts[claimIds[i]] = amounts[i];
             _claims[claimIds[i]].status = CoverageClaimStatus.Slashed;
             slashStatuses[i] = CoverageClaimStatus.Slashed;
             emit Slashed(claimIds[i], amounts[i]);
         }
+    }
+
+    function completeSlash(uint256 claimId) external override {
+        if (_claimSlashAmounts[claimId] > _claims[claimId].amount) {
+            revert SlashAmountExceedsClaim(claimId, _claimSlashAmounts[claimId], _claims[claimId].amount);
+        }
+        _claims[claimId].status = CoverageClaimStatus.Slashed;
+        emit ClaimSlashed(claimId, _claimSlashAmounts[claimId]);
     }
 
     function position(uint256 positionId) external view override returns (CoveragePosition memory) {

@@ -4,8 +4,9 @@ pragma solidity ^0.8.24;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20} from "@openzeppelin-v5/contracts/token/ERC20/ERC20.sol";
 import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/EnumerableMap.sol";
-import {IAllocationManager} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
+import {IAllocationManager, IAllocationManagerTypes} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
+import {IStrategyManager} from "eigenlayer-contracts/interfaces/IStrategyManager.sol";
 import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
 import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
 import {IRewardsCoordinatorTypes} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
@@ -13,12 +14,13 @@ import {Refundable, CoverageClaimStatus} from "src/interfaces/ICoverageProvider.
 
 import {LibDiamond} from "../../../diamond/libraries/LibDiamond.sol";
 import {EigenAddresses} from "../Types.sol";
-import {InvalidAVS} from "../Errors.sol";
+import {InvalidAVS, NotAllocated} from "../Errors.sol";
 import {IEigenServiceManager, EigenCoveragePosition} from "../interfaces/IEigenServiceManager.sol";
 import {CoverageClaim} from "../../../interfaces/ICoverageProvider.sol";
 import {ICoverageAgent} from "../../../interfaces/ICoverageAgent.sol";
 import {AssetPriceOracleAndSwapper} from "../../../mixins/AssetPriceOracleAndSwapper.sol";
 import {EigenCoverageStorage, ClaimRewardDistribution} from "../EigenCoverageStorage.sol";
+import {WAD} from "eigenlayer-contracts/libraries/SlashingLib.sol";
 
 /// @title EigenServiceManagerFacet
 /// @author p-dealwis, Infinality
@@ -142,6 +144,69 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, AssetPriceOracleAndSw
         IAllocationManager(_eigenAddresses.allocationManager).updateAVSMetadataURI(address(this), metadataURI);
     }
 
+    /// @inheritdoc IEigenServiceManager
+    function slashOperator(address operator, address strategy, address coverageAgent, uint256 amount)
+        external
+        returns (uint256 tokensReceived)
+    {
+        require(msg.sender == address(this), "Only internal calls");
+
+        uint32 operatorSetId = coverageAgentToOperatorSetId[coverageAgent];
+
+        IStrategy[] memory strategies = new IStrategy[](1);
+        strategies[0] = IStrategy(strategy);
+
+        uint256 wadToSlash = _calculateWadToSlash(operator, strategy, coverageAgent, amount);
+
+        uint256[] memory wadsToSlash = new uint256[](1);
+        wadsToSlash[0] = wadToSlash;
+
+        (uint256 slashId,) = IAllocationManager(_eigenAddresses.allocationManager)
+            .slashOperator(
+                address(this),
+                IAllocationManagerTypes.SlashingParams({
+                    operator: operator,
+                    operatorSetId: operatorSetId,
+                    strategies: strategies,
+                    wadsToSlash: wadsToSlash,
+                    description: "Coverage claim slash"
+                })
+            );
+
+        // Claim slashed tokens from StrategyManager (tokens are sent to this contract as redistribution recipient)
+        OperatorSet memory operatorSet = OperatorSet({avs: address(this), id: operatorSetId});
+        tokensReceived = IStrategyManager(_eigenAddresses.strategyManager)
+            .clearBurnOrRedistributableSharesByStrategy(operatorSet, slashId, IStrategy(strategy));
+    }
+
+    /// @inheritdoc IEigenServiceManager
+    function ensureAllocations(address coverageAgent, address operator, address strategy) external {
+        uint32 operatorSetId = coverageAgentToOperatorSetId[coverageAgent];
+        OperatorSet memory operatorSet = OperatorSet({avs: address(this), id: operatorSetId});
+        IAllocationManager allocationManager = IAllocationManager(_eigenAddresses.allocationManager);
+
+        // Ensure strategy is added to the operator set
+        IStrategy[] memory strategiesInSet = allocationManager.getStrategiesInOperatorSet(operatorSet);
+        bool strategyInSet = false;
+        for (uint256 i = 0; i < strategiesInSet.length; i++) {
+            if (address(strategiesInSet[i]) == strategy) {
+                strategyInSet = true;
+                break;
+            }
+        }
+        if (!strategyInSet) {
+            IStrategy[] memory strategiesToAdd = new IStrategy[](1);
+            strategiesToAdd[0] = IStrategy(strategy);
+            allocationManager.addStrategiesToOperatorSet(address(this), operatorSetId, strategiesToAdd);
+        }
+
+        // Make sure operator has strategy allocations to the coverage agent's operator set
+        IAllocationManagerTypes.Allocation memory allocation =
+            allocationManager.getAllocation(operator, operatorSet, IStrategy(strategy));
+
+        if (allocation.currentMagnitude == 0) revert NotAllocated();
+    }
+
     /// ============ Internal functions ============ //
 
     /// @notice Returns the minimum of two uint256 values
@@ -161,9 +226,12 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, AssetPriceOracleAndSw
         strategies[0] = IStrategy(strategy);
         address strategyAsset = address(IStrategy(strategy).underlyingToken());
         address coverageAsset = address(ICoverageAgent(coverageAgent).asset());
-        uint256[][] memory allocatedStake = IAllocationManager(_eigenAddresses.allocationManager).getAllocatedStake(
-            OperatorSet({avs: address(this), id: coverageAgentToOperatorSetId[coverageAgent]}), _operators, strategies
-        );
+        uint256[][] memory allocatedStake = IAllocationManager(_eigenAddresses.allocationManager)
+            .getAllocatedStake(
+                OperatorSet({avs: address(this), id: coverageAgentToOperatorSetId[coverageAgent]}),
+                _operators,
+                strategies
+            );
         uint256 quotedPrice = quote(allocatedStake[0][0], strategyAsset, coverageAsset);
 
         uint8 strategyDecimals = ERC20(strategyAsset).decimals();
@@ -174,6 +242,33 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, AssetPriceOracleAndSw
         } else {
             return quotedPrice * (10 ** (coverageDecimals - strategyDecimals));
         }
+    }
+
+    /// @notice Calculates the WAD proportion to slash based on the amount
+    function _calculateWadToSlash(address operator, address strategy, address coverageAgent, uint256 amount)
+        private
+        view
+        returns (uint256 wadToSlash)
+    {
+        // Get allocated stake
+        address[] memory ops = new address[](1);
+        ops[0] = operator;
+        IStrategy[] memory strats = new IStrategy[](1);
+        strats[0] = IStrategy(strategy);
+
+        uint256 totalAllocatedStake = IAllocationManager(_eigenAddresses.allocationManager)
+            .getAllocatedStake(
+                OperatorSet({avs: address(this), id: coverageAgentToOperatorSetId[coverageAgent]}), ops, strats
+            )[0][0];
+
+        if (totalAllocatedStake == 0) revert NotAllocated();
+
+        // Convert amount to strategy asset and calculate proportion
+        uint256 slashAmount = quote(
+            amount, address(IStrategy(strategy).underlyingToken()), address(ICoverageAgent(coverageAgent).asset())
+        );
+        wadToSlash = (slashAmount * WAD) / totalAllocatedStake;
+        if (wadToSlash > WAD) wadToSlash = WAD;
     }
 }
 

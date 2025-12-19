@@ -109,10 +109,13 @@ abstract contract AssetPriceOracleAndSwapper {
         bytes[] memory inputs = new bytes[](1);
         bytes memory commands = abi.encodePacked(uint8(Commands.V3_SWAP_EXACT_OUT));
 
-        // Extract input token (token1) from V3 poolInfo path (at offset 23 in data, after length prefix)
+        // Extract input token from V3 poolInfo path (last 20 bytes of the path)
+        // For EXACT_OUT, path format is: output -> fee -> [intermediate -> fee ->]* input
+        // The input token is always the last 20 bytes
         address inputToken;
         assembly {
-            inputToken := mload(add(poolInfo, 43)) // inputToken is at offset 43 in poolInfo
+            let len := mload(poolInfo) // Get length of poolInfo
+            inputToken := mload(add(poolInfo, len)) // Input token ends at offset len, mload reads 32 bytes so address is right-aligned
         }
 
         permit2.approve(inputToken, address(universalRouter), type(uint160).max, uint48(block.timestamp));

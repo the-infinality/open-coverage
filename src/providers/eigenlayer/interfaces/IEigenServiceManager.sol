@@ -65,4 +65,21 @@ interface IEigenServiceManager {
     /// @dev Only callable by the contract owner
     /// @param metadataURI The new metadata URI
     function updateAVSMetadataURI(string calldata metadataURI) external;
+
+    /// @notice Slashes an operator's allocated stake through EigenLayer and claims redistributed tokens
+    /// @dev Only callable internally by the diamond
+    /// @param operator The operator to slash
+    /// @param strategy The strategy to slash
+    /// @param coverageAgent The coverage agent associated with the slash
+    /// @param amount The amount to slash in coverage asset terms
+    /// @return tokensReceived The amount of tokens received from the slash
+    function slashOperator(address operator, address strategy, address coverageAgent, uint256 amount)
+        external
+        returns (uint256 tokensReceived);
+
+    /// @notice Ensures strategy is added to the operator set and operator has non-zero allocations for given operator.
+    /// @param coverageAgent The coverage agent whose operator set to check
+    /// @param operator The operator to verify allocations for
+    /// @param strategy The strategy to ensure is allocated
+    function ensureAllocations(address coverageAgent, address operator, address strategy) external;
 }

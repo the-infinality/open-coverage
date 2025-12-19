@@ -133,7 +133,7 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
     }
 
     function _getEigenServiceManagerSelectors() internal pure returns (bytes4[] memory) {
-        bytes4[] memory selectors = new bytes4[](8);
+        bytes4[] memory selectors = new bytes4[](10);
         selectors[0] = IEigenServiceManager.eigenAddresses.selector;
         selectors[1] = IEigenServiceManager.registerOperator.selector;
         selectors[2] = IEigenServiceManager.setStrategyWhitelist.selector;
@@ -142,11 +142,13 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
         selectors[5] = IEigenServiceManager.coverageAllocated.selector;
         selectors[6] = IEigenServiceManager.captureRewards.selector;
         selectors[7] = IEigenServiceManager.updateAVSMetadataURI.selector;
+        selectors[8] = IEigenServiceManager.slashOperator.selector;
+        selectors[9] = IEigenServiceManager.ensureAllocations.selector;
         return selectors;
     }
 
     function _getEigenCoverageProviderSelectors() internal pure returns (bytes4[] memory) {
-        bytes4[] memory selectors = new bytes4[](11);
+        bytes4[] memory selectors = new bytes4[](12);
         selectors[0] = ICoverageProvider.onIsRegistered.selector;
         selectors[1] = ICoverageProvider.createPosition.selector;
         selectors[2] = ICoverageProvider.closePosition.selector;
@@ -154,10 +156,11 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
         selectors[4] = ICoverageProvider.liquidateClaim.selector;
         selectors[5] = ICoverageProvider.completeClaims.selector;
         selectors[6] = ICoverageProvider.slashClaims.selector;
-        selectors[7] = ICoverageProvider.position.selector;
-        selectors[8] = ICoverageProvider.positionMaxAmount.selector;
-        selectors[9] = ICoverageProvider.claim.selector;
-        selectors[10] = ICoverageProvider.claimDeficit.selector;
+        selectors[7] = ICoverageProvider.completeSlash.selector;
+        selectors[8] = ICoverageProvider.position.selector;
+        selectors[9] = ICoverageProvider.positionMaxAmount.selector;
+        selectors[10] = ICoverageProvider.claim.selector;
+        selectors[11] = ICoverageProvider.claimDeficit.selector;
         return selectors;
     }
 }

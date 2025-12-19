@@ -55,6 +55,9 @@ abstract contract EigenCoverageStorage {
     /// @notice The amount of reward distributed to the operator for a given claim
     mapping(uint256 claimId => ClaimRewardDistribution) public claimRewardDistributions;
 
+    /// @notice The amount of coverage agent assets to slash for a given claim
+    mapping(uint256 claimId => uint256 amount) public claimSlashAmounts;
+
     /// @dev Gap for future storage variables (following OpenZeppelin upgradeable pattern)
     uint256[50] private __gap;
 }

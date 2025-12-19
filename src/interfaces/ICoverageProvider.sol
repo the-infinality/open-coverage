@@ -71,6 +71,8 @@ interface ICoverageProvider {
     event Slashed(uint256 indexed claimId, uint256 amount);
     event Liquidated(uint256 indexed claimId);
     event ClaimCompleted(uint256 indexed claimId);
+    event ClaimSlashed(uint256 indexed claimId, uint256 amount);
+    event ClaimSlashPending(uint256 indexed claimId, address slashCoordinator);
 
     error PositionExpired(uint256 positionId);
     error TimestampInvalid(uint256 timestamp);
@@ -80,6 +82,9 @@ interface ICoverageProvider {
     error RewardTransferFailed();
     error InsufficientCoverageAvailable(uint256 deficit);
     error DurationExceedsMax(uint256 maxDuration, uint256 duration);
+    error InvalidClaim(uint256 claimId);
+    error SlashFailed(uint256 claimId);
+    error SlashAmountExceedsClaim(uint256 claimId, uint256 slash, uint256 claim);
 
     /// ============ Hooks ============
 
@@ -135,6 +140,11 @@ interface ICoverageProvider {
     function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts)
         external
         returns (CoverageClaimStatus[] memory slashStatuses);
+
+    /// @notice Complete the slashing process for a coverage claim.
+    /// @dev Can only be called by the slash coordinator that initiated the slashing process.
+    /// @param claimId The id of the coverage claim to complete the slashing process for.
+    function completeSlash(uint256 claimId) external;
 
     /// ============ Discovery ============
 

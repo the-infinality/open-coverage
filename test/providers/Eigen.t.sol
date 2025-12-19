@@ -4,7 +4,10 @@ pragma solidity ^0.8.24;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EigenTestDeployer} from "../utils/EigenTestDeployer.sol";
 import {CoveragePosition, Refundable} from "src/interfaces/ICoverageProvider.sol";
-import {CreatePositionAddtionalData, IEigenServiceManager} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
+import {
+    CreatePositionAddtionalData,
+    IEigenServiceManager
+} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
 import {IAllocationManager} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {IAllocationManagerTypes} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermissionController.sol";
@@ -15,10 +18,7 @@ import {CoverageProviderData} from "src/interfaces/ICoverageAgent.sol";
 import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
 import {IStrategyManager} from "eigenlayer-contracts/interfaces/IStrategyManager.sol";
 import {ISignatureUtilsMixinTypes} from "eigenlayer-contracts/interfaces/ISignatureUtilsMixin.sol";
-import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
-import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
-import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
-import {UniswapV4PoolInfo, SwapParams, SwapEngine, AssetPriceOracleAndSwapper} from "src/mixins/AssetPriceOracleAndSwapper.sol";
+import {SwapParams, SwapEngine, AssetPriceOracleAndSwapper} from "src/mixins/AssetPriceOracleAndSwapper.sol";
 import {MockPriceOracle} from "../utils/MockPriceOracle.sol";
 import {CoverageClaim, CoverageClaimStatus} from "src/interfaces/ICoverageProvider.sol";
 
@@ -67,7 +67,7 @@ contract EigenTest is EigenTestDeployer {
 
         staker = makeAddr("staker");
 
-        deal(cbBTC, staker, 1000e18);
+        deal(rETH, staker, 1000e18);
 
         // Cast diamond to interfaces
         eigenServiceManager = IEigenServiceManager(address(eigenCoverageDiamond));
@@ -85,22 +85,20 @@ contract EigenTest is EigenTestDeployer {
         coverageAgent.registerCoverageProvider(address(eigenCoverageDiamond));
         eigenServiceManager.setStrategyWhitelist(address(_getTestStrategy()), true);
 
-        mockPriceOracle = new MockPriceOracle(100000e18, cbBTC, USDC);
+        mockPriceOracle = new MockPriceOracle(100000e18, rETH, USDC);
 
-        // Add V4 pool
-        PoolKey memory poolKey = PoolKey({
-            currency0: Currency.wrap(cbBTC),
-            currency1: Currency.wrap(USDC),
-            fee: 100,
-            tickSpacing: 1,
-            hooks: IHooks(address(0))
-        });
+        // V3 multi-hop path: rETH -> WETH (fee: 100) -> USDC (fee: 500)
+        // For EXACT_OUT, path is reversed: output -> fee -> intermediate -> fee -> input
+        bytes memory poolInfo = abi.encodePacked(
+            USDC, // output token (20 bytes)
+            uint24(500), // fee for WETH->USDC pool (3 bytes)
+            WETH, // intermediate token (20 bytes)
+            uint24(100), // fee for rETH->WETH pool (3 bytes)
+            rETH // input token (20 bytes)
+        );
 
-        UniswapV4PoolInfo memory uniswapV4PoolInfo = UniswapV4PoolInfo({poolKey: poolKey, zeroForOne: true});
-
-        SwapParams memory swapParams =
-            SwapParams({swapEngine: SwapEngine.UNISWAP_V4_SINGLE_HOP, poolInfo: abi.encode(uniswapV4PoolInfo)});
-        eigenPriceOracle.registerPriceAdaptor(address(mockPriceOracle), cbBTC, USDC, swapParams);
+        SwapParams memory swapParams = SwapParams({swapEngine: SwapEngine.UNISWAP_V3, poolInfo: poolInfo});
+        eigenPriceOracle.registerPriceAdaptor(address(mockPriceOracle), rETH, USDC, swapParams);
     }
 
     function test_checkCoverageProviderRegistered() public view {
@@ -116,13 +114,11 @@ contract EigenTest is EigenTestDeployer {
     function test_allocate() public {
         _setupwithAllocations();
         OperatorSet memory operatorSet = OperatorSet({
-            avs: address(eigenCoverageDiamond),
-            id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
+            avs: address(eigenCoverageDiamond), id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
         });
-        IAllocationManagerTypes.Allocation memory allocation =
-            IAllocationManager(eigenServiceManager.eigenAddresses().allocationManager).getAllocation(
-                address(operator), operatorSet, _getTestStrategy()
-            );
+        IAllocationManagerTypes.Allocation memory allocation = IAllocationManager(
+                eigenServiceManager.eigenAddresses().allocationManager
+            ).getAllocation(address(operator), operatorSet, _getTestStrategy());
         assertEq(allocation.currentMagnitude, 1e18);
     }
 
@@ -166,17 +162,17 @@ contract EigenTest is EigenTestDeployer {
     }
 
     function test_mockPriceOracleQuotes() public view {
-        uint256 quote = mockPriceOracle.getQuote(1e18, cbBTC, USDC);
+        uint256 quote = mockPriceOracle.getQuote(1e18, rETH, USDC);
         assertEq(quote, 100000e18);
 
-        (uint256 bidOutAmount, uint256 askOutAmount) = mockPriceOracle.getQuotes(1e18, cbBTC, USDC);
+        (uint256 bidOutAmount, uint256 askOutAmount) = mockPriceOracle.getQuotes(1e18, rETH, USDC);
         assertEq(bidOutAmount, 100000e18);
         assertEq(askOutAmount, 100000e18);
 
-        quote = mockPriceOracle.getQuote(100000e18, USDC, cbBTC);
+        quote = mockPriceOracle.getQuote(100000e18, USDC, rETH);
         assertEq(quote, 1e18);
 
-        (bidOutAmount, askOutAmount) = mockPriceOracle.getQuotes(100000e18, USDC, cbBTC);
+        (bidOutAmount, askOutAmount) = mockPriceOracle.getQuotes(100000e18, USDC, rETH);
         assertEq(bidOutAmount, 1e18);
         assertEq(askOutAmount, 1e18);
     }
@@ -236,8 +232,9 @@ contract EigenTest is EigenTestDeployer {
         );
         uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
 
-        uint256 coverageAllocated =
-            eigenServiceManager.coverageAllocated(address(operator), address(_getTestStrategy()), address(coverageAgent));
+        uint256 coverageAllocated = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
 
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
@@ -426,5 +423,40 @@ contract EigenTest is EigenTestDeployer {
         assertEq(amount, 5e6);
         assertEq(duration, 15 days);
         assertEq(distributionStartTime, toRewardsInterval(block.timestamp - 25 days));
+    }
+
+    function xtest_slashClaims() public {
+        _setupwithAllocations();
+
+        _stakeAndDelegateToOperator(1000e18);
+
+        // Create the position
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0)
+        });
+        bytes memory additionalData = abi.encode(
+            CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
+        );
+        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+
+        uint256[] memory claimIds = new uint256[](1);
+        uint256[] memory amounts = new uint256[](1);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+        uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
+
+        claimIds[0] = claimId;
+        amounts[0] = 10e6;
+        eigenCoverageProvider.slashClaims(claimIds, amounts);
+        vm.stopPrank();
+
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
     }
 }
