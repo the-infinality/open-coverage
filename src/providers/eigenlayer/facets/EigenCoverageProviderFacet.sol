@@ -23,7 +23,7 @@ import {
     CoverageClaimStatus
 } from "src/interfaces/ICoverageProvider.sol";
 import {ICoverageAgent} from "src/interfaces/ICoverageAgent.sol";
-import {AssetPriceOracleAndSwapper} from "src/mixins/AssetPriceOracleAndSwapper.sol";
+import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {EigenCoverageStorage, ClaimRewardDistribution} from "../EigenCoverageStorage.sol";
 import {ISlashCoordinator, SlashStatus} from "src/interfaces/ISlashCoordinator.sol";
 
@@ -31,7 +31,7 @@ import {ISlashCoordinator, SlashStatus} from "src/interfaces/ISlashCoordinator.s
 /// @author p-dealwis, Infinality
 /// @notice Facet contract implementing ICoverageProvider interface
 /// @dev This contract is designed to be called via delegatecall from EigenCoverageDiamond
-contract EigenCoverageProviderFacet is EigenCoverageStorage, AssetPriceOracleAndSwapper, ICoverageProvider {
+contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     using EnumerableMap for EnumerableMap.AddressToUintMap;
 
     /// @inheritdoc ICoverageProvider
@@ -321,7 +321,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, AssetPriceOracleAnd
                 _operators,
                 strategies
             );
-        uint256 quotedPrice = quote(allocatedStake[0][0], strategyAsset, coverageAsset);
+        uint256 quotedPrice = IAssetPriceOracleAndSwapper(address(this)).quote(allocatedStake[0][0], strategyAsset, coverageAsset);
 
         uint8 strategyDecimals = ERC20(strategyAsset).decimals();
         uint8 coverageDecimals = ERC20(coverageAsset).decimals();
@@ -364,7 +364,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, AssetPriceOracleAnd
 
         // Swap the slashed strategy asset to the coverage agent's asset
         // forge-lint: disable-next-line(unsafe-typecast)
-        swap(uint128(amount), _position.asset, ICoverageAgent(_position.coverageAgent).asset());
+        IAssetPriceOracleAndSwapper(address(this)).swap(uint128(amount), _position.asset, ICoverageAgent(_position.coverageAgent).asset());
 
         // Transfer swapped tokens to coverage agent
         bool success = IERC20(ICoverageAgent(_position.coverageAgent).asset()).transfer(_position.coverageAgent, amount);

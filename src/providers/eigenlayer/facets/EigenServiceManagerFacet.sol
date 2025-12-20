@@ -18,7 +18,7 @@ import {InvalidAVS, NotAllocated} from "../Errors.sol";
 import {IEigenServiceManager, EigenCoveragePosition} from "../interfaces/IEigenServiceManager.sol";
 import {CoverageClaim} from "../../../interfaces/ICoverageProvider.sol";
 import {ICoverageAgent} from "../../../interfaces/ICoverageAgent.sol";
-import {AssetPriceOracleAndSwapper} from "../../../mixins/AssetPriceOracleAndSwapper.sol";
+import {IAssetPriceOracleAndSwapper} from "../../../interfaces/IAssetPriceOracleAndSwapper.sol";
 import {EigenCoverageStorage, ClaimRewardDistribution} from "../EigenCoverageStorage.sol";
 import {WAD} from "eigenlayer-contracts/libraries/SlashingLib.sol";
 
@@ -26,7 +26,7 @@ import {WAD} from "eigenlayer-contracts/libraries/SlashingLib.sol";
 /// @author p-dealwis, Infinality
 /// @notice Facet contract implementing IEigenServiceManager interface
 /// @dev This contract is designed to be called via delegatecall from EigenCoverageDiamond
-contract EigenServiceManagerFacet is EigenCoverageStorage, AssetPriceOracleAndSwapper, IEigenServiceManager {
+contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager {
     using EnumerableMap for EnumerableMap.AddressToUintMap;
 
     /// @inheritdoc IEigenServiceManager
@@ -232,7 +232,7 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, AssetPriceOracleAndSw
                 _operators,
                 strategies
             );
-        uint256 quotedPrice = quote(allocatedStake[0][0], strategyAsset, coverageAsset);
+        uint256 quotedPrice = IAssetPriceOracleAndSwapper(address(this)).quote(allocatedStake[0][0], strategyAsset, coverageAsset);
 
         uint8 strategyDecimals = ERC20(strategyAsset).decimals();
         uint8 coverageDecimals = ERC20(coverageAsset).decimals();
@@ -264,7 +264,7 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, AssetPriceOracleAndSw
         if (totalAllocatedStake == 0) revert NotAllocated();
 
         // Convert amount to strategy asset and calculate proportion
-        uint256 slashAmount = quote(
+        uint256 slashAmount = IAssetPriceOracleAndSwapper(address(this)).quote(
             amount, address(IStrategy(strategy).underlyingToken()), address(ICoverageAgent(coverageAgent).asset())
         );
         wadToSlash = (slashAmount * WAD) / totalAllocatedStake;
