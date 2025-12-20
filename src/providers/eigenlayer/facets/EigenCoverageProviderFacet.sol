@@ -321,7 +321,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
                 _operators,
                 strategies
             );
-        uint256 quotedPrice = IAssetPriceOracleAndSwapper(address(this)).quote(allocatedStake[0][0], strategyAsset, coverageAsset);
+        uint256 quotedPrice =
+            IAssetPriceOracleAndSwapper(address(this)).quote(allocatedStake[0][0], strategyAsset, coverageAsset);
 
         uint8 strategyDecimals = ERC20(strategyAsset).decimals();
         uint8 coverageDecimals = ERC20(coverageAsset).decimals();
@@ -364,7 +365,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
 
         // Swap the slashed strategy asset to the coverage agent's asset
         // forge-lint: disable-next-line(unsafe-typecast)
-        IAssetPriceOracleAndSwapper(address(this)).swap(uint128(amount), _position.asset, ICoverageAgent(_position.coverageAgent).asset());
+        IAssetPriceOracleAndSwapper(address(this))
+            .swap(uint128(amount), _position.asset, ICoverageAgent(_position.coverageAgent).asset());
 
         // Transfer swapped tokens to coverage agent
         bool success = IERC20(ICoverageAgent(_position.coverageAgent).asset()).transfer(_position.coverageAgent, amount);

@@ -21,8 +21,7 @@ abstract contract AssetPriceOracleAndSwapperStorage {
     }
 
     /// @notice Storage slot for the swapper storage (keccak256("open-coverage.storage.AssetPriceOracleAndSwapper") - 1)
-    bytes32 private constant SWAPPER_STORAGE_SLOT =
-        0x8a35acfbc15ff81a39ae7d344fd709f28e8600b4aa8c65c6b64bfe7fe36bd19a;
+    bytes32 private constant SWAPPER_STORAGE_SLOT = 0x8a35acfbc15ff81a39ae7d344fd709f28e8600b4aa8c65c6b64bfe7fe36bd19a;
 
     /// @notice Returns the swapper storage struct from the designated storage slot
     function _swapperStorage() internal pure returns (SwapperStorage storage s) {

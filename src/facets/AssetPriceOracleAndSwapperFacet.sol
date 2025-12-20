@@ -10,5 +10,6 @@ import {AssetPriceOracleAndSwapper} from "../mixins/AssetPriceOracleAndSwapper.s
 contract AssetPriceOracleAndSwapperFacet is AssetPriceOracleAndSwapper {
     // All functionality is inherited from AssetPriceOracleAndSwapper
     // This facet exposes the abstract contract's functions through the diamond pattern
-}
+
+    }
 

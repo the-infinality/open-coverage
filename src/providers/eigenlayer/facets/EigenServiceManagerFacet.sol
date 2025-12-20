@@ -232,7 +232,8 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
                 _operators,
                 strategies
             );
-        uint256 quotedPrice = IAssetPriceOracleAndSwapper(address(this)).quote(allocatedStake[0][0], strategyAsset, coverageAsset);
+        uint256 quotedPrice =
+            IAssetPriceOracleAndSwapper(address(this)).quote(allocatedStake[0][0], strategyAsset, coverageAsset);
 
         uint8 strategyDecimals = ERC20(strategyAsset).decimals();
         uint8 coverageDecimals = ERC20(coverageAsset).decimals();
@@ -264,9 +265,10 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         if (totalAllocatedStake == 0) revert NotAllocated();
 
         // Convert amount to strategy asset and calculate proportion
-        uint256 slashAmount = IAssetPriceOracleAndSwapper(address(this)).quote(
-            amount, address(IStrategy(strategy).underlyingToken()), address(ICoverageAgent(coverageAgent).asset())
-        );
+        uint256 slashAmount = IAssetPriceOracleAndSwapper(address(this))
+            .quote(
+                amount, address(IStrategy(strategy).underlyingToken()), address(ICoverageAgent(coverageAgent).asset())
+            );
         wadToSlash = (slashAmount * WAD) / totalAllocatedStake;
         if (wadToSlash > WAD) wadToSlash = WAD;
     }
