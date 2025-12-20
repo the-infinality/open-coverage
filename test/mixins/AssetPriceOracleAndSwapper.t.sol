@@ -3,38 +3,26 @@ pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {TestDeployer} from "test/utils/TestDeployer.sol";
+import {AssetPriceOracleAndSwapper} from "../../src/mixins/AssetPriceOracleAndSwapper.sol";
 import {
-    AssetPriceOracleAndSwapper,
-    IPriceOracle,
+    IAssetPriceOracleAndSwapper,
     SwapEngine,
     SwapParams,
     UniswapV4PoolInfo
-} from "../../src/mixins/AssetPriceOracleAndSwapper.sol";
+} from "../../src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {UniswapHelper, UniswapAddressbook} from "utils/UniswapHelper.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
+import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {MockPriceOracle} from "../utils/MockPriceOracle.sol";
 
-contract MockPriceOracle is IPriceOracle {
-    function name() external pure returns (string memory) {
-        return "MockPriceOracle";
+contract MockContract is AssetPriceOracleAndSwapper, Initializable {
+    constructor() {}
+
+    function initialize(address universalRouter_, address permit2_) public initializer {
+        __AssetPriceOracleAndSwapper_init(universalRouter_, permit2_);
     }
-
-    function getQuote(uint256 amountIn, address, address) external pure returns (uint256) {
-        return amountIn;
-    }
-
-    function getQuotes(uint256 amountIn, address, address)
-        external
-        pure
-        returns (uint256 bidOutAmount, uint256 askOutAmount)
-    {
-        return (amountIn, amountIn);
-    }
-}
-
-contract MockContract is AssetPriceOracleAndSwapper {
-    constructor(address universalRouter, address permit2) AssetPriceOracleAndSwapper(universalRouter, permit2) {}
 }
 
 contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
@@ -50,10 +38,11 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
 
         UniswapAddressbook memory uniswapAddressBook = _getUniswapAddressBook();
 
-        mockContract = new MockContract(
+        mockContract = new MockContract();
+        mockContract.initialize(
             uniswapAddressBook.uniswapAddresses.universalRouter, uniswapAddressBook.uniswapAddresses.permit2
         );
-        mockPriceOracle = new MockPriceOracle();
+        mockPriceOracle = new MockPriceOracle(1e18, USDC, USDT);
 
         // Add V4 pool
         PoolKey memory poolKey = PoolKey({
@@ -103,11 +92,34 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         assertEq(IERC20(USDT).balanceOf(address(mockContract)), amountOut);
     }
 
+    function test_swap_uniswap_v3_multihop() public {
+        uint128 amountOut = 1000e6;
+        deal(rETH, address(mockContract), 1e18);
+
+        // V3 multi-hop path: rETH -> WETH (fee: 100) -> USDC (fee: 500)
+        // For EXACT_OUT, path is reversed: output -> fee -> intermediate -> fee -> input
+        bytes memory poolInfo = abi.encodePacked(
+            USDC, // output token (20 bytes)
+            uint24(500), // fee for WETH->USDC pool (3 bytes)
+            WETH, // intermediate token (20 bytes)
+            uint24(100), // fee for rETH->WETH pool (3 bytes)
+            rETH // input token (20 bytes)
+        );
+
+        MockPriceOracle rethUsdcOracle = new MockPriceOracle(3300e6, rETH, USDC);
+        SwapParams memory swapParams = SwapParams({swapEngine: SwapEngine.UNISWAP_V3, poolInfo: poolInfo});
+        mockContract.registerPriceAdaptor(address(rethUsdcOracle), rETH, USDC, swapParams);
+
+        mockContract.swap(amountOut, rETH, USDC);
+
+        assertEq(IERC20(USDC).balanceOf(address(mockContract)), amountOut);
+    }
+
     function test_RevertWhen_swap_asset_pair_not_registered() public {
         uint128 amountOut = 1000e6;
         deal(USDC, address(mockContract), amountOut * 2);
 
-        vm.expectRevert(abi.encodeWithSelector(AssetPriceOracleAndSwapper.AssetPairNotRegistered.selector));
+        vm.expectRevert(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.AssetPairNotRegistered.selector));
         mockContract.swap(amountOut, USDC, address(0));
     }
 
@@ -122,7 +134,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
 
     function test_RevertWhen_quote_asset_pair_not_registered() public {
         uint256 amountIn = 1000e6;
-        vm.expectRevert(abi.encodeWithSelector(AssetPriceOracleAndSwapper.AssetPairNotRegistered.selector));
+        vm.expectRevert(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.AssetPairNotRegistered.selector));
         mockContract.quote(amountIn, USDC, address(0));
     }
 }

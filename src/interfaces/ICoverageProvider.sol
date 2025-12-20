@@ -2,9 +2,9 @@
 pragma solidity ^0.8.24;
 
 /// @notice Refund policy for coverage positions on liquidation
-/// @dev None - No premium refund
-/// @dev TimeWeighted - Refund premium based on time position has been open
-/// @dev Full - Full refund of premium on liquidation
+/// @dev None - No reward refund
+/// @dev TimeWeighted - Refund reward based on time position has been open
+/// @dev Full - Full refund of reward on liquidation
 enum Refundable {
     None,
     TimeWeighted,
@@ -12,6 +12,9 @@ enum Refundable {
 }
 
 struct CoveragePosition {
+    /// @notice The address of the coverage agent that this position will cover.
+    address coverageAgent;
+
     /// @notice The minimum rate for any delegation locking.
     /// @dev Rate is in basis points per annum
     uint16 minRate;
@@ -31,7 +34,7 @@ struct CoveragePosition {
     /// @dev The coverage provider must provide contingencies based on the refund policy:
     /// - None: No refund required
     /// - TimeWeighted: Refund proportional to remaining duration (e.g., 50% refund if 6 months remain of 12 month position)
-    /// - Full: Complete refund of premium to allow coverage agent to purchase coverage for remaining duration
+    /// - Full: Complete refund of reward to allow coverage agent to purchase coverage for remaining duration
     Refundable refundable;
 
     /// @notice The address of the slash coordinator for the coverage position.
@@ -52,7 +55,9 @@ struct CoverageClaim {
     uint256 positionId;
     uint256 amount;
     uint256 duration;
+    uint256 createdAt;
     CoverageClaimStatus status;
+    uint256 reward;
 }
 
 /// @title ICoverageProvider
@@ -60,15 +65,26 @@ struct CoverageClaim {
 /// @notice An interface for a coverage provider that can slash a delegator and distribute rewards.
 interface ICoverageProvider {
     event PositionCreated(uint256 indexed positionId);
-    event PositionUpdated(uint256 indexed positionId);
+    event PositionClosed(uint256 indexed positionId);
+    event CoverageIssued(uint256 indexed positionId, uint256 indexed claimId, uint256 amount, uint256 duration);
     event ClaimIssued(uint256 indexed positionId, uint256 indexed claimId, uint256 amount, uint256 duration);
     event Slashed(uint256 indexed claimId, uint256 amount);
     event Liquidated(uint256 indexed claimId);
     event ClaimCompleted(uint256 indexed claimId);
+    event ClaimSlashed(uint256 indexed claimId, uint256 amount);
+    event ClaimSlashPending(uint256 indexed claimId, address slashCoordinator);
 
     error PositionExpired(uint256 positionId);
     error TimestampInvalid(uint256 timestamp);
     error MinRateInvalid(uint16 minRate);
+    error NotCoverageAgent(address caller, address required);
+    error InsufficientReward(uint256 minimumReward, uint256 reward);
+    error RewardTransferFailed();
+    error InsufficientCoverageAvailable(uint256 deficit);
+    error DurationExceedsMax(uint256 maxDuration, uint256 duration);
+    error InvalidClaim(uint256 claimId);
+    error SlashFailed(uint256 claimId);
+    error SlashAmountExceedsClaim(uint256 claimId, uint256 slash, uint256 claim);
 
     /// ============ Hooks ============
 
@@ -89,29 +105,22 @@ interface ICoverageProvider {
         external
         returns (uint256 positionId);
 
-    /// @notice Update a coverage position.
-    /// @dev This can be called without notifying the coverage agent because it is assumed that they are already aware via events emitted.
-    /// @param positionId The id of the coverage position to update.
-    /// @param data The coverage position data to update.
-    function updatePosition(uint256 positionId, CoveragePosition memory data) external;
+    /// @notice Close a coverage position.
+    /// @param positionId The id of the coverage position to close.
+    function closePosition(uint256 positionId) external;
 
     /// ============ Coverage Claims ============
 
-    /// @notice Issue coverage for a coverage position.
-    /// @dev The purchaser of the coverage should approve the coverage provider to claim the coverage premium.
+    /// @notice Claim coverage for a coverage position.
+    /// @dev The purchaser of the coverage should approve the coverage provider to claim the coverage reward.
     /// @param positionId ID of the coverage position to claim coverage from.
     /// @param amount The amount of coverage to claim.
     /// @param duration The duration of the coverage to claim.
-    /// @param paymentAsset The asset to pay the coverage premium in.
-    /// @param paymentAmount The amount of the coverage premium to pay in the payment asset.
+    /// @param reward The amount of the coverage reward to pay.
     /// @return claimId ID of the coverage claim on success.
-    function issueCoverage(
-        uint256 positionId,
-        uint256 amount,
-        uint256 duration,
-        address paymentAsset,
-        uint256 paymentAmount
-    ) external returns (uint256 claimId);
+    function claimCoverage(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
+        external
+        returns (uint256 claimId);
 
     /// @notice Liquidate a coverage claim if it doesn't meet its obligations.
     /// @dev This should be called by the coverage agent if the coverage position doesn't meet its obligations.
@@ -132,20 +141,31 @@ interface ICoverageProvider {
         external
         returns (CoverageClaimStatus[] memory slashStatuses);
 
-    /// ============ Discovery ============
+    /// @notice Complete the slashing process for a coverage claim.
+    /// @dev Can only be called by the slash coordinator that initiated the slashing process.
+    /// @param claimId The id of the coverage claim to complete the slashing process for.
+    function completeSlash(uint256 claimId) external;
 
-    /// @notice Get the amount of the delegation for a given coverage agent.
-    /// @param coverageAgent The target of the delegation.
-    /// @return amount Total coverage issued to an agent.
-    function totalCoverageByAgent(address coverageAgent) external view returns (uint256 amount);
+    /// ============ Discovery ============
 
     /// @notice Get the coverage position for a given coverage id.
     /// @param positionId The position id to get the position for.
     /// @return position The coverage position.
     function position(uint256 positionId) external view returns (CoveragePosition memory position);
 
+    /// @notice Get the maximum amount of coverage available for a given position.
+    /// @param positionId The position id to get the maximum amount for.
+    /// @return maxAmount The maximum amount of coverage for the position.
+    function positionMaxAmount(uint256 positionId) external view returns (uint256 maxAmount);
+
     /// @notice Get the coverage claim for a given claim id.
     /// @param claimId The claim id
     /// @return claim The coverage claim.
     function claim(uint256 claimId) external view returns (CoverageClaim memory claim);
+
+    /// @notice Check if a claim is covered.
+    /// @dev If the deficit is anything above 0 the claim should be considered for liquidation.
+    /// @param claimId The claim id to check if it is covered.
+    /// @return deficit The deficit of coverage for the claim.
+    function claimDeficit(uint256 claimId) external view returns (uint256 deficit);
 }

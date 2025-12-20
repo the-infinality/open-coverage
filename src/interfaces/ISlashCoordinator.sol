@@ -18,7 +18,7 @@ interface ISlashCoordinator {
     /// @notice Initiate the slashing process for a coverage claim.
     /// @dev Can only be called by the coverage provider issuing the claim.
     /// @param claimId The id of the coverage claim to slash.
-    function initiateSlash(uint256 claimId) external returns (SlashStatus status);
+    function initiateSlash(uint256 claimId, uint256 amount) external returns (SlashStatus status);
 
     /// ============ Discovery ============
 

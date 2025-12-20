@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {NotCoverageAgentHandler, CoverageProviderNotActive} from "./Errors.sol";
-import {ICoverageAgent, CoverageProviderData, PurchaseCoverageRequest, Coverage} from "./interfaces/ICoverageAgent.sol";
+import {ICoverageAgent, CoverageProviderData, ClaimCoverageRequest, Coverage} from "./interfaces/ICoverageAgent.sol";
 import {ICoverageProvider} from "./interfaces/ICoverageProvider.sol";
 
 /// @notice A pool of delegations for a single operator.
@@ -40,7 +40,14 @@ contract CoverageAgent is ICoverageAgent {
     }
 
     /// @inheritdoc ICoverageAgent
-    function purchaseCoverage(PurchaseCoverageRequest[] calldata requests) external returns (uint256 coverageId) {
+    function onSlashCompleted(uint256) external view {
+        if (!_coverageProviders[msg.sender].active) {
+            revert CoverageProviderNotActive();
+        }
+    }
+
+    /// @inheritdoc ICoverageAgent
+    function purchaseCoverage(ClaimCoverageRequest[] calldata requests) external returns (uint256 coverageId) {
         //TODO: Implement purchaseCoverage
     }
 

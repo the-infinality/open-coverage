@@ -14,6 +14,8 @@ contract TestDeployer is Test {
 
     address USDC;
     address USDT;
+    address WETH;
+    address rETH;
 
     function setUp() public virtual {
         string memory chainJson = getConfig(CHAIN_CONFIG_SUFFIX);
@@ -26,5 +28,7 @@ contract TestDeployer is Test {
 
         USDC = chainJson.readAddress(string.concat(selectorPrefix, ".assets.USDC"));
         USDT = chainJson.readAddress(string.concat(selectorPrefix, ".assets.USDT"));
+        WETH = chainJson.readAddress(string.concat(selectorPrefix, ".assets.WETH"));
+        rETH = chainJson.readAddress(string.concat(selectorPrefix, ".assets.rETH"));
     }
 }

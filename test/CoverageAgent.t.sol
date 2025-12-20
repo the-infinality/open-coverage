@@ -12,13 +12,14 @@ import {
     CoverageClaimStatus,
     Refundable
 } from "src/interfaces/ICoverageProvider.sol";
+import {IPriceOracle} from "src/interfaces/IPriceOracle.sol";
 import {
-    AssetPriceOracleAndSwapper,
-    IPriceOracle,
+    IAssetPriceOracleAndSwapper,
     SwapEngine,
     SwapParams,
     UniswapV4PoolInfo
-} from "src/mixins/AssetPriceOracleAndSwapper.sol";
+} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {AssetPriceOracleAndSwapper} from "src/mixins/AssetPriceOracleAndSwapper.sol";
 import {UniswapHelper, UniswapAddressbook} from "utils/UniswapHelper.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
@@ -52,6 +53,7 @@ contract MockCoverageProvider is ICoverageProvider {
     mapping(uint256 => CoveragePosition) private _positions;
     mapping(uint256 => CoverageClaim) private _claims;
     mapping(address => uint256) private _totalCoverageByAgent;
+    mapping(uint256 => uint256) private _claimSlashAmounts;
 
     function onIsRegistered() external override {
         isRegistered = true;
@@ -68,14 +70,13 @@ contract MockCoverageProvider is ICoverageProvider {
         emit PositionCreated(positionId);
     }
 
-    function updatePosition(uint256 positionId, CoveragePosition memory data) external override {
-        _positions[positionId] = data;
-        emit PositionUpdated(positionId);
+    function closePosition(uint256 positionId) external override {
+        _positions[positionId].expiryTimestamp = block.timestamp;
+        emit PositionClosed(positionId);
     }
 
-    function issueCoverage(uint256 positionId, uint256 amount, uint256 duration, address, uint256)
+    function claimCoverage(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
         external
-        override
         returns (uint256 claimId)
     {
         claimId = nextClaimId++;
@@ -83,7 +84,9 @@ contract MockCoverageProvider is ICoverageProvider {
             positionId: positionId,
             amount: amount,
             duration: duration,
-            status: CoverageClaimStatus.Issued
+            createdAt: block.timestamp,
+            status: CoverageClaimStatus.Issued,
+            reward: reward
         });
         _totalCoverageByAgent[msg.sender] += amount;
         emit ClaimIssued(positionId, claimId, amount, duration);
@@ -108,22 +111,35 @@ contract MockCoverageProvider is ICoverageProvider {
     {
         slashStatuses = new CoverageClaimStatus[](claimIds.length);
         for (uint256 i = 0; i < claimIds.length; i++) {
+            _claimSlashAmounts[claimIds[i]] = amounts[i];
             _claims[claimIds[i]].status = CoverageClaimStatus.Slashed;
             slashStatuses[i] = CoverageClaimStatus.Slashed;
             emit Slashed(claimIds[i], amounts[i]);
         }
     }
 
-    function totalCoverageByAgent(address coverageAgent) external view override returns (uint256 amount) {
-        return _totalCoverageByAgent[coverageAgent];
+    function completeSlash(uint256 claimId) external override {
+        if (_claimSlashAmounts[claimId] > _claims[claimId].amount) {
+            revert SlashAmountExceedsClaim(claimId, _claimSlashAmounts[claimId], _claims[claimId].amount);
+        }
+        _claims[claimId].status = CoverageClaimStatus.Slashed;
+        emit ClaimSlashed(claimId, _claimSlashAmounts[claimId]);
     }
 
     function position(uint256 positionId) external view override returns (CoveragePosition memory) {
         return _positions[positionId];
     }
 
+    function positionMaxAmount(uint256) external pure override returns (uint256) {
+        return 1000e6;
+    }
+
     function claim(uint256 claimId) external view override returns (CoverageClaim memory) {
         return _claims[claimId];
+    }
+
+    function claimDeficit(uint256) external pure override returns (uint256) {
+        return 0;
     }
 }
 
@@ -131,8 +147,11 @@ contract MockCoverageProvider is ICoverageProvider {
 contract CoverageAgentWithSwapper is CoverageAgent, AssetPriceOracleAndSwapper {
     constructor(address _handler, address _coverageAsset, address universalRouter, address permit2)
         CoverageAgent(_handler, _coverageAsset)
-        AssetPriceOracleAndSwapper(universalRouter, permit2)
-    {}
+        AssetPriceOracleAndSwapper()
+    {
+        // Initialize the swapper functionality
+        __AssetPriceOracleAndSwapper_init(universalRouter, permit2);
+    }
 }
 
 /// @notice Test suite for CoverageAgent
@@ -192,7 +211,7 @@ contract CoverageAgentTest is TestDeployer, UniswapHelper {
         // Verify handler is set correctly by testing access control
         // Handler (address(this)) should be able to register providers
         coverageAgent.registerCoverageProvider(address(mockProvider));
-        
+
         // Non-handler should not be able to register providers
         vm.prank(nonHandler);
         vm.expectRevert(NotCoverageAgentHandler.selector);
@@ -281,6 +300,7 @@ contract CoverageAgentTest is TestDeployer, UniswapHelper {
         coverageAgent.registerCoverageProvider(address(mockProvider));
 
         CoveragePosition memory position = CoveragePosition({
+            coverageAgent: address(coverageAgent),
             minRate: 100,
             maxDuration: 30 days,
             expiryTimestamp: block.timestamp + 365 days,
@@ -360,13 +380,13 @@ contract CoverageAgentTest is TestDeployer, UniswapHelper {
         uint128 amountOut = 1000e6;
         deal(USDC, address(coverageAgent), amountOut * 2);
 
-        vm.expectRevert(AssetPriceOracleAndSwapper.AssetPairNotRegistered.selector);
+        vm.expectRevert(IAssetPriceOracleAndSwapper.AssetPairNotRegistered.selector);
         coverageAgent.swap(amountOut, USDC, address(0x999));
     }
 
     function test_RevertWhen_quote_assetPairNotRegistered() public {
         uint256 amountIn = 1000e6;
-        vm.expectRevert(AssetPriceOracleAndSwapper.AssetPairNotRegistered.selector);
+        vm.expectRevert(IAssetPriceOracleAndSwapper.AssetPairNotRegistered.selector);
         coverageAgent.quote(amountIn, USDC, address(0x999));
     }
 
@@ -378,6 +398,7 @@ contract CoverageAgentTest is TestDeployer, UniswapHelper {
 
         // Step 2: Create position through provider
         CoveragePosition memory position = CoveragePosition({
+            coverageAgent: address(coverageAgent),
             minRate: 100,
             maxDuration: 30 days,
             expiryTimestamp: block.timestamp + 365 days,
@@ -394,8 +415,8 @@ contract CoverageAgentTest is TestDeployer, UniswapHelper {
         assertEq(createdPosition.maxDuration, 30 days);
         assertEq(createdPosition.asset, USDC);
 
-        // Step 4: Issue coverage
-        uint256 claimId = mockProvider.issueCoverage(positionId, 1000e6, 30 days, USDC, 10e6);
+        // Step 4: Claim coverage
+        uint256 claimId = mockProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
 
         // Step 5: Verify claim
         CoverageClaim memory coverageClaim = mockProvider.claim(claimId);
@@ -413,6 +434,7 @@ contract CoverageAgentTest is TestDeployer, UniswapHelper {
 
         // Create positions on both providers
         CoveragePosition memory position1 = CoveragePosition({
+            coverageAgent: address(coverageAgent),
             minRate: 100,
             maxDuration: 30 days,
             expiryTimestamp: block.timestamp + 365 days,
@@ -422,6 +444,7 @@ contract CoverageAgentTest is TestDeployer, UniswapHelper {
         });
 
         CoveragePosition memory position2 = CoveragePosition({
+            coverageAgent: address(coverageAgent),
             minRate: 200,
             maxDuration: 60 days,
             expiryTimestamp: block.timestamp + 180 days,
