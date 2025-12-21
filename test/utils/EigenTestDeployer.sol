@@ -181,8 +181,6 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
         selectors[1] = IAssetPriceOracleAndSwapper.swap.selector;
         selectors[2] = IAssetPriceOracleAndSwapper.assetPair.selector;
         selectors[3] = IAssetPriceOracleAndSwapper.quote.selector;
-        selectors[4] = IAssetPriceOracleAndSwapper.universalRouter.selector;
-        selectors[5] = IAssetPriceOracleAndSwapper.permit2.selector;
         return selectors;
     }
 }

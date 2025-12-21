@@ -68,11 +68,5 @@ interface IAssetPriceOracleAndSwapper {
     /// @param asset2 The second asset
     /// @return The equivalent amount in the second asset
     function quote(uint256 amountIn, address asset1, address asset2) external view returns (uint256);
-
-    /// @notice Returns the universal router address
-    function universalRouter() external view returns (address);
-
-    /// @notice Returns the permit2 address
-    function permit2() external view returns (address);
 }
 

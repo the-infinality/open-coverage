@@ -88,16 +88,6 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
         return IPriceOracle(_assetPair.priceOracle).getQuote(amountIn, asset1, asset2);
     }
 
-    /// @inheritdoc IAssetPriceOracleAndSwapper
-    function universalRouter() public view virtual returns (address) {
-        return address(_swapperStorage().universalRouter);
-    }
-
-    /// @inheritdoc IAssetPriceOracleAndSwapper
-    function permit2() public view virtual returns (address) {
-        return address(_swapperStorage().permit2);
-    }
-
     // ============ Internal Functions ============ //
 
     function _swapV3(uint128 amountOut, bytes memory poolInfo) internal {

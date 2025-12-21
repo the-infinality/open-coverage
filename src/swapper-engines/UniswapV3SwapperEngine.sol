@@ -178,14 +178,17 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
     /// @param base The asset to get value for (input token)
     /// @param quote The asset to quote from (output token)
     /// @return amountOut The amount of `quote` that is equivalent to `amountIn` of `base`
-    function getQuote(bytes memory poolInfo, uint256 amountIn, address base, address quote) external returns (uint256 amountOut) {
+    function getQuote(bytes memory poolInfo, uint256 amountIn, address base, address quote)
+        external
+        returns (uint256 amountOut)
+    {
         // Extract first and last tokens from the path
         (address pathFirst, address pathLast) = _getAssetAddresses(poolInfo);
-        
+
         // For EXACT_IN quote, path format is: input -> fee -> [intermediate -> fee ->]* output
         // So pathFirst should be the input token (base) and pathLast should be the output token (quote)
         bytes memory pathToUse;
-        
+
         if (pathFirst == base && pathLast == quote) {
             // Path direction matches: pathFirst = input (base), pathLast = output (quote)
             pathToUse = poolInfo;
@@ -197,7 +200,7 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
             // Pool doesn't match expected tokens
             revert PoolMismatch();
         }
-        
+
         // Use QuoterV2 to get the quote
         // Note: quoteExactInput is not marked as view but can be called in view context
         // It uses staticcall internally and reverts to compute the result

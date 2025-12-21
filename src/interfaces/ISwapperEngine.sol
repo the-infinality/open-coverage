@@ -41,5 +41,7 @@ interface ISwapperEngine {
     /// @param base The asset to get value for
     /// @param quote The asset to quote from
     /// @return amountOut The amount of `quote` that is equivalent to `amountIn` of `base`.
-    function getQuote(bytes memory poolInfo, uint256 amountIn, address base, address quote) external returns (uint256 amountOut);
+    function getQuote(bytes memory poolInfo, uint256 amountIn, address base, address quote)
+        external
+        returns (uint256 amountOut);
 }
