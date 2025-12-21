@@ -11,6 +11,7 @@ import {IUniversalRouter} from "@uniswap/universal-router/interfaces/IUniversalR
 struct UniswapAddresses {
     address universalRouter;
     address permit2;
+    address quoterV2;
 }
 
 struct UniswapAddressbook {
@@ -41,6 +42,8 @@ contract UniswapHelper {
             configJson.readAddress(string.concat(selectorPrefix, ".universalRouter"));
         ab.uniswapAddresses.permit2 =
             configJson.readAddress(string.concat(selectorPrefix, ".permit2"));
+        ab.uniswapAddresses.quoterV2 =
+            configJson.readAddress(string.concat(selectorPrefix, ".quoterV2"));
     }
 
     function _labelUniswapAddresses(UniswapAddressbook memory ab) internal {
@@ -48,5 +51,6 @@ contract UniswapHelper {
 
         vm.label(ab.uniswapAddresses.universalRouter, "Uniswap V4 Universal Router");
         vm.label(ab.uniswapAddresses.permit2, "Permit2");
+        vm.label(ab.uniswapAddresses.quoterV2, "Uniswap V3 QuoterV2");
     }
 }

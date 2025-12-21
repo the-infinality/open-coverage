@@ -2,6 +2,7 @@
     "1": {
         "universalRouter": "0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af",
         "permit2": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+        "quoterV2": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",
         "poolPaths": {
             "v4:": {
                 "USDC/USDT": {
@@ -16,7 +17,7 @@
             },
             "v3:": {
                 "USDC/USDT": {
-                    "poolInfo": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                    "poolInfo": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000064dac17f958d2ee523a2206206994597c13d831ec7"
                 }
             }
         }
