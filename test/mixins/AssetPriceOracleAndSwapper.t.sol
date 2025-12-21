@@ -57,10 +57,10 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
 
         SwapParams memory swapParams =
             SwapParams({swapEngine: SwapEngine.UNISWAP_V4_SINGLE_HOP, poolInfo: abi.encode(uniswapV4PoolInfo)});
-        mockContract.registerPriceAdaptor(address(mockPriceOracle), USDC, USDT, swapParams);
+        mockContract.register(address(mockPriceOracle), USDC, USDT, swapParams);
     }
 
-    function test_registerPriceAdaptor() public view {
+    function test_register() public view {
         assertEq(mockContract.assetPair(USDC, USDT).priceOracle, address(mockPriceOracle));
     }
 
@@ -85,7 +85,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         );
 
         SwapParams memory swapParams = SwapParams({swapEngine: SwapEngine.UNISWAP_V3, poolInfo: poolInfo});
-        mockContract.registerPriceAdaptor(address(mockPriceOracle), USDC, USDT, swapParams);
+        mockContract.register(address(mockPriceOracle), USDC, USDT, swapParams);
 
         mockContract.swap(amountOut, USDC, USDT);
 
@@ -108,7 +108,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
 
         MockPriceOracle rethUsdcOracle = new MockPriceOracle(3300e6, rETH, USDC);
         SwapParams memory swapParams = SwapParams({swapEngine: SwapEngine.UNISWAP_V3, poolInfo: poolInfo});
-        mockContract.registerPriceAdaptor(address(rethUsdcOracle), rETH, USDC, swapParams);
+        mockContract.register(address(rethUsdcOracle), rETH, USDC, swapParams);
 
         mockContract.swap(amountOut, rETH, USDC);
 

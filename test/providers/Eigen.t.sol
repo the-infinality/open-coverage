@@ -98,7 +98,7 @@ contract EigenTest is EigenTestDeployer {
         );
 
         SwapParams memory swapParams = SwapParams({swapEngine: SwapEngine.UNISWAP_V3, poolInfo: poolInfo});
-        eigenPriceOracle.registerPriceAdaptor(address(mockPriceOracle), rETH, USDC, swapParams);
+        eigenPriceOracle.register(address(mockPriceOracle), rETH, USDC, swapParams);
     }
 
     function test_checkCoverageProviderRegistered() public view {

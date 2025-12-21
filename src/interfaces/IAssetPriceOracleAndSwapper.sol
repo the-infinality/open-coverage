@@ -47,7 +47,7 @@ interface IAssetPriceOracleAndSwapper {
     /// @param asset1 The first asset (swap from)
     /// @param asset2 The second asset (swap to)
     /// @param swapParams The swap parameters including engine and pool info
-    function registerPriceAdaptor(address priceOracle, address asset1, address asset2, SwapParams calldata swapParams)
+    function register(address priceOracle, address asset1, address asset2, SwapParams calldata swapParams)
         external;
 
     /// @notice Swaps an exact amount of output tokens

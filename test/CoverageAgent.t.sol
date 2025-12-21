@@ -197,7 +197,7 @@ contract CoverageAgentTest is TestDeployer, UniswapHelper {
         SwapParams memory swapParams =
             SwapParams({swapEngine: SwapEngine.UNISWAP_V4_SINGLE_HOP, poolInfo: abi.encode(uniswapV4PoolInfo)});
 
-        coverageAgent.registerPriceAdaptor(address(mockPriceOracle), USDC, USDT, swapParams);
+        coverageAgent.register(address(mockPriceOracle), USDC, USDT, swapParams);
     }
 
     /// ============ Constructor Tests ============
@@ -369,7 +369,7 @@ contract CoverageAgentTest is TestDeployer, UniswapHelper {
         );
 
         SwapParams memory swapParams = SwapParams({swapEngine: SwapEngine.UNISWAP_V3, poolInfo: poolInfo});
-        coverageAgent.registerPriceAdaptor(address(mockPriceOracle), USDC, USDT, swapParams);
+        coverageAgent.register(address(mockPriceOracle), USDC, USDT, swapParams);
 
         coverageAgent.swap(amountOut, USDC, USDT);
 

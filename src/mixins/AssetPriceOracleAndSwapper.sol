@@ -34,7 +34,7 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
     }
 
     /// @inheritdoc IAssetPriceOracleAndSwapper
-    function registerPriceAdaptor(address priceOracle, address asset1, address asset2, SwapParams calldata swapParams)
+    function register(address priceOracle, address asset1, address asset2, SwapParams calldata swapParams)
         external
         virtual
     {
