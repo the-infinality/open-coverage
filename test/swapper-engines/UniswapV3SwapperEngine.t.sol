@@ -298,6 +298,206 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         swapperEngine.swapForOutput(poolInfo, 1000e6, 1100e6, USDC, USDT);
     }
 
+    // ============ getQuote() Tests ============ //
+
+    function test_getQuote() public {
+        uint256 amountIn = 1000e6; // 1000 USDC
+        
+        // Path: USDC -> USDT (EXACT_IN format: input -> fee -> output)
+        bytes memory poolInfo = abi.encodePacked(
+            USDC,
+            uint24(100), // 0.01% fee for stablecoin pairs
+            USDT
+        );
+
+        // Execute quote via delegatecall
+        (bool success, bytes memory result) = address(proxy)
+            .call(
+                abi.encodeWithSelector(
+                    UniswapV3SwapperEngine.getQuote.selector, poolInfo, amountIn, USDC, USDT
+                )
+            );
+
+        require(success, "Quote should succeed");
+        uint256 amountOut = abi.decode(result, (uint256));
+        
+        // Verify we got a valid quote (should be close to amountIn for stablecoin pair)
+        assertGt(amountOut, 0, "Amount out should be greater than 0");
+        assertLt(amountOut, amountIn * 101 / 100, "Amount out should be less than 101% of amount in (accounting for fees)");
+        assertGt(amountOut, amountIn * 99 / 100, "Amount out should be greater than 99% of amount in");
+    }
+
+    function test_getQuote_reversedPath() public {
+        uint256 amountIn = 1000e6; // 1000 USDC
+        
+        // Path: USDT -> USDC (reversed, will be reversed internally)
+        bytes memory poolInfo = abi.encodePacked(
+            USDT,
+            uint24(100), // 0.01% fee
+            USDC
+        );
+
+        // Execute quote via delegatecall with reversed path
+        (bool success, bytes memory result) = address(proxy)
+            .call(
+                abi.encodeWithSelector(
+                    UniswapV3SwapperEngine.getQuote.selector, poolInfo, amountIn, USDC, USDT
+                )
+            );
+
+        require(success, "Quote should succeed");
+        uint256 amountOut = abi.decode(result, (uint256));
+        
+        // Verify we got a valid quote
+        assertGt(amountOut, 0, "Amount out should be greater than 0");
+        assertLt(amountOut, amountIn * 101 / 100, "Amount out should be less than 101% of amount in");
+        assertGt(amountOut, amountIn * 99 / 100, "Amount out should be greater than 99% of amount in");
+    }
+
+    function test_getQuote_multiHop() public {
+        uint256 amountIn = 1e18; // 1 WETH
+        
+        // Multi-hop path: WETH -> USDC -> USDT
+        bytes memory poolInfo = abi.encodePacked(
+            WETH,
+            uint24(3000), // 0.3% fee
+            USDC,
+            uint24(100), // 0.01% fee
+            USDT
+        );
+
+        // Execute quote via delegatecall
+        (bool success, bytes memory result) = address(proxy)
+            .call(
+                abi.encodeWithSelector(
+                    UniswapV3SwapperEngine.getQuote.selector, poolInfo, amountIn, WETH, USDT
+                )
+            );
+
+        require(success, "Multi-hop quote should succeed");
+        uint256 amountOut = abi.decode(result, (uint256));
+        
+        // Verify we got a valid quote (should be significant amount of USDT for 1 WETH)
+        assertGt(amountOut, 0, "Amount out should be greater than 0");
+        assertGt(amountOut, 1000e6, "Should get at least 1000 USDT for 1 WETH");
+    }
+
+    function test_RevertWhen_getQuote_poolMismatch() public {
+        uint256 amountIn = 1000e6;
+        
+        // Path: USDC -> WETH (but we're asking for USDC -> USDT)
+        bytes memory poolInfo = abi.encodePacked(
+            USDC,
+            uint24(500),
+            WETH
+        );
+
+        // Execute quote via delegatecall - should revert with PoolMismatch
+        (bool success, bytes memory result) = address(proxy)
+            .call(
+                abi.encodeWithSelector(
+                    UniswapV3SwapperEngine.getQuote.selector, poolInfo, amountIn, USDC, USDT
+                )
+            );
+
+        assertFalse(success, "Quote should fail with pool mismatch");
+        
+        // Check that it reverted with PoolMismatch error
+        if (result.length > 0) {
+            // casting to 'bytes4' is safe because error selectors are always 4 bytes
+            // forge-lint: disable-next-line(unsafe-typecast)
+            bytes4 errorSelector = bytes4(result);
+            assertEq(errorSelector, UniswapV3SwapperEngine.PoolMismatch.selector, "Should revert with PoolMismatch");
+        }
+    }
+
+    function test_getQuote_rETH_to_USDC() public {
+        uint256 amountIn = 1e18; // 1 rETH
+        
+        // Path: rETH -> WETH -> USDC
+        bytes memory poolInfo = abi.encodePacked(
+            rETH,
+            uint24(100), // 0.01% fee
+            WETH,
+            uint24(500), // 0.05% fee
+            USDC
+        );
+
+        // Execute quote via delegatecall
+        (bool success, bytes memory result) = address(proxy)
+            .call(
+                abi.encodeWithSelector(
+                    UniswapV3SwapperEngine.getQuote.selector, poolInfo, amountIn, rETH, USDC
+                )
+            );
+
+        require(success, "rETH to USDC quote should succeed");
+        uint256 amountOut = abi.decode(result, (uint256));
+        
+        // Verify we got a valid quote
+        assertGt(amountOut, 0, "Amount out should be greater than 0");
+        assertGt(amountOut, 1000e6, "Should get significant USDC for 1 rETH");
+    }
+
+    function test_getQuote_rETH_to_USDC_reversedPath() public {
+        uint256 amountIn = 1e18; // 1 rETH
+        
+        // Path: USDC -> WETH -> rETH (reversed, will be reversed internally)
+        bytes memory poolInfo = abi.encodePacked(
+            USDC,
+            uint24(500), // 0.05% fee
+            WETH,
+            uint24(100), // 0.01% fee
+            rETH
+        );
+
+        // Execute quote via delegatecall with reversed path
+        (bool success, bytes memory result) = address(proxy)
+            .call(
+                abi.encodeWithSelector(
+                    UniswapV3SwapperEngine.getQuote.selector, poolInfo, amountIn, rETH, USDC
+                )
+            );
+
+        require(success, "rETH to USDC quote with reversed path should succeed");
+        uint256 amountOut = abi.decode(result, (uint256));
+        
+        // Verify we got a valid quote
+        assertGt(amountOut, 0, "Amount out should be greater than 0");
+        assertGt(amountOut, 1000e6, "Should get significant USDC for 1 rETH");
+        
+        // The quote should be similar to the non-reversed path (within reasonable tolerance)
+        // Get the quote from the normal path for comparison
+        bytes memory normalPath = abi.encodePacked(
+            rETH,
+            uint24(100),
+            WETH,
+            uint24(500),
+            USDC
+        );
+        
+        (bool success2, bytes memory result2) = address(proxy)
+            .call(
+                abi.encodeWithSelector(
+                    UniswapV3SwapperEngine.getQuote.selector, normalPath, amountIn, rETH, USDC
+                )
+            );
+        
+        require(success2, "Normal path quote should succeed");
+        uint256 amountOutNormal = abi.decode(result2, (uint256));
+        
+        // Both quotes should be very close (within 1% difference due to path reversal and rounding)
+        uint256 diff;
+        if (amountOut > amountOutNormal) {
+            diff = amountOut - amountOutNormal;
+        } else {
+            diff = amountOutNormal - amountOut;
+        }
+        
+        uint256 tolerance = amountOutNormal / 100; // 1% tolerance
+        assertLt(diff, tolerance, "Reversed path quote should be within 1% of normal path quote");
+    }
+
     // ============ swapForInput() via delegatecall Tests ============ //
 
     function test_swapForInput() public {
@@ -392,6 +592,8 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
 
         assertFalse(success, "Should fail with pool mismatch");
         // Check for PoolMismatch error
+        // casting to 'bytes4' is safe because error selectors are always 4 bytes
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertEq(bytes4(result), UniswapV3SwapperEngine.PoolMismatch.selector);
     }
 
@@ -491,6 +693,8 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
             );
 
         assertFalse(success, "Should fail with pool mismatch");
+        // casting to 'bytes4' is safe because error selectors are always 4 bytes
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertEq(bytes4(result), UniswapV3SwapperEngine.PoolMismatch.selector);
     }
 
