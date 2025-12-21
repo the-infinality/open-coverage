@@ -89,7 +89,7 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         uint256 balanceBefore = IERC20(outputToken).balanceOf(address(this));
 
         // Approve permit2 to spend input token
-        getPermit2().approve(inputToken, address(getUniversalRouter()), uint160(amountIn), uint48(block.timestamp));
+        _getPermit2().approve(inputToken, address(_getUniversalRouter()), uint160(amountIn), uint48(block.timestamp));
 
         // Build the swap command
         bytes memory commands = abi.encodePacked(uint8(Commands.V3_SWAP_EXACT_IN));
@@ -104,7 +104,7 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         );
 
         // Execute the swap
-        getUniversalRouter().execute(commands, inputs, block.timestamp);
+        _getUniversalRouter().execute(commands, inputs, block.timestamp);
 
         // Calculate actual amount of output tokens received
         uint256 balanceAfter = IERC20(outputToken).balanceOf(address(this));
@@ -149,7 +149,7 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         uint256 balanceBefore = IERC20(inputToken).balanceOf(address(this));
 
         // Approve permit2 to spend input token
-        getPermit2().approve(inputToken, address(getUniversalRouter()), uint160(amountInMax), uint48(block.timestamp));
+        _getPermit2().approve(inputToken, address(_getUniversalRouter()), uint160(amountInMax), uint48(block.timestamp));
 
         // Build the swap command
         bytes memory commands = abi.encodePacked(uint8(Commands.V3_SWAP_EXACT_OUT));
@@ -164,7 +164,7 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         );
 
         // Execute the swap
-        getUniversalRouter().execute(commands, inputs, block.timestamp);
+        _getUniversalRouter().execute(commands, inputs, block.timestamp);
 
         // Calculate actual amount of input tokens used
         uint256 balanceAfter = IERC20(inputToken).balanceOf(address(this));
@@ -273,15 +273,15 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         }
     }
 
-    function getPermit2() private view returns (IPermit2) {
+    function _getPermit2() private view returns (IPermit2) {
         return UniswapV3SwapperEngineStorage(SELF).permit2();
     }
 
-    function getQuoterV2() private view returns (IQuoterV2) {
+    function _getQuoterV2() private view returns (IQuoterV2) {
         return UniswapV3SwapperEngineStorage(SELF).quoterV2();
     }
 
-    function getUniversalRouter() private view returns (IUniversalRouter) {
+    function _getUniversalRouter() private view returns (IUniversalRouter) {
         return UniswapV3SwapperEngineStorage(SELF).universalRouter();
     }
 }
