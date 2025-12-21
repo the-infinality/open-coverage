@@ -18,8 +18,6 @@ contract UniswapV3SwapperEngineStorage {
 contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage {
     /// @notice Error thrown when the pool doesn't match expected base/swap tokens
     error PoolMismatch();
-    /// @notice Error thrown when the contract is called directly instead of via delegatecall
-    error OnlyDelegateCall();
 
     /// @notice The address of this implementation contract, used to enforce delegatecall-only
     address private immutable SELF;
@@ -174,14 +172,6 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         amountIn = balanceBefore - balanceAfter;
     }
 
-    /// @notice Returns the asset addresses from the pool information
-    /// @param poolInfo The pool information to use for the swap (can contain single or multiple pools)
-    /// @return assetA The first asset in the pool info data
-    /// @return assetB The last asset in the pool info data
-    function getAssetAddresses(bytes memory poolInfo) external pure returns (address assetA, address assetB) {
-        return _getAssetAddresses(poolInfo);
-    }
-
     /// @notice Quotes the amount of `quote` that is equivalent to `amountIn` of `base`
     /// @param poolInfo The pool information (path) to use for the quote
     /// @param amountIn The amount of `base` token to quote
@@ -212,6 +202,15 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         // Note: quoteExactInput is not marked as view but can be called in view context
         // It uses staticcall internally and reverts to compute the result
         (amountOut,,,) = _getQuoterV2().quoteExactInput(pathToUse, amountIn);
+    }
+
+    /// @notice Returns the asset addresses from the pool information
+    /// @dev A good helper function for decoding the pool information
+    /// @param poolInfo The pool information to use for the swap (can contain single or multiple pools)
+    /// @return assetA The first asset in the pool info data
+    /// @return assetB The last asset in the pool info data
+    function getAssetAddresses(bytes memory poolInfo) external pure returns (address assetA, address assetB) {
+        return _getAssetAddresses(poolInfo);
     }
 
     /// @notice Internal function to extract asset addresses from pool information

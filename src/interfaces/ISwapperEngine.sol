@@ -2,13 +2,17 @@
 pragma solidity ^0.8.24;
 
 /// @title ISwapperEngine
-/// @notice Interface for the asset swapper engine
+/// @notice Interface for swapper engines
 /// @author p-dealwis, Infinality
 interface ISwapperEngine {
+    /// @notice Error thrown when the contract is called directly instead of via delegatecall
+    error OnlyDelegateCall();
+
     /// @notice The name of the swapper engine
     function name() external pure returns (string memory);
 
     /// @notice Swaps with an exact amount of input tokens
+    /// @dev The swapper engine must revert with OnlyDelegateCall() if the contract is called directly instead of via delegatecall
     /// @param poolInfo The pool information to use for the swap
     /// @param amountIn The exact amount of tokens to spend
     /// @param amountOutMin The minimum amount of tokens to receive
@@ -20,6 +24,7 @@ interface ISwapperEngine {
         returns (uint256 amountOut);
 
     /// @notice Swaps to an exact amount of output tokens
+    /// @dev The swapper engine must revert with OnlyDelegateCall() if the contract is called directly instead of via delegatecall
     /// @param poolInfo The pool information to use for the swap
     /// @param amountOut The exact amount of tokens to receive
     /// @param amountInMax The maximum amount of tokens to spend
