@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {console2} from "@uniswap/permit2/lib/forge-std/src/console2.sol";
 import {ISwapperEngine} from "../interfaces/ISwapperEngine.sol";
 import {IUniversalRouter} from "@uniswap/universal-router/interfaces/IUniversalRouter.sol";
 import {IPermit2} from "@uniswap/permit2/src/interfaces/IPermit2.sol";
@@ -89,6 +88,8 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         uint256 balanceBefore = IERC20(outputToken).balanceOf(address(this));
 
         // Approve permit2 to spend input token
+        // casting to 'uint160' is safe because token amounts are well below uint160 max value
+        // forge-lint: disable-next-line(unsafe-typecast)
         _getPermit2().approve(inputToken, address(_getUniversalRouter()), uint160(amountIn), uint48(block.timestamp));
 
         // Build the swap command
@@ -149,6 +150,8 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         uint256 balanceBefore = IERC20(inputToken).balanceOf(address(this));
 
         // Approve permit2 to spend input token
+        // casting to 'uint160' is safe because token amounts are well below uint160 max value
+        // forge-lint: disable-next-line(unsafe-typecast)
         _getPermit2().approve(inputToken, address(_getUniversalRouter()), uint160(amountInMax), uint48(block.timestamp));
 
         // Build the swap command
@@ -177,6 +180,38 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
     /// @return assetB The last asset in the pool info data
     function getAssetAddresses(bytes memory poolInfo) external pure returns (address assetA, address assetB) {
         return _getAssetAddresses(poolInfo);
+    }
+
+    /// @notice Quotes the amount of `quote` that is equivalent to `amountIn` of `base`
+    /// @param poolInfo The pool information (path) to use for the quote
+    /// @param amountIn The amount of `base` token to quote
+    /// @param base The asset to get value for (input token)
+    /// @param quote The asset to quote from (output token)
+    /// @return amountOut The amount of `quote` that is equivalent to `amountIn` of `base`
+    function getQuote(bytes memory poolInfo, uint256 amountIn, address base, address quote) external returns (uint256 amountOut) {
+        // Extract first and last tokens from the path
+        (address pathFirst, address pathLast) = _getAssetAddresses(poolInfo);
+        
+        // For EXACT_IN quote, path format is: input -> fee -> [intermediate -> fee ->]* output
+        // So pathFirst should be the input token (base) and pathLast should be the output token (quote)
+        bytes memory pathToUse;
+        
+        if (pathFirst == base && pathLast == quote) {
+            // Path direction matches: pathFirst = input (base), pathLast = output (quote)
+            pathToUse = poolInfo;
+        } else if (pathFirst == quote && pathLast == base) {
+            // Path is reversed: pathFirst = output (quote), pathLast = input (base)
+            // Reverse the path to match EXACT_IN format: input -> fee -> output
+            pathToUse = _reversePath(poolInfo);
+        } else {
+            // Pool doesn't match expected tokens
+            revert PoolMismatch();
+        }
+        
+        // Use QuoterV2 to get the quote
+        // Note: quoteExactInput is not marked as view but can be called in view context
+        // It uses staticcall internally and reverts to compute the result
+        (amountOut,,,) = _getQuoterV2().quoteExactInput(pathToUse, amountIn);
     }
 
     /// @notice Internal function to extract asset addresses from pool information

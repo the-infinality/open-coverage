@@ -363,9 +363,9 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         IEigenServiceManager(address(this))
             .slashOperator(eigenPosition.operator, eigenPosition.strategy, _position.coverageAgent, amount);
 
+        IAssetPriceOracleAndSwapper(address(this))
         // Swap the slashed strategy asset to the coverage agent's asset
         // forge-lint: disable-next-line(unsafe-typecast)
-        IAssetPriceOracleAndSwapper(address(this))
             .swap(uint128(amount), _position.asset, ICoverageAgent(_position.coverageAgent).asset());
 
         // Transfer swapped tokens to coverage agent

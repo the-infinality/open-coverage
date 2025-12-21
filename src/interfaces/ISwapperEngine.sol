@@ -29,4 +29,12 @@ interface ISwapperEngine {
     function swapForOutput(bytes memory poolInfo, uint256 amountOut, uint256 amountInMax, address base, address swap)
         external
         returns (uint256 amountIn);
+
+    /// @notice Quotes the amount of `quote` that is equivalent to `amountIn` of `base`.
+    /// @param poolInfo The pool information to use for the quote
+    /// @param amountIn The amount of `base` to get value for `quote`.
+    /// @param base The asset to get value for
+    /// @param quote The asset to quote from
+    /// @return amountOut The amount of `quote` that is equivalent to `amountIn` of `base`.
+    function getQuote(bytes memory poolInfo, uint256 amountIn, address base, address quote) external returns (uint256 amountOut);
 }
