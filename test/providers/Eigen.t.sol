@@ -132,22 +132,10 @@ contract EigenTest is EigenTestDeployer {
 
     function test_RevertWhen_register_not_owner() public {
         address nonOwner = makeAddr("nonOwner");
-        bytes memory poolInfo = abi.encodePacked(
-            rETH,
-            uint24(100),
-            WETH,
-            uint24(500),
-            USDC
-        );
+        bytes memory poolInfo = abi.encodePacked(rETH, uint24(100), WETH, uint24(500), USDC);
 
         vm.prank(nonOwner);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                LibDiamond.NotContractOwner.selector,
-                nonOwner,
-                address(this)
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(LibDiamond.NotContractOwner.selector, nonOwner, address(this)));
         eigenPriceOracle.register(
             AssetPair({
                 assetA: rETH,
@@ -462,8 +450,6 @@ contract EigenTest is EigenTestDeployer {
         assertEq(duration, 15 days);
         assertEq(distributionStartTime, toRewardsInterval(block.timestamp - 25 days));
     }
-
-    
 
     function xtest_slashClaims() public {
         _setupwithAllocations();

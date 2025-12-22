@@ -2,9 +2,14 @@
 pragma solidity ^0.8.24;
 
 enum PriceStrategy {
+    /// @notice Only use the oracle to get the quote
     OracleOnly,
+    /// @notice Only use the swapper to get the quote
     SwapperOnly,
-    SwapperVerified
+    /// @notice Use the swapper to get the quote and verify it with the oracle
+    SwapperVerified,
+    /// @notice Use the oracle to get the quote and verify it with the swapper
+    OracleVerified
 }
 
 /// @notice Asset pair configuration for price oracle and swapping
@@ -69,11 +74,11 @@ interface IAssetPriceOracleAndSwapper {
     /// @param amountIn The amount of `assetB` to get value for `assetA`
     /// @param assetA The asset to quote the value for (output/base)
     /// @param assetB The asset to get value from (input/swap)
-    /// @return swapperQuote The equivalent amount of `assetA` for `amountIn` of `assetB` from the swapper
-    /// @return oracleQuote The equivalent amount of `assetA` for `amountIn` of `assetB` from the oracle
+    /// @return quote The equivalent amount of `assetA` for `amountIn` of `assetB`
+    /// @return verified Whether the quote has been verified by an oracle (if applicable)
     function getQuote(uint256 amountIn, address assetA, address assetB)
         external
         view
-        returns (uint256 swapperQuote, uint256 oracleQuote);
+        returns (uint256 quote, bool verified);
 }
 

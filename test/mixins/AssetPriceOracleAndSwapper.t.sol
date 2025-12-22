@@ -4,9 +4,9 @@ pragma solidity ^0.8.24;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {TestDeployer} from "test/utils/TestDeployer.sol";
 import {MockAssetPriceOracleAndSwapper} from "../utils/MockAssetPriceOracleAndSwapper.sol";
-import {IAssetPriceOracleAndSwapper} from "../../src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {UniswapHelper, UniswapAddressbook} from "utils/UniswapHelper.sol";
-import {MockPriceOracle} from "../utils/MockPriceOracle.sol";
+import {MockPriceOracle} from "test/utils/MockPriceOracle.sol";
 import {ISwapperEngine} from "src/interfaces/ISwapperEngine.sol";
 import {UniswapV3SwapperEngine} from "src/swapper-engines/UniswapV3SwapperEngine.sol";
 import {PriceStrategy, AssetPair} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
@@ -32,7 +32,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
             uniswapAddressBook.uniswapAddresses.permit2,
             uniswapAddressBook.uniswapAddresses.viewQuoterV3
         );
-        mockPriceOracle = new MockPriceOracle(1e18, USDC, USDT);
+        mockPriceOracle = new MockPriceOracle(1, USDC, USDT);
 
         assetPriceOracleAndSwapper.register(
             AssetPair({
@@ -122,31 +122,122 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, address(0));
     }
 
-    function test_getQuote_with_oracle() public view {
+    function test_getQuote_oracle_only() public view {
         uint256 amountIn = 1000e6;
-        (uint256 swapperQuote, uint256 oracleQuote) = assetPriceOracleAndSwapper.getQuote(amountIn, USDC, USDT);
-        assertGt(swapperQuote, 0);
-        assertEq(oracleQuote, amountIn);
+        (uint256 quote, bool verified) = assetPriceOracleAndSwapper.getQuote(amountIn, USDC, USDT);
+        assertEq(quote, mockPriceOracle.getQuote(amountIn, USDC, USDT));
+        assertEq(verified, true);
+        // MockPriceOracle returns amountIn, so verification depends on swapper quote matching
+        // Since swapperAccuracy is 10 (0.1%), verification may pass if within tolerance
 
-        (uint256 swapperQuote2, uint256 oracleQuote2) = assetPriceOracleAndSwapper.getQuote(amountIn, USDT, USDC);
-        assertGt(swapperQuote2, 0);
-        assertEq(oracleQuote2, amountIn);
+        (uint256 quote2, bool verified2) = assetPriceOracleAndSwapper.getQuote(amountIn, USDT, USDC);
+        assertGt(quote2, 0);
+        assertEq(verified2, true);
     }
 
     function test_getQuote_swapper_only() public view {
         uint256 amountIn = 1e18;
-        (uint256 swapperQuote, uint256 oracleQuote) = assetPriceOracleAndSwapper.getQuote(amountIn, USDC, rETH);
+        (uint256 quote, bool verified) = assetPriceOracleAndSwapper.getQuote(amountIn, USDC, rETH);
 
-        assertEq(oracleQuote, 0);
-        assertGt(swapperQuote, 1000e6);
+        assertEq(verified, true); // No oracle to verify against
+        assertGt(quote, 1000e6);
     }
 
     function test_getQuote_swapper_only_reverse() public view {
         uint256 amountIn = 1000e6; // 1000 USDC
-        (uint256 swapperQuote, uint256 oracleQuote) = assetPriceOracleAndSwapper.getQuote(amountIn, rETH, USDC);
+        (uint256 quote, bool verified) = assetPriceOracleAndSwapper.getQuote(amountIn, rETH, USDC);
 
-        assertEq(oracleQuote, 0);
-        assertGt(swapperQuote, 1e17);
+        assertEq(verified, true); // No oracle to verify against
+        assertGt(quote, 1e17);
+    }
+
+    function test_getQuote_swapper_verified() public {
+        bytes memory rETH_WETH_USDC_V3_POOL_INFO = abi.encodePacked(
+            rETH,
+            uint24(100), // 0.01% fee rETH-WETH
+            WETH,
+            uint24(500), // 0.05% fee WETH-USDC
+            USDC
+        );
+
+        uint256 swapperQuote = uniswapV3SwapperEngine.getQuote(rETH_WETH_USDC_V3_POOL_INFO, 1e6, rETH, USDC);
+        swapperQuote = swapperQuote / 1e6;
+        MockPriceOracle newMockPriceOracle = new MockPriceOracle(swapperQuote - (swapperQuote / 100), rETH, USDC);
+
+        assetPriceOracleAndSwapper.register(
+            AssetPair({
+                assetA: rETH,
+                assetB: USDC,
+                swapEngine: address(uniswapV3SwapperEngine),
+                poolInfo: rETH_WETH_USDC_V3_POOL_INFO,
+                priceStrategy: PriceStrategy.SwapperVerified,
+                swapperAccuracy: 500, // 5% tolerance
+                priceOracle: address(newMockPriceOracle)
+            })
+        );
+
+        uint256 swapperQuoteToVerify = uniswapV3SwapperEngine.getQuote(rETH_WETH_USDC_V3_POOL_INFO, 1e18, USDC, rETH);
+
+        uint256 amountIn = 1e18;
+        (uint256 quote, bool verified) = assetPriceOracleAndSwapper.getQuote(amountIn, USDC, rETH);
+
+        assertEq(verified, true); // No oracle to verify against
+        assertEq(quote, swapperQuoteToVerify);
+
+        newMockPriceOracle.setMultiplier(swapperQuote - (swapperQuote * 10 / 100));
+        (uint256 quote2, bool verified2) = assetPriceOracleAndSwapper.getQuote(amountIn, USDC, rETH);
+        assertEq(verified2, false);
+        assertEq(quote2, swapperQuoteToVerify);
+    }
+
+    function test_getQuote_oracle_verified() public {
+        uint256 amountIn = 1e18;
+
+        // Manually get the swapper quote to know what the swapper will return
+        bytes memory rETH_WETH_USDC_V3_POOL_INFO = abi.encodePacked(
+            rETH,
+            uint24(100), // 0.01% fee rETH-WETH
+            WETH,
+            uint24(500), // 0.05% fee WETH-USDC
+            USDC
+        );
+
+        uint256 swapperQuote = uniswapV3SwapperEngine.getQuote(rETH_WETH_USDC_V3_POOL_INFO, 1e6, rETH, USDC);
+        swapperQuote = swapperQuote / 1e6;
+        MockPriceOracle newMockPriceOracle = new MockPriceOracle(swapperQuote - (swapperQuote / 100), rETH, USDC);
+
+        assetPriceOracleAndSwapper.register(
+            AssetPair({
+                assetA: rETH,
+                assetB: USDC,
+                swapEngine: address(uniswapV3SwapperEngine),
+                poolInfo: rETH_WETH_USDC_V3_POOL_INFO,
+                priceStrategy: PriceStrategy.OracleVerified,
+                swapperAccuracy: 500, // 5% tolerance
+                priceOracle: address(newMockPriceOracle)
+            })
+        );
+
+        // Get quote - should return oracle quote and be verified
+        (uint256 quote, bool verified) = assetPriceOracleAndSwapper.getQuote(amountIn, USDC, rETH);
+
+        // Manually verify the oracle quote matches what we expect
+        uint256 expectedOracleQuote = newMockPriceOracle.getQuote(amountIn, USDC, rETH);
+        assertEq(quote, expectedOracleQuote); // Quote should come from oracle
+        assertEq(verified, true); // Should be verified since oracle quote matches swapper within tolerance
+        assertGt(quote, 1000e6);
+
+        // Change oracle to return a value outside tolerance (10% difference)
+        uint256 newMultiplier = swapperQuote + (swapperQuote * 10 / 100); // 10% higher
+        newMockPriceOracle.setMultiplier(newMultiplier);
+
+        (uint256 quote2, bool verified2) = assetPriceOracleAndSwapper.getQuote(amountIn, USDC, rETH);
+
+        // Manually verify the new oracle quote
+        uint256 expectedOracleQuote2 = newMockPriceOracle.getQuote(amountIn, USDC, rETH);
+        assertEq(quote2, expectedOracleQuote2); // Quote should still come from oracle
+        assertEq(verified2, false); // Should fail verification since oracle quote is outside tolerance
+        assertGt(quote2, 1000e6);
     }
 
     function test_RevertWhen_getQuote_asset_pair_not_registered() public {

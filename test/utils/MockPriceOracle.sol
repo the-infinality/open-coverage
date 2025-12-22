@@ -11,10 +11,10 @@ contract MockPriceOracle is IPriceOracle {
     constructor(uint256 multiplier_, address asset1_, address asset2_) {
         asset1 = asset1_;
         asset2 = asset2_;
-        multiplier = multiplier_;
+        setMultiplier(multiplier_);
     }
 
-    function setMultiplier(uint256 multiplier_) external {
+    function setMultiplier(uint256 multiplier_) public {
         multiplier = multiplier_;
     }
 
@@ -36,9 +36,9 @@ contract MockPriceOracle is IPriceOracle {
 
     function multiply(uint256 amount, address base_) private view returns (uint256) {
         if (base_ == asset1) {
-            return amount * (multiplier / 1e18);
+            return amount * multiplier;
         } else if (base_ == asset2) {
-            return amount * 1e18 / multiplier;
+            return amount / multiplier;
         } else {
             revert("Invalid asset");
         }

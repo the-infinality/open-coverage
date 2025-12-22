@@ -5,7 +5,6 @@ import {AssetPriceOracleAndSwapperStorage} from "../storage/AssetPriceOracleAndS
 import {IAssetPriceOracleAndSwapper, AssetPair, PriceStrategy} from "../interfaces/IAssetPriceOracleAndSwapper.sol";
 import {ISwapperEngine} from "../interfaces/ISwapperEngine.sol";
 import {IPriceOracle} from "../interfaces/IPriceOracle.sol";
-import {console2} from "forge-std/console2.sol";
 
 /// @title AssetPriceOracleAndSwapper
 /// @author p-dealwis, Infinality
@@ -78,22 +77,28 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
     function getQuote(uint256 amountIn, address assetA, address assetB)
         external
         view
-        returns (uint256 swapperQuote, uint256 oracleQuote)
+        returns (uint256 quote, bool verified)
     {
-        AssetPair memory _assetPair = assetPairs[keccak256(abi.encode(assetA, assetB))];
+        AssetPair memory _assetPair = _getRegisteredAssetPair(assetA, assetB);
+        verified = true;
 
-        // Should flip around since the price oracle works both ways
-        if (address(_assetPair.swapEngine) == address(0)) {
-            _assetPair = assetPairs[keccak256(abi.encode(assetB, assetA))];
-            if (address(_assetPair.swapEngine) == address(0)) {
-                revert AssetPairNotRegistered();
+        if (_assetPair.priceStrategy == PriceStrategy.OracleOnly) {
+            quote = IPriceOracle(_assetPair.priceOracle).getQuote(amountIn, assetA, assetB);
+        } else if (_assetPair.priceStrategy == PriceStrategy.SwapperOnly) {
+            quote = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountIn, assetA, assetB);
+        } else {
+            uint256 verifyingQuote = 0;
+            if (_assetPair.priceStrategy == PriceStrategy.SwapperVerified) {
+                quote = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountIn, assetA, assetB);
+                verifyingQuote = IPriceOracle(_assetPair.priceOracle).getQuote(amountIn, assetA, assetB);
+            } else if (_assetPair.priceStrategy == PriceStrategy.OracleVerified) {
+                quote = IPriceOracle(_assetPair.priceOracle).getQuote(amountIn, assetA, assetB);
+                verifyingQuote =
+                    ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountIn, assetA, assetB);
             }
-        }
-
-        swapperQuote = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountIn, assetA, assetB);
-
-        if (address(_assetPair.priceOracle) != address(0)) {
-            oracleQuote = IPriceOracle(_assetPair.priceOracle).getQuote(amountIn, assetA, assetB);
+            uint256 diff = quote > verifyingQuote ? quote - verifyingQuote : verifyingQuote - quote;
+            uint256 tolerance = (quote * _assetPair.swapperAccuracy) / 10000;
+            verified = diff <= tolerance;
         }
     }
 
@@ -107,8 +112,13 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
         returns (AssetPair memory _assetPair)
     {
         _assetPair = assetPairs[keccak256(abi.encode(assetA, assetB))];
-
-        if (address(_assetPair.swapEngine) == address(0)) revert AssetPairNotRegistered();
+        // Should flip around since the price oracle works both ways
+        if (address(_assetPair.swapEngine) == address(0)) {
+            _assetPair = assetPairs[keccak256(abi.encode(assetB, assetA))];
+            if (address(_assetPair.swapEngine) == address(0)) {
+                revert AssetPairNotRegistered();
+            }
+        }
     }
 }
 
