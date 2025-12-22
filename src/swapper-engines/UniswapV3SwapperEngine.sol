@@ -269,63 +269,71 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         uint256 len = poolInfo.length;
         require(len >= Constants.ADDR_SIZE, "PoolInfo too short");
 
-        // Single pool case: path is just one token (20 bytes), so reversed is the same
-        if (len == 20) {
-            reversedPath = new bytes(20);
-            // Copy all 20 bytes
-            for (uint256 i = 0; i < 20; i++) {
-                reversedPath[i] = poolInfo[i];
-            }
-        } else {
-            // Allocate memory for reversed path (same length)
-            reversedPath = new bytes(len);
+        // Allocate memory for reversed path (same length)
+        reversedPath = new bytes(len);
+
+        assembly {
+            // Get pointers to data start (skip length word)
+            let srcPtr := add(poolInfo, 0x20)
+            let dstPtr := add(reversedPath, 0x20)
 
             // Calculate number of pools: (len - 20) / 23 + 1
-            // Each intermediate pool adds 23 bytes (token + fee), last pool is just token (20 bytes)
-            uint256 numPools = (len - 20) / 23 + 1;
+            let numPools := add(div(sub(len, 20), 23), 1)
 
-            // Copy last token to first position (20 bytes)
-            for (uint256 i = 0; i < 20; i++) {
-                reversedPath[i] = poolInfo[len - 20 + i];
-            }
+            // Copy last token (20 bytes) to first position using mload/mstore
+            // Load 32 bytes from last token position, extract address
+            let lastTokenWord := mload(add(srcPtr, sub(len, 20)))
+            let lastToken := shr(96, lastTokenWord) // Right-align address
+            mstore(dstPtr, shl(96, lastToken)) // Store at start, left-aligned
 
             // Process intermediate pools: copy fees and tokens in reverse order
-            uint256 dstOffset = 20; // Write position starts after first token
-            uint256 srcOffset = len - 23; // Start reading from second-to-last fee
+            let dstOffset := 20 // Write position starts after first token
+            let srcOffset := sub(len, 23) // Start reading from second-to-last fee
 
             // For each intermediate pool (from pool N-1 down to pool 1)
-            for (uint256 i = 1; i < numPools; i++) {
+            for { let i := 1 } lt(i, numPools) { i := add(i, 1) } {
                 // Copy fee (3 bytes) from source to destination
-                for (uint256 j = 0; j < 3; j++) {
-                    reversedPath[dstOffset + j] = poolInfo[srcOffset + j];
-                }
+                // Load word containing fee, extract 3 bytes (24 bits) from the start
+                let feeWord := mload(add(srcPtr, srcOffset))
+                let fee := shr(232, feeWord) // Extract fee (rightmost 24 bits after shift)
+
+                // Store fee: load destination word, clear first 3 bytes, set fee
+                let dstWord := mload(add(dstPtr, dstOffset))
+                // Mask: keep all bytes except first 3 (0xffffff00...00)
+                dstWord := and(dstWord, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00)
+                // Set fee in first 3 bytes (shift left by 232 bits)
+                dstWord := or(dstWord, shl(232, fee))
+                mstore(add(dstPtr, dstOffset), dstWord)
 
                 // Move source offset back 20 bytes to read token
-                // Use unchecked since we know srcOffset >= 20 at this point
-                unchecked {
-                    srcOffset -= 20;
-                }
+                srcOffset := sub(srcOffset, 20)
 
-                // Copy token (20 bytes) from source to destination byte-by-byte
-                for (uint256 k = 0; k < 20; k++) {
-                    reversedPath[dstOffset + 3 + k] = poolInfo[srcOffset + k];
-                }
+                // Copy token (20 bytes) from source to destination
+                let tokenWord := mload(add(srcPtr, srcOffset))
+                let token := shr(96, tokenWord) // Extract address (right-align)
+
+                // Store token at dstOffset + 3
+                // Load word at destination, clear first 20 bytes, set token
+                let tokenDstWord := mload(add(dstPtr, add(dstOffset, 3)))
+                // Mask: keep last 12 bytes, clear first 20 bytes (0x0000...00ffff...ff)
+                tokenDstWord := and(tokenDstWord, 0x000000000000000000000000ffffffffffffffffffffffffffffffffffffffff)
+                // Set token in first 20 bytes (shift left by 96 bits)
+                tokenDstWord := or(tokenDstWord, shl(96, token))
+                mstore(add(dstPtr, add(dstOffset, 3)), tokenDstWord)
 
                 // Update offsets for next iteration
-                dstOffset += 23; // Move past fee (3) + token (20)
+                dstOffset := add(dstOffset, 23) // Move past fee (3) + token (20)
 
                 // Only move srcOffset back if there are more pools to process
-                if (i + 1 < numPools) {
-                    unchecked {
-                        srcOffset -= 3; // Move back 3 bytes to next fee position
-                    }
+                if lt(add(i, 1), numPools) {
+                    srcOffset := sub(srcOffset, 3) // Move back 3 bytes to next fee position
                 }
             }
 
-            // Copy first token to last position (20 bytes)
-            for (uint256 i = 0; i < 20; i++) {
-                reversedPath[len - 20 + i] = poolInfo[i];
-            }
+            // Copy first token (20 bytes) to last position
+            let firstTokenWord := mload(srcPtr)
+            let firstToken := shr(96, firstTokenWord) // Extract address
+            mstore(add(dstPtr, sub(len, 20)), shl(96, firstToken)) // Store at end, left-aligned
         }
     }
 

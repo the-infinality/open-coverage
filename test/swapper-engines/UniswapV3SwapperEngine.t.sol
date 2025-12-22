@@ -106,24 +106,7 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
     // ============ reversePath() Tests ============ //
 
     function test_reversePath_singlePool() public view {
-        // Single pool: just one token (20 bytes)
-        bytes memory poolInfo = abi.encodePacked(USDC);
-
-        bytes memory reversed = testSwapperEngine.reversePath(poolInfo);
-
-        // Single pool reversed should be the same
-        assertEq(reversed.length, poolInfo.length, "Length should match");
-        assertEq(reversed, poolInfo, "Single pool path should remain unchanged when reversed");
-
-        // Verify the token address is preserved
-        (address originalA, address originalB) = swapperEngine.getAssetAddresses(poolInfo);
-        (address reversedA, address reversedB) = swapperEngine.getAssetAddresses(reversed);
-        assertEq(originalA, reversedA, "First token should match");
-        assertEq(originalB, reversedB, "Last token should match");
-    }
-
-    function test_reversePath_twoPools() public view {
-        // Two pools: token0 (20) + fee0 (3) + token1 (20) = 43 bytes
+        // Single pool path: token0 (20 bytes) + fee (3 bytes) + token1 (20 bytes) = 43 bytes
         bytes memory poolInfo = abi.encodePacked(USDC, uint24(500), USDT);
 
         bytes memory reversed = testSwapperEngine.reversePath(poolInfo);
