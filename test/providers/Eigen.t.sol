@@ -25,6 +25,7 @@ import {UniswapV3SwapperEngine} from "src/swapper-engines/UniswapV3SwapperEngine
 import {UniswapAddressbook} from "utils/UniswapHelper.sol";
 import {ISwapperEngine} from "src/interfaces/ISwapperEngine.sol";
 import {PriceStrategy, AssetPair} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
 
 contract EigenTest is EigenTestDeployer {
     IEigenOperatorProxy public operator;
@@ -127,6 +128,37 @@ contract EigenTest is EigenTestDeployer {
         CoverageProviderData memory coverageProviderData =
             coverageAgent.coverageProviderData(address(eigenCoverageDiamond));
         assertEq(coverageProviderData.active, true);
+    }
+
+    function test_RevertWhen_register_not_owner() public {
+        address nonOwner = makeAddr("nonOwner");
+        bytes memory poolInfo = abi.encodePacked(
+            rETH,
+            uint24(100),
+            WETH,
+            uint24(500),
+            USDC
+        );
+
+        vm.prank(nonOwner);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                LibDiamond.NotContractOwner.selector,
+                nonOwner,
+                address(this)
+            )
+        );
+        eigenPriceOracle.register(
+            AssetPair({
+                assetA: rETH,
+                assetB: USDC,
+                swapEngine: address(uniswapV3SwapperEngine),
+                poolInfo: poolInfo,
+                priceStrategy: PriceStrategy.SwapperOnly,
+                swapperAccuracy: 0,
+                priceOracle: address(0)
+            })
+        );
     }
 
     function test_registerCoverageAgent() public {
@@ -430,6 +462,8 @@ contract EigenTest is EigenTestDeployer {
         assertEq(duration, 15 days);
         assertEq(distributionStartTime, toRewardsInterval(block.timestamp - 25 days));
     }
+
+    
 
     function xtest_slashClaims() public {
         _setupwithAllocations();

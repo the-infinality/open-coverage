@@ -71,6 +71,25 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         assertEq(assetPriceOracleAndSwapper.assetPair(USDC, USDT).priceOracle, address(mockPriceOracle));
     }
 
+    function test_RevertWhen_register_not_owner() public {
+        address nonOwner = makeAddr("nonOwner");
+        bytes memory USDC_USDT_V3_POOL_INFO = abi.encodePacked(USDC, uint24(500), USDT);
+
+        vm.prank(nonOwner);
+        vm.expectRevert(MockAssetPriceOracleAndSwapper.NotOwner.selector);
+        assetPriceOracleAndSwapper.register(
+            AssetPair({
+                assetA: USDC,
+                assetB: USDT,
+                swapEngine: address(uniswapV3SwapperEngine),
+                poolInfo: USDC_USDT_V3_POOL_INFO,
+                priceStrategy: PriceStrategy.SwapperOnly,
+                swapperAccuracy: 0,
+                priceOracle: address(0)
+            })
+        );
+    }
+
     function test_swap_uniswap_v3() public {
         uint128 amountOut = 1000e6;
         // Deal USDT (swap/input asset) instead of USDC
