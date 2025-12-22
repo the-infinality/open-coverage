@@ -47,6 +47,7 @@ interface IAssetPriceOracleAndSwapper {
     error AssetPairNotRegistered();
     error PriceOracleRequired();
     error InvalidAssetPair();
+    error InvalidSwapSlippage();
 
     /// @notice Registers a price adaptor for an asset pair
     /// @param _assetPair The asset pair configuration
@@ -64,11 +65,19 @@ interface IAssetPriceOracleAndSwapper {
     /// @param assetB The asset to spend (input/swap)
     function swapForInput(uint128 amountIn, address assetA, address assetB) external;
 
+    /// @notice Sets the swap slippage
+    /// @param swapSlippage_ The swap slippage in basis points i.e. 1 = 0.01%
+    function setSwapSlippage(uint16 swapSlippage_) external;
+
     /// @notice Gets the asset pair configuration for two assets
     /// @param assetA The first asset
     /// @param assetB The second asset
     /// @return The asset pair configuration
     function assetPair(address assetA, address assetB) external view returns (AssetPair memory);
+
+    /// @notice Gets the swap slippage
+    /// @return The swap slippage
+    function swapSlippage() external view returns (uint16);
 
     /// @notice Gets a price quote for an asset pair
     /// @param amountIn The amount of `assetB` to get value for `assetA`

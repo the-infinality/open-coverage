@@ -34,6 +34,8 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
     function swapForOutput(uint128 amountOut, address assetA, address assetB) public {
         AssetPair memory _assetPair = _getRegisteredAssetPair(assetA, assetB);
 
+        uint256 maxAmountIn = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountOut, assetA, assetB);
+
         // Delegatecall version of swapForOutput
         (bool success,) = _assetPair.swapEngine
             .delegatecall(
@@ -41,7 +43,7 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
                     "swapForOutput(bytes,uint256,uint256,address,address)",
                     _assetPair.poolInfo,
                     amountOut,
-                    type(uint256).max,
+                    maxAmountIn + (_swapSlippage * maxAmountIn) / 10000,
                     assetA,
                     assetB
                 )
@@ -53,6 +55,8 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
     function swapForInput(uint128 amountIn, address assetA, address assetB) public {
         AssetPair memory _assetPair = _getRegisteredAssetPair(assetA, assetB);
 
+        uint256 minAmountOut = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountIn, assetA, assetB);
+
         // Delegatecall version of swapForInput
         (bool success,) = _assetPair.swapEngine
             .delegatecall(
@@ -60,12 +64,23 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
                     "swapForInput(bytes,uint256,uint256,address,address)",
                     _assetPair.poolInfo,
                     amountIn,
-                    type(uint256).max,
+                    minAmountOut - (minAmountOut * _swapSlippage) / 10000,
                     assetA,
                     assetB
                 )
             );
         if (!success) revert SwapFailed();
+    }
+
+    /// @inheritdoc IAssetPriceOracleAndSwapper
+    function setSwapSlippage(uint16 swapSlippage_) public virtual {
+        if (swapSlippage_ > 10000) revert InvalidSwapSlippage();
+        _swapSlippage = swapSlippage_;
+    }
+
+    /// @inheritdoc IAssetPriceOracleAndSwapper
+    function swapSlippage() external view returns (uint16) {
+        return _swapSlippage;
     }
 
     /// @inheritdoc IAssetPriceOracleAndSwapper

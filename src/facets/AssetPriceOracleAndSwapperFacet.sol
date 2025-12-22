@@ -17,5 +17,10 @@ contract AssetPriceOracleAndSwapperFacet is AssetPriceOracleAndSwapper {
         LibDiamond.enforceIsContractOwner();
         super.register(_assetPair);
     }
+
+    function setSwapSlippage(uint16 swapSlippage_) public override {
+        LibDiamond.enforceIsContractOwner();
+        super.setSwapSlippage(swapSlippage_);
+    }
 }
 

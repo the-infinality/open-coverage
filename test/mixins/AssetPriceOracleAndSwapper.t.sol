@@ -90,7 +90,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         );
     }
 
-    function test_swap_uniswap_v3() public {
+    function test_swapForOutput() public {
         uint128 amountOut = 1000e6;
         // Deal USDT (swap/input asset) instead of USDC
         deal(USDT, address(assetPriceOracleAndSwapper), amountOut * 2);
@@ -99,6 +99,42 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT);
 
         assertEq(IERC20(USDC).balanceOf(address(assetPriceOracleAndSwapper)), amountOut);
+    }
+
+    function test_swapForInput() public {
+        uint128 amountIn = 1000e6;
+        // Deal USDT (swap/input asset) instead of USDC
+        deal(USDT, address(assetPriceOracleAndSwapper), amountIn * 2);
+
+        // Swap from USDT (swap) to get amountOut of USDC (base)
+        assetPriceOracleAndSwapper.swapForInput(amountIn, USDC, USDT);
+    }
+
+    function test_RevertWhen_swapForOutput_slippageTooLow() public {
+        assetPriceOracleAndSwapper.setSwapSlippage(0);
+
+        uint128 amountOut = 1000e6;
+        // Deal USDT (swap/input asset) instead of USDC
+        deal(USDT, address(assetPriceOracleAndSwapper), amountOut * 2);
+
+        vm.expectRevert(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.SwapFailed.selector));
+        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT);
+    }
+
+    function test_RevertWhen_swapForInput_slippageTooLow() public {
+        assetPriceOracleAndSwapper.setSwapSlippage(0);
+
+        uint128 amountIn = 1000e6;
+        // Deal USDT (swap/input asset) instead of USDC
+        deal(USDT, address(assetPriceOracleAndSwapper), amountIn * 2);
+
+        vm.expectRevert(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.SwapFailed.selector));
+        assetPriceOracleAndSwapper.swapForInput(amountIn, USDC, USDT);
+    }
+
+    function test_RevertWhen_swapForOutput_slippageTooHigh() public {
+        vm.expectRevert(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.InvalidSwapSlippage.selector));
+        assetPriceOracleAndSwapper.setSwapSlippage(10001);
     }
 
     function test_swap_uniswap_v3_multihop() public {
