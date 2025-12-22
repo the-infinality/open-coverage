@@ -2,7 +2,6 @@
 pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {ERC20} from "@openzeppelin-v5/contracts/token/ERC20/ERC20.sol";
 import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/EnumerableMap.sol";
 import {IAllocationManager, IAllocationManagerTypes} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";

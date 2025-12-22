@@ -755,8 +755,10 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         assertEq(IERC20(rETH).balanceOf(address(proxy)), amountOut, "Should receive exact output amount");
 
         // Execute swap via delegatecall: swap USDC (swap) -> get amountOut of rETH (base)
-        (, bytes memory qoute) = address(proxy)
+        (bool success2, bytes memory qoute) = address(proxy)
             .call(abi.encodeWithSelector(UniswapV3SwapperEngine.getQuote.selector, poolInfo, amountOut, USDC, rETH));
+
+        assertTrue(success2, "Quote should succeed");
 
         // Verify we received the exact output
         assertApproxEqAbs(

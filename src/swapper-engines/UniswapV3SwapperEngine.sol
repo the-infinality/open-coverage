@@ -199,7 +199,7 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         // Call decimals() using the selector bytes since decimals() is not defined in the IERC20 interface
         (bool success, bytes memory data) = quote.staticcall(abi.encodeWithSelector(bytes4(0x313ce567)));
         if (success && data.length >= 32) {
-            quoteDecimals = uint8(uint256(bytes32(data)));
+            quoteDecimals = abi.decode(data, (uint8));
         }
 
         // Calculate unit amount: 10^decimals (e.g., 1e18 for 18 decimals, 1e6 for 6 decimals)
