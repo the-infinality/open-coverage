@@ -321,17 +321,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
                 _operators,
                 strategies
             );
-        uint256 quotedPrice =
-            IAssetPriceOracleAndSwapper(address(this)).getQuote(allocatedStake[0][0], strategyAsset, coverageAsset);
-
-        uint8 strategyDecimals = ERC20(strategyAsset).decimals();
-        uint8 coverageDecimals = ERC20(coverageAsset).decimals();
-
-        if (strategyDecimals > coverageDecimals) {
-            return quotedPrice / (10 ** (strategyDecimals - coverageDecimals));
-        } else {
-            return quotedPrice * (10 ** (coverageDecimals - strategyDecimals));
-        }
+        (total,) =
+            IAssetPriceOracleAndSwapper(address(this)).getQuote(allocatedStake[0][0], coverageAsset, strategyAsset);
     }
 
     function _registerPosition(

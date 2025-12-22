@@ -5,10 +5,12 @@ import {AssetPriceOracleAndSwapperStorage} from "../storage/AssetPriceOracleAndS
 import {IAssetPriceOracleAndSwapper, AssetPair, PriceStrategy} from "../interfaces/IAssetPriceOracleAndSwapper.sol";
 import {ISwapperEngine} from "../interfaces/ISwapperEngine.sol";
 import {IPriceOracle} from "../interfaces/IPriceOracle.sol";
+import {console2} from "forge-std/console2.sol";
 
 /// @title AssetPriceOracleAndSwapper
 /// @author p-dealwis, Infinality
-/// @notice Mixin contract for managing asset price oracles and executing swaps
+/// @notice Mixin contract for quoting and swapping assets
+/// @dev This contract utlised Swapper Engines with optional price oracles
 contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorage, IAssetPriceOracleAndSwapper {
     /// @inheritdoc IAssetPriceOracleAndSwapper
     function register(AssetPair calldata _assetPair) external {
@@ -73,17 +75,31 @@ contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorage, IAsset
     }
 
     /// @inheritdoc IAssetPriceOracleAndSwapper
-    function getQuote(uint256 amountIn, address assetA, address assetB) public view returns (uint256) {
+    function getQuote(uint256 amountIn, address assetA, address assetB)
+        external
+        view
+        returns (uint256 swapperQuote, uint256 oracleQuote)
+    {
         AssetPair memory _assetPair = assetPairs[keccak256(abi.encode(assetA, assetB))];
 
         // Should flip around since the price oracle works both ways
-        if (address(_assetPair.priceOracle) == address(0)) {
+        if (address(_assetPair.swapEngine) == address(0)) {
             _assetPair = assetPairs[keccak256(abi.encode(assetB, assetA))];
-            if (address(_assetPair.priceOracle) == address(0)) {
+            if (address(_assetPair.swapEngine) == address(0)) {
                 revert AssetPairNotRegistered();
             }
         }
-        return IPriceOracle(_assetPair.priceOracle).getQuote(amountIn, assetA, assetB);
+
+        console2.log("assetA", assetA);
+        console2.log("assetB", assetB);
+        console2.log("amountIn", amountIn);
+        console2.log("swapperQuote", swapperQuote);
+        console2.log("oracleQuote", oracleQuote);
+        swapperQuote = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountIn, assetA, assetB);
+        // swapperQuote = 0;
+        if (address(_assetPair.priceOracle) != address(0)) {
+            oracleQuote = IPriceOracle(_assetPair.priceOracle).getQuote(amountIn, assetA, assetB);
+        }
     }
 
     /// @notice Gets the registered asset pair and reverts if not registered

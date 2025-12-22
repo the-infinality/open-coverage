@@ -10,12 +10,12 @@ import {IUniversalRouter} from "@uniswap/universal-router/interfaces/IUniversalR
 import {IPermit2} from "@uniswap/permit2/src/interfaces/IPermit2.sol";
 import {IV4Quoter} from "@uniswap/v4-periphery/src/interfaces/IV4Quoter.sol";
 import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
+import {IQuoter} from "src/interfaces/IQuoter.sol";
 
 struct UniswapAddresses {
     address universalRouter;
     address permit2;
-    address quoterV2;
-    address quoterV3;
+    address viewQuoterV3;
     address v4PositionManager;
 }
 
@@ -41,8 +41,8 @@ contract UniswapHelper {
         return IPermit2(_getUniswapAddressBook().uniswapAddresses.permit2);
     }
 
-    function _getQuoterV3() internal view returns (IV4Quoter) {
-        return IV4Quoter(_getUniswapAddressBook().uniswapAddresses.quoterV3);
+    function _getQuoter() internal view returns (IQuoter) {
+        return IQuoter(_getUniswapAddressBook().uniswapAddresses.viewQuoterV3);
     }
 
     function _getV4PositionManager() internal view returns (IPositionManager) {
@@ -59,10 +59,8 @@ contract UniswapHelper {
             configJson.readAddress(string.concat(selectorPrefix, ".universalRouter"));
         ab.uniswapAddresses.permit2 =
             configJson.readAddress(string.concat(selectorPrefix, ".permit2"));
-        ab.uniswapAddresses.quoterV2 =
-            configJson.readAddress(string.concat(selectorPrefix, ".quoterV2"));
-        ab.uniswapAddresses.quoterV3 =
-            configJson.readAddress(string.concat(selectorPrefix, ".quoterV3"));
+        ab.uniswapAddresses.viewQuoterV3 =
+            configJson.readAddress(string.concat(selectorPrefix, ".viewQuoterV3"));
         ab.uniswapAddresses.v4PositionManager =
             configJson.readAddress(string.concat(selectorPrefix, ".v4PositionManager"));
     }
@@ -72,7 +70,7 @@ contract UniswapHelper {
 
         vm.label(ab.uniswapAddresses.universalRouter, "Uniswap V4 Universal Router");
         vm.label(ab.uniswapAddresses.permit2, "Permit2");
-        vm.label(ab.uniswapAddresses.quoterV2, "Uniswap V3 QuoterV2");
-        vm.label(ab.uniswapAddresses.quoterV3, "Uniswap V4 QuoterV3");
+        vm.label(ab.uniswapAddresses.viewQuoterV3, "Uniswap V3 View Quoter");
+        vm.label(ab.uniswapAddresses.v4PositionManager, "Uniswap V4 Position Manager");
     }
 }

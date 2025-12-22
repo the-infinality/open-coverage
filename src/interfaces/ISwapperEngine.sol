@@ -17,11 +17,11 @@ interface ISwapperEngine {
     /// @notice Swaps with an exact amount of input tokens
     /// @dev The swapper engine must revert with OnlyDelegateCall() if the contract is called directly instead of via delegatecall
     /// @param poolInfo The pool information to use for the swap
-    /// @param amountIn The exact amount of tokens to spend
-    /// @param amountOutMin The minimum amount of tokens to receive
-    /// @param base The asset to swap from
-    /// @param swap The asset to swap to
-    /// @return amountOut The actual amount of output tokens received
+    /// @param amountIn The exact amount of `swap` tokens to spend
+    /// @param amountOutMin The minimum amount of `base` tokens to receive
+    /// @param base The asset to receive (output)
+    /// @param swap The asset to spend (input)
+    /// @return amountOut The actual amount of `base` tokens received
     function swapForInput(bytes memory poolInfo, uint256 amountIn, uint256 amountOutMin, address base, address swap)
         external
         returns (uint256 amountOut);
@@ -29,23 +29,24 @@ interface ISwapperEngine {
     /// @notice Swaps to an exact amount of output tokens
     /// @dev The swapper engine must revert with OnlyDelegateCall() if the contract is called directly instead of via delegatecall
     /// @param poolInfo The pool information to use for the swap
-    /// @param amountOut The exact amount of tokens to receive
-    /// @param amountInMax The maximum amount of tokens to spend
-    /// @param base The asset to swap from
-    /// @param swap The asset to swap to
-    /// @return amountIn The actual amount of input tokens spent
+    /// @param amountOut The exact amount of `base` tokens to receive
+    /// @param amountInMax The maximum amount of `swap` tokens to spend
+    /// @param base The asset to receive (output)
+    /// @param swap The asset to spend (input)
+    /// @return amountIn The actual amount of `swap` tokens spent
     function swapForOutput(bytes memory poolInfo, uint256 amountOut, uint256 amountInMax, address base, address swap)
         external
         returns (uint256 amountIn);
 
-    /// @notice Quotes the amount of `quote` that is equivalent to `amountIn` of `base`.
+    /// @notice Quotes the amount of `base` that is equivalent to `amountIn` of `quote`.
     /// @param poolInfo The pool information to use for the quote
-    /// @param amountIn The amount of `base` to get value for `quote`.
-    /// @param base The asset to get value for
-    /// @param quote The asset to quote from
-    /// @return amountOut The amount of `quote` that is equivalent to `amountIn` of `base`.
+    /// @param amountIn The amount of `quote` to get value for `base`.
+    /// @param base The asset to quote the value for
+    /// @param quote The asset to get value from
+    /// @return amountOut The amount of `base` that is equivalent to `amountIn` of `quote`.
     function getQuote(bytes memory poolInfo, uint256 amountIn, address base, address quote)
         external
+        view
         returns (uint256 amountOut);
 
     /// @notice Called when the swapper engine is initialized

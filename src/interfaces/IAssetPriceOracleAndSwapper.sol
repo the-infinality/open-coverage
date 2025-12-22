@@ -36,10 +36,10 @@ struct AssetPair {
 interface IAssetPriceOracleAndSwapper {
     event AssetPairRegistered(address assetA, address assetB);
 
+    error PriceMismatch();
     error SwapFailed();
     error InvalidPoolInfo();
     error AssetPairNotRegistered();
-    error InvalidPriceOracle();
     error PriceOracleRequired();
     error InvalidAssetPair();
 
@@ -48,15 +48,15 @@ interface IAssetPriceOracleAndSwapper {
     function register(AssetPair calldata _assetPair) external;
 
     /// @notice Swaps an exact amount to receive output tokens specified
-    /// @param amountOut The exact amount of tokens to receive
-    /// @param assetA The input asset
-    /// @param assetB The output asset
+    /// @param amountOut The exact amount of `assetA` tokens to receive
+    /// @param assetA The asset to receive (output/base)
+    /// @param assetB The asset to spend (input/swap)
     function swapForOutput(uint128 amountOut, address assetA, address assetB) external;
 
     /// @notice Swaps an exact amount of input tokens
-    /// @param amountIn The exact amount of tokens to spend
-    /// @param assetA The input asset
-    /// @param assetB The output asset
+    /// @param amountIn The exact amount of `assetB` tokens to spend
+    /// @param assetA The asset to receive (output/base)
+    /// @param assetB The asset to spend (input/swap)
     function swapForInput(uint128 amountIn, address assetA, address assetB) external;
 
     /// @notice Gets the asset pair configuration for two assets
@@ -66,10 +66,14 @@ interface IAssetPriceOracleAndSwapper {
     function assetPair(address assetA, address assetB) external view returns (AssetPair memory);
 
     /// @notice Gets a price quote for an asset pair
-    /// @param amountIn The amount of the first asset
-    /// @param assetA The first asset
-    /// @param assetB The second asset
-    /// @return The equivalent amount in the second asset
-    function getQuote(uint256 amountIn, address assetA, address assetB) external view returns (uint256);
+    /// @param amountIn The amount of `assetB` to get value for `assetA`
+    /// @param assetA The asset to quote the value for (output/base)
+    /// @param assetB The asset to get value from (input/swap)
+    /// @return swapperQuote The equivalent amount of `assetA` for `amountIn` of `assetB` from the swapper
+    /// @return oracleQuote The equivalent amount of `assetA` for `amountIn` of `assetB` from the oracle
+    function getQuote(uint256 amountIn, address assetA, address assetB)
+        external
+        view
+        returns (uint256 swapperQuote, uint256 oracleQuote);
 }
 

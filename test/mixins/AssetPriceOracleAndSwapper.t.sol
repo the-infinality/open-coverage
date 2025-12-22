@@ -30,7 +30,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         uniswapV3SwapperEngine = new UniswapV3SwapperEngine(
             uniswapAddressBook.uniswapAddresses.universalRouter,
             uniswapAddressBook.uniswapAddresses.permit2,
-            uniswapAddressBook.uniswapAddresses.quoterV2
+            uniswapAddressBook.uniswapAddresses.viewQuoterV3
         );
         mockPriceOracle = new MockPriceOracle(1e18, USDC, USDT);
 
@@ -73,40 +73,61 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
 
     function test_swap_uniswap_v3() public {
         uint128 amountOut = 1000e6;
-        deal(USDC, address(assetPriceOracleAndSwapper), amountOut * 2);
+        // Deal USDT (swap/input asset) instead of USDC
+        deal(USDT, address(assetPriceOracleAndSwapper), amountOut * 2);
 
-        // Token 0 needs to be first for exact output
+        // Swap from USDT (swap) to get amountOut of USDC (base)
         assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT);
-
-        assertEq(IERC20(USDT).balanceOf(address(assetPriceOracleAndSwapper)), amountOut);
-    }
-
-    function test_swap_uniswap_v3_multihop() public {
-        uint128 amountOut = 1000e6;
-        deal(rETH, address(assetPriceOracleAndSwapper), 1e18);
-
-        // V3 multi-hop path: rETH -> WETH (fee: 100) -> USDC (fee: 500)
-        // For EXACT_OUT, path is reversed: output -> fee -> intermediate -> fee -> input
-        assetPriceOracleAndSwapper.swapForOutput(amountOut, rETH, USDC);
 
         assertEq(IERC20(USDC).balanceOf(address(assetPriceOracleAndSwapper)), amountOut);
     }
 
+    function test_swap_uniswap_v3_multihop() public {
+        uint128 amountOut = 1e18; // 1 rETH (base is output)
+        // Deal USDC (swap/input asset) instead of rETH
+        deal(USDC, address(assetPriceOracleAndSwapper), 10000e6);
+
+        // V3 multi-hop path: rETH -> WETH (fee: 100) -> USDC (fee: 500)
+        // For EXACT_OUT, path format: output -> fee -> intermediate -> fee -> input
+        // Swap from USDC (swap) to get amountOut of rETH (base)
+        assetPriceOracleAndSwapper.swapForOutput(amountOut, rETH, USDC);
+
+        assertEq(IERC20(rETH).balanceOf(address(assetPriceOracleAndSwapper)), amountOut);
+    }
+
     function test_RevertWhen_swap_asset_pair_not_registered() public {
         uint128 amountOut = 1000e6;
-        deal(USDC, address(assetPriceOracleAndSwapper), amountOut * 2);
+        deal(USDT, address(assetPriceOracleAndSwapper), amountOut * 2);
 
         vm.expectRevert(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.AssetPairNotRegistered.selector));
         assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, address(0));
     }
 
-    function test_getQuote_oracle_only() public view {
+    function test_getQuote_with_oracle() public view {
         uint256 amountIn = 1000e6;
-        uint256 quote = assetPriceOracleAndSwapper.getQuote(amountIn, USDC, USDT);
-        assertEq(quote, amountIn);
+        (uint256 swapperQuote, uint256 oracleQuote) = assetPriceOracleAndSwapper.getQuote(amountIn, USDC, USDT);
+        assertGt(swapperQuote, 0);
+        assertEq(oracleQuote, amountIn);
 
-        uint256 newQuote = assetPriceOracleAndSwapper.getQuote(amountIn, USDT, USDC);
-        assertEq(newQuote, amountIn);
+        (uint256 swapperQuote2, uint256 oracleQuote2) = assetPriceOracleAndSwapper.getQuote(amountIn, USDT, USDC);
+        assertGt(swapperQuote2, 0);
+        assertEq(oracleQuote2, amountIn);
+    }
+
+    function test_getQuote_swapper_only() public view {
+        uint256 amountIn = 1e18;
+        (uint256 swapperQuote, uint256 oracleQuote) = assetPriceOracleAndSwapper.getQuote(amountIn, USDC, rETH);
+
+        assertEq(oracleQuote, 0);
+        assertGt(swapperQuote, 1000e6);
+    }
+
+    function test_getQuote_swapper_only_reverse() public view {
+        uint256 amountIn = 1000e6; // 1000 USDC
+        (uint256 swapperQuote, uint256 oracleQuote) = assetPriceOracleAndSwapper.getQuote(amountIn, rETH, USDC);
+
+        assertEq(oracleQuote, 0);
+        assertGt(swapperQuote, 1e17);
     }
 
     function test_RevertWhen_getQuote_asset_pair_not_registered() public {

@@ -96,17 +96,17 @@ contract EigenTest is EigenTestDeployer {
         uniswapV3SwapperEngine = new UniswapV3SwapperEngine(
             uniswapAddressBook.uniswapAddresses.universalRouter,
             uniswapAddressBook.uniswapAddresses.permit2,
-            uniswapAddressBook.uniswapAddresses.quoterV2
+            uniswapAddressBook.uniswapAddresses.viewQuoterV3
         );
 
         // V3 multi-hop path: rETH -> WETH (fee: 100) -> USDC (fee: 500)
         // For EXACT_OUT, path is reversed: output -> fee -> intermediate -> fee -> input
         bytes memory poolInfo = abi.encodePacked(
-            USDC, // output token (20 bytes)
-            uint24(500), // fee for WETH->USDC pool (3 bytes)
-            WETH, // intermediate token (20 bytes)
-            uint24(100), // fee for rETH->WETH pool (3 bytes)
-            rETH // input token (20 bytes)
+            rETH,
+            uint24(100), // 0.01% fee rETH-WETH
+            WETH,
+            uint24(500), // 0.05% fee WETH-USDC
+            USDC
         );
 
         // SwapParams memory swapParams = SwapParams({swapEngine: SwapEngine.UNISWAP_V3, poolInfo: poolInfo});
@@ -116,9 +116,9 @@ contract EigenTest is EigenTestDeployer {
                 assetB: USDC,
                 swapEngine: address(uniswapV3SwapperEngine),
                 poolInfo: poolInfo,
-                priceStrategy: PriceStrategy.OracleOnly,
+                priceStrategy: PriceStrategy.SwapperOnly,
                 swapperAccuracy: 0,
-                priceOracle: address(mockPriceOracle)
+                priceOracle: address(0)
             })
         );
     }
@@ -183,26 +183,10 @@ contract EigenTest is EigenTestDeployer {
         assertEq(eigenCoverageProvider.position(positionId).expiryTimestamp, block.timestamp);
     }
 
-    function test_mockPriceOracleQuotes() public view {
-        uint256 quote = mockPriceOracle.getQuote(1e18, rETH, USDC);
-        assertEq(quote, 100000e18);
-
-        (uint256 bidOutAmount, uint256 askOutAmount) = mockPriceOracle.getQuotes(1e18, rETH, USDC);
-        assertEq(bidOutAmount, 100000e18);
-        assertEq(askOutAmount, 100000e18);
-
-        quote = mockPriceOracle.getQuote(100000e18, USDC, rETH);
-        assertEq(quote, 1e18);
-
-        (bidOutAmount, askOutAmount) = mockPriceOracle.getQuotes(100000e18, USDC, rETH);
-        assertEq(bidOutAmount, 1e18);
-        assertEq(askOutAmount, 1e18);
-    }
-
     function test_claimPosition() public {
         _setupwithAllocations();
 
-        _stakeAndDelegateToOperator(1000e18);
+        _stakeAndDelegateToOperator(10e18);
 
         // Create the position
         CoveragePosition memory data = CoveragePosition({
@@ -310,7 +294,7 @@ contract EigenTest is EigenTestDeployer {
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
         uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
-        assertApproxEqAbs(eigenCoverageProvider.positionMaxAmount(positionId), 1000e6, 4e5);
+        assertApproxEqAbs(eigenCoverageProvider.positionMaxAmount(positionId), 35735542, 4e5);
     }
 
     function test_RevertWhen_claimPosition_durationExceedsMax() public {

@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {ISwapperEngine} from "../interfaces/ISwapperEngine.sol";
+import {ISwapperEngine} from "src/interfaces/ISwapperEngine.sol";
 import {IUniversalRouter} from "@uniswap/universal-router/interfaces/IUniversalRouter.sol";
 import {IPermit2} from "@uniswap/permit2/src/interfaces/IPermit2.sol";
-import {IQuoterV2} from "@uniswap/v3-periphery/contracts/interfaces/IQuoterV2.sol";
 import {Commands} from "@uniswap/universal-router/libraries/Commands.sol";
 import {Constants} from "@uniswap/universal-router/libraries/Constants.sol";
 import {IERC20} from "@openzeppelin-v5/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin-v5/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IQuoter} from "src/interfaces/IQuoter.sol";
 
 contract UniswapV3SwapperEngineStorage {
     IUniversalRouter public universalRouter;
     IPermit2 public permit2;
-    IQuoterV2 public quoterV2;
+    IQuoter public quoter;
 }
 
 contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage {
@@ -37,11 +37,11 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         if (address(this) == SELF) revert OnlyDelegateCall();
     }
 
-    constructor(address _universalRouter, address _permit2, address _quoterV2) {
+    constructor(address _universalRouter, address _permit2, address _quoter) {
         SELF = address(this);
         universalRouter = IUniversalRouter(_universalRouter);
         permit2 = IPermit2(_permit2);
-        quoterV2 = IQuoterV2(_quoterV2);
+        quoter = IQuoter(_quoter);
     }
 
     /// @inheritdoc ISwapperEngine
@@ -59,18 +59,18 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         (address pathFirst, address pathLast) = _getAssetAddresses(poolInfo);
 
         // For EXACT_IN, path format is: input -> fee -> [intermediate -> fee ->]* output
-        // So pathFirst should be the input token (base) and pathLast should be the output token (swap)
+        // So pathFirst should be the input token (swap) and pathLast should be the output token (base)
         address inputToken;
         address outputToken;
         bytes memory pathToUse;
 
-        if (pathFirst == base && pathLast == swap) {
-            // Path direction matches: pathFirst = input (base), pathLast = output (swap)
+        if (pathFirst == swap && pathLast == base) {
+            // Path direction matches: pathFirst = input (swap), pathLast = output (base)
             inputToken = pathFirst;
             outputToken = pathLast;
             pathToUse = poolInfo;
-        } else if (pathFirst == swap && pathLast == base) {
-            // Path is reversed: pathFirst = output (swap), pathLast = input (base)
+        } else if (pathFirst == base && pathLast == swap) {
+            // Path is reversed: pathFirst = output (base), pathLast = input (swap)
             // Reverse the path to match EXACT_IN format: input -> fee -> output
             inputToken = pathLast;
             outputToken = pathFirst;
@@ -118,16 +118,16 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         (address pathFirst, address pathLast) = _getAssetAddresses(poolInfo);
 
         // For EXACT_OUT, path format is: output -> fee -> [intermediate -> fee ->]* input
-        // So pathFirst should be the output token (swap) and pathLast should be the input token (base)
+        // So pathFirst should be the output token (base) and pathLast should be the input token (swap)
         address inputToken;
         bytes memory pathToUse;
 
-        if (pathFirst == swap && pathLast == base) {
-            // Path direction matches: pathFirst = output (swap), pathLast = input (base)
+        if (pathFirst == base && pathLast == swap) {
+            // Path direction matches: pathFirst = output (base), pathLast = input (swap)
             inputToken = pathLast;
             pathToUse = poolInfo;
-        } else if (pathFirst == base && pathLast == swap) {
-            // Path is reversed: pathFirst = input (base), pathLast = output (swap)
+        } else if (pathFirst == swap && pathLast == base) {
+            // Path is reversed: pathFirst = input (swap), pathLast = output (base)
             // Reverse the path to match EXACT_OUT format: output -> fee -> input
             inputToken = pathFirst;
             pathToUse = _reversePath(poolInfo);
@@ -167,20 +167,22 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
     /// @inheritdoc ISwapperEngine
     function getQuote(bytes memory poolInfo, uint256 amountIn, address base, address quote)
         external
+        view
         returns (uint256 amountOut)
     {
         // Extract first and last tokens from the path
         (address pathFirst, address pathLast) = _getAssetAddresses(poolInfo);
 
         // For EXACT_IN quote, path format is: input -> fee -> [intermediate -> fee ->]* output
-        // So pathFirst should be the input token (base) and pathLast should be the output token (quote)
+        // So pathFirst should be the input token (quote) and pathLast should be the output token (base)
+        // We want to know: given amountIn of quote, how much base do we get?
         bytes memory pathToUse;
 
-        if (pathFirst == base && pathLast == quote) {
-            // Path direction matches: pathFirst = input (base), pathLast = output (quote)
+        if (pathFirst == quote && pathLast == base) {
+            // Path direction matches: pathFirst = input (quote), pathLast = output (base)
             pathToUse = poolInfo;
-        } else if (pathFirst == quote && pathLast == base) {
-            // Path is reversed: pathFirst = output (quote), pathLast = input (base)
+        } else if (pathFirst == base && pathLast == quote) {
+            // Path is reversed: pathFirst = output (base), pathLast = input (quote)
             // Reverse the path to match EXACT_IN format: input -> fee -> output
             pathToUse = _reversePath(poolInfo);
         } else {
@@ -188,10 +190,27 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
             revert InvalidPoolInfo();
         }
 
-        // Use QuoterV2 to get the quote
-        // Note: quoteExactInput is not marked as view but can be called in view context
-        // It uses staticcall internally and reverts to compute the result
-        (amountOut,,,) = _getQuoterV2().quoteExactInput(pathToUse, amountIn);
+        // To avoid large swap discrepancies and gas/timeout issues, calculate exchange rate first
+        // Quote with 1 unit (based on token decimals) to get the exchange rate, then multiply by amountIn
+        // This is more gas-efficient and avoids precision issues with very large amounts
+
+        // Get the decimals of the quote token to determine the unit amount
+        uint8 quoteDecimals = 18; // Default to 18 decimals
+        // Call decimals() using the selector bytes since decimals() is not defined in the IERC20 interface
+        (bool success, bytes memory data) = quote.staticcall(abi.encodeWithSelector(bytes4(0x313ce567)));
+        if (success && data.length >= 32) {
+            quoteDecimals = uint8(uint256(bytes32(data)));
+        }
+
+        // Calculate unit amount: 10^decimals (e.g., 1e18 for 18 decimals, 1e6 for 6 decimals)
+        uint256 unitAmount = 10 ** quoteDecimals;
+        uint256 unitAmountOut;
+        (unitAmountOut,,,) = _getQuoter().quoteExactInput(pathToUse, unitAmount);
+
+        // Calculate exchange rate: how much base per unit of quote
+        // Then multiply by amountIn to get the final quote
+        // Use checked math to prevent overflow
+        amountOut = (unitAmountOut * amountIn) / unitAmount;
     }
 
     function onInit(bytes memory poolInfo) external {
@@ -314,8 +333,8 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         return UniswapV3SwapperEngineStorage(SELF).permit2();
     }
 
-    function _getQuoterV2() private view returns (IQuoterV2) {
-        return UniswapV3SwapperEngineStorage(SELF).quoterV2();
+    function _getQuoter() private view returns (IQuoter) {
+        return UniswapV3SwapperEngineStorage(SELF).quoter();
     }
 
     function _getUniversalRouter() private view returns (IUniversalRouter) {

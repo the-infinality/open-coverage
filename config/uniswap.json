@@ -2,8 +2,7 @@
     "1": {
         "universalRouter": "0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af",
         "permit2": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
-        "quoterV2": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e",
-        "quoterV3": "0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6",
+        "viewQuoterV3": "0x5e55c9e631fae526cd4b0526c4818d6e0a9ef0e3",
         "v4PositionManager": "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
         "poolPaths": {
             "v4:": {

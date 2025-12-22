@@ -32,8 +32,8 @@ contract DelegateCallProxy {
 
 /// @notice Test contract that extends UniswapV3SwapperEngine to expose internal functions for testing
 contract TestUniswapV3SwapperEngine is UniswapV3SwapperEngine {
-    constructor(address _universalRouter, address _permit2, address _quoterV2)
-        UniswapV3SwapperEngine(_universalRouter, _permit2, _quoterV2)
+    constructor(address _universalRouter, address _permit2, address _quoter)
+        UniswapV3SwapperEngine(_universalRouter, _permit2, _quoter)
     {}
 
     /// @notice Exposes _reversePath for testing
@@ -55,13 +55,13 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         swapperEngine = new UniswapV3SwapperEngine(
             uniswapAddressBook.uniswapAddresses.universalRouter,
             uniswapAddressBook.uniswapAddresses.permit2,
-            uniswapAddressBook.uniswapAddresses.quoterV2
+            uniswapAddressBook.uniswapAddresses.viewQuoterV3
         );
 
         testSwapperEngine = new TestUniswapV3SwapperEngine(
             uniswapAddressBook.uniswapAddresses.universalRouter,
             uniswapAddressBook.uniswapAddresses.permit2,
-            uniswapAddressBook.uniswapAddresses.quoterV2
+            uniswapAddressBook.uniswapAddresses.viewQuoterV3
         );
 
         proxy = new DelegateCallProxy(address(swapperEngine));
@@ -302,16 +302,16 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
     // ============ getQuote() Tests ============ //
 
     function test_getQuote() public {
-        uint256 amountIn = 1000e6; // 1000 USDC
+        uint256 amountIn = 1000e6; // 1000 USDT (quote)
 
-        // Path: USDC -> USDT (EXACT_IN format: input -> fee -> output)
+        // Path: USDT -> USDC (EXACT_OUT format: output -> fee -> input)
         bytes memory poolInfo = abi.encodePacked(
-            USDC,
+            USDT,
             uint24(100), // 0.01% fee for stablecoin pairs
-            USDT
+            USDC
         );
 
-        // Execute quote via delegatecall
+        // Execute quote via delegatecall: given amountIn of USDT (quote), how much USDC (base)?
         (bool success, bytes memory result) = address(proxy)
             .call(abi.encodeWithSelector(UniswapV3SwapperEngine.getQuote.selector, poolInfo, amountIn, USDC, USDT));
 
@@ -327,16 +327,16 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
     }
 
     function test_getQuote_reversedPath() public {
-        uint256 amountIn = 1000e6; // 1000 USDC
+        uint256 amountIn = 1000e6; // 1000 USDT (quote)
 
-        // Path: USDT -> USDC (reversed, will be reversed internally)
+        // Path: USDC -> USDT (will be reversed internally to USDT -> USDC for EXACT_OUT)
         bytes memory poolInfo = abi.encodePacked(
-            USDT,
+            USDC,
             uint24(100), // 0.01% fee
-            USDC
+            USDT
         );
 
-        // Execute quote via delegatecall with reversed path
+        // Execute quote via delegatecall with reversed path: given amountIn of USDT (quote), how much USDC (base)?
         (bool success, bytes memory result) = address(proxy)
             .call(abi.encodeWithSelector(UniswapV3SwapperEngine.getQuote.selector, poolInfo, amountIn, USDC, USDT));
 
@@ -350,33 +350,33 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
     }
 
     function test_getQuote_multiHop() public {
-        uint256 amountIn = 1e18; // 1 WETH
+        uint256 amountIn = 3000e6; // 3000 USDT (quote)
 
-        // Multi-hop path: WETH -> USDC -> USDT
+        // Multi-hop path: USDT -> USDC -> WETH (EXACT_OUT format: output -> fee -> input)
         bytes memory poolInfo = abi.encodePacked(
-            WETH,
-            uint24(3000), // 0.3% fee
-            USDC,
+            USDT,
             uint24(100), // 0.01% fee
-            USDT
+            USDC,
+            uint24(3000), // 0.3% fee
+            WETH
         );
 
-        // Execute quote via delegatecall
+        // Execute quote via delegatecall: given amountIn of USDT (quote), how much WETH (base)?
         (bool success, bytes memory result) = address(proxy)
             .call(abi.encodeWithSelector(UniswapV3SwapperEngine.getQuote.selector, poolInfo, amountIn, WETH, USDT));
 
         require(success, "Multi-hop quote should succeed");
         uint256 amountOut = abi.decode(result, (uint256));
 
-        // Verify we got a valid quote (should be significant amount of USDT for 1 WETH)
+        // Verify we got a valid quote (should be significant amount of WETH for 3000 USDT)
         assertGt(amountOut, 0, "Amount out should be greater than 0");
-        assertGt(amountOut, 1000e6, "Should get at least 1000 USDT for 1 WETH");
+        assertGt(amountOut, 1e15, "Should get at least 0.001 WETH for 3000 USDT");
     }
 
     function test_RevertWhen_getQuote_poolMismatch() public {
         uint256 amountIn = 1000e6;
 
-        // Path: USDC -> WETH (but we're asking for USDC -> USDT)
+        // Path: USDC -> WETH (but we're asking for USDC (base) and USDT (quote))
         bytes memory poolInfo = abi.encodePacked(USDC, uint24(500), WETH);
 
         // Execute quote via delegatecall - should revert with InvalidPoolInfo
@@ -389,33 +389,9 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
     }
 
     function test_getQuote_rETH_to_USDC() public {
-        uint256 amountIn = 1e18; // 1 rETH
+        uint256 amountIn = 3000e6; // 3000 USDC (quote)
 
-        // Path: rETH -> WETH -> USDC
-        bytes memory poolInfo = abi.encodePacked(
-            rETH,
-            uint24(100), // 0.01% fee
-            WETH,
-            uint24(500), // 0.05% fee
-            USDC
-        );
-
-        // Execute quote via delegatecall
-        (bool success, bytes memory result) = address(proxy)
-            .call(abi.encodeWithSelector(UniswapV3SwapperEngine.getQuote.selector, poolInfo, amountIn, rETH, USDC));
-
-        require(success, "rETH to USDC quote should succeed");
-        uint256 amountOut = abi.decode(result, (uint256));
-
-        // Verify we got a valid quote
-        assertGt(amountOut, 0, "Amount out should be greater than 0");
-        assertGt(amountOut, 1000e6, "Should get significant USDC for 1 rETH");
-    }
-
-    function test_getQuote_rETH_to_USDC_reversedPath() public {
-        uint256 amountIn = 1e18; // 1 rETH
-
-        // Path: USDC -> WETH -> rETH (reversed, will be reversed internally)
+        // Path: USDC -> WETH -> rETH (EXACT_OUT format: output -> fee -> input)
         bytes memory poolInfo = abi.encodePacked(
             USDC,
             uint24(500), // 0.05% fee
@@ -424,20 +400,44 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
             rETH
         );
 
-        // Execute quote via delegatecall with reversed path
+        // Execute quote via delegatecall: given amountIn of USDC (quote), how much rETH (base)?
         (bool success, bytes memory result) = address(proxy)
             .call(abi.encodeWithSelector(UniswapV3SwapperEngine.getQuote.selector, poolInfo, amountIn, rETH, USDC));
 
-        require(success, "rETH to USDC quote with reversed path should succeed");
+        require(success, "USDC to rETH quote should succeed");
         uint256 amountOut = abi.decode(result, (uint256));
 
         // Verify we got a valid quote
         assertGt(amountOut, 0, "Amount out should be greater than 0");
-        assertGt(amountOut, 1000e6, "Should get significant USDC for 1 rETH");
+        assertGt(amountOut, 1e15, "Should get significant rETH for 3000 USDC");
+    }
+
+    function test_getQuote_rETH_to_USDC_reversedPath() public {
+        uint256 amountIn = 3000e6; // 3000 USDC (quote)
+
+        // Path: rETH -> WETH -> USDC (will be reversed internally to USDC -> WETH -> rETH for EXACT_OUT)
+        bytes memory poolInfo = abi.encodePacked(
+            rETH,
+            uint24(100), // 0.01% fee
+            WETH,
+            uint24(500), // 0.05% fee
+            USDC
+        );
+
+        // Execute quote via delegatecall with reversed path: given amountIn of USDC (quote), how much rETH (base)?
+        (bool success, bytes memory result) = address(proxy)
+            .call(abi.encodeWithSelector(UniswapV3SwapperEngine.getQuote.selector, poolInfo, amountIn, rETH, USDC));
+
+        require(success, "USDC to rETH quote with reversed path should succeed");
+        uint256 amountOut = abi.decode(result, (uint256));
+
+        // Verify we got a valid quote
+        assertGt(amountOut, 0, "Amount out should be greater than 0");
+        assertGt(amountOut, 1e15, "Should get significant rETH for 3000 USDC");
 
         // The quote should be similar to the non-reversed path (within reasonable tolerance)
         // Get the quote from the normal path for comparison
-        bytes memory normalPath = abi.encodePacked(rETH, uint24(100), WETH, uint24(500), USDC);
+        bytes memory normalPath = abi.encodePacked(USDC, uint24(500), WETH, uint24(100), rETH);
 
         (bool success2, bytes memory result2) = address(proxy)
             .call(abi.encodeWithSelector(UniswapV3SwapperEngine.getQuote.selector, normalPath, amountIn, rETH, USDC));
@@ -463,14 +463,14 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         uint256 amountIn = 1000e6;
         uint256 amountOutMin = 990e6;
 
-        // Deal USDC to proxy
-        deal(USDC, address(proxy), amountIn);
+        // Deal USDT to proxy (swap is now the input asset)
+        deal(USDT, address(proxy), amountIn);
 
-        // Path: USDC -> USDT (EXACT_IN format: input -> fee -> output)
+        // Path: USDT -> USDC (EXACT_IN format: input -> fee -> output)
         bytes memory poolInfo = abi.encodePacked(
-            USDC,
+            USDT,
             uint24(100), // 0.01% fee for stablecoin pairs
-            USDT
+            USDC
         );
 
         // Initialize approvals via onInit
@@ -478,7 +478,7 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
             address(proxy).call(abi.encodeWithSelector(UniswapV3SwapperEngine.onInit.selector, poolInfo));
         assertTrue(successOnInit, "onInit should succeed");
 
-        // Execute swap via delegatecall
+        // Execute swap via delegatecall: swap amountIn of USDT (swap) -> get USDC (base)
         (bool success, bytes memory result) = address(proxy)
             .call(
                 abi.encodeWithSelector(
@@ -491,25 +491,28 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         uint256 amountOut = abi.decode(result, (uint256));
         assertGt(amountOut, 0, "Should receive output tokens");
         assertGe(amountOut, amountOutMin, "Should receive at least minimum output");
+
+        // Verify we received USDC (base) as output
+        assertGt(IERC20(USDC).balanceOf(address(proxy)), 0, "Should receive USDC");
     }
 
     function test_swapForInput_reversedPath() public {
         uint256 amountIn = 1000e6;
         uint256 amountOutMin = 990e6;
 
-        // Deal USDC to proxy
-        deal(USDC, address(proxy), amountIn);
+        // Deal USDT to proxy (swap is now the input asset)
+        deal(USDT, address(proxy), amountIn);
 
-        // Path is reversed: USDT -> USDC (but we're swapping USDC -> USDT)
+        // Path is reversed: USDC -> USDT (but we're swapping USDT -> USDC)
         // The contract should handle this by detecting the reversal
-        bytes memory poolInfo = abi.encodePacked(USDT, uint24(100), USDC);
+        bytes memory poolInfo = abi.encodePacked(USDC, uint24(100), USDT);
 
         // Initialize approvals via onInit
         (bool successOnInit,) =
             address(proxy).call(abi.encodeWithSelector(UniswapV3SwapperEngine.onInit.selector, poolInfo));
         assertTrue(successOnInit, "onInit should succeed");
 
-        // Execute swap via delegatecall
+        // Execute swap via delegatecall: swap amountIn of USDT (swap) -> get USDC (base)
         (bool success, bytes memory result) = address(proxy)
             .call(
                 abi.encodeWithSelector(
@@ -517,8 +520,8 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
                     poolInfo,
                     amountIn,
                     amountOutMin,
-                    USDC, // base = input
-                    USDT // swap = output
+                    USDC, // base = output
+                    USDT // swap = input
                 )
             );
 
@@ -526,6 +529,9 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
 
         uint256 amountOut = abi.decode(result, (uint256));
         assertGt(amountOut, 0, "Should receive output tokens");
+
+        // Verify we received USDC (base) as output
+        assertGt(IERC20(USDC).balanceOf(address(proxy)), 0, "Should receive USDC");
     }
 
     function test_RevertWhen_swapForInput_poolMismatch() public {
@@ -558,18 +564,18 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
 
     // ============ swapForOutput() via delegatecall Tests ============ //
 
-    function test_swapForOutput() public {
+    function test_swapForOutput_singleHop() public {
         uint256 amountOut = 1000e6;
         uint256 amountInMax = 1100e6;
 
-        // Deal USDC to proxy (more than needed for slippage)
-        deal(USDC, address(proxy), amountInMax);
+        // Deal USDT to proxy (swap is now the input asset, more than needed for slippage)
+        deal(USDT, address(proxy), amountInMax);
 
-        // Path: USDT -> USDC (EXACT_OUT format: output -> fee -> input)
+        // Path: USDC -> USDT (EXACT_OUT format: output -> fee -> input)
         bytes memory poolInfo = abi.encodePacked(
-            USDT,
+            USDC,
             uint24(100), // 0.01% fee for stablecoin pairs
-            USDC
+            USDT
         );
 
         // Initialize approvals via onInit
@@ -577,7 +583,7 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
             address(proxy).call(abi.encodeWithSelector(UniswapV3SwapperEngine.onInit.selector, poolInfo));
         assertTrue(successOnInit, "onInit should succeed");
 
-        // Execute swap via delegatecall
+        // Execute swap via delegatecall: swap USDT (swap) -> get amountOut of USDC (base)
         (bool success, bytes memory result) = address(proxy)
             .call(
                 abi.encodeWithSelector(
@@ -585,8 +591,8 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
                     poolInfo,
                     amountOut,
                     amountInMax,
-                    USDC, // base = input
-                    USDT // swap = output
+                    USDC, // base = output
+                    USDT // swap = input
                 )
             );
 
@@ -596,26 +602,26 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         assertGt(amountIn, 0, "Should spend input tokens");
         assertLe(amountIn, amountInMax, "Should not exceed max input");
 
-        // Verify we received the exact output amount
-        assertEq(IERC20(USDT).balanceOf(address(proxy)), amountOut, "Should receive exact output amount");
+        // Verify we received the exact output amount of USDC (base)
+        assertEq(IERC20(USDC).balanceOf(address(proxy)), amountOut, "Should receive exact output amount");
     }
 
     function test_swapForOutput_reversedPath() public {
         uint256 amountOut = 1000e6;
         uint256 amountInMax = 1100e6;
 
-        // Deal USDC to proxy
-        deal(USDC, address(proxy), amountInMax);
+        // Deal USDT to proxy (swap is now the input asset)
+        deal(USDT, address(proxy), amountInMax);
 
-        // Path is reversed: USDC -> USDT (but for EXACT_OUT we want USDT as output)
-        bytes memory poolInfo = abi.encodePacked(USDC, uint24(100), USDT);
+        // Path is reversed: USDT -> USDC (but for EXACT_OUT we want USDC as output)
+        bytes memory poolInfo = abi.encodePacked(USDT, uint24(100), USDC);
 
         // Initialize approvals via onInit
         (bool successOnInit,) =
             address(proxy).call(abi.encodeWithSelector(UniswapV3SwapperEngine.onInit.selector, poolInfo));
         assertTrue(successOnInit, "onInit should succeed");
 
-        // Execute swap via delegatecall
+        // Execute swap via delegatecall: swap USDT (swap) -> get amountOut of USDC (base)
         (bool success, bytes memory result) = address(proxy)
             .call(
                 abi.encodeWithSelector(
@@ -623,8 +629,8 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
                     poolInfo,
                     amountOut,
                     amountInMax,
-                    USDC, // base = input
-                    USDT // swap = output
+                    USDC, // base = output
+                    USDT // swap = input
                 )
             );
 
@@ -632,6 +638,9 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
 
         uint256 amountIn = abi.decode(result, (uint256));
         assertGt(amountIn, 0, "Should spend input tokens");
+
+        // Verify we received USDC (base) as output
+        assertEq(IERC20(USDC).balanceOf(address(proxy)), amountOut, "Should receive exact output amount");
     }
 
     function test_RevertWhen_swapForOutput_poolMismatch() public {
@@ -661,51 +670,12 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
     // ============ Multi-hop Swap Tests ============ //
 
     function test_swapForInput_multiHop() public {
-        uint256 amountIn = 1e18; // 1 rETH
+        uint256 amountIn = 3000e6; // 3000 USDC (swap is now the input asset)
 
-        // Deal rETH to proxy
-        deal(rETH, address(proxy), amountIn);
+        // Deal USDC to proxy
+        deal(USDC, address(proxy), amountIn);
 
-        // Multi-hop path: rETH -> WETH -> USDC (EXACT_IN)
-        bytes memory poolInfo = abi.encodePacked(
-            rETH,
-            uint24(100), // 0.01% fee for rETH/WETH
-            WETH,
-            uint24(500), // 0.05% fee for WETH/USDC
-            USDC
-        );
-
-        (bool successOnInit,) =
-            address(proxy).call(abi.encodeWithSelector(UniswapV3SwapperEngine.onInit.selector, poolInfo));
-
-        assertTrue(successOnInit, "onInit should succeed");
-
-        // Execute swap via delegatecall
-        (bool success, bytes memory result) = address(proxy)
-            .call(
-                abi.encodeWithSelector(
-                    UniswapV3SwapperEngine.swapForInput.selector,
-                    poolInfo,
-                    amountIn,
-                    0, // No minimum for test
-                    rETH,
-                    USDC
-                )
-            );
-
-        assertTrue(success, "Multi-hop swap should succeed");
-
-        uint256 amountOut = abi.decode(result, (uint256));
-        assertGt(amountOut, 0, "Should receive USDC");
-    }
-
-    function test_swapForOutput_multiHop() public {
-        uint256 amountOut = 1000e6; // 1000 USDC
-
-        // Deal rETH to proxy (more than needed)
-        deal(rETH, address(proxy), 10e18);
-
-        // Multi-hop path: USDC -> WETH -> rETH (EXACT_OUT format: output -> intermediate -> input)
+        // Multi-hop path: USDC -> WETH -> rETH (EXACT_IN: swap -> base)
         bytes memory poolInfo = abi.encodePacked(
             USDC,
             uint24(500), // 0.05% fee for WETH/USDC
@@ -714,12 +684,56 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
             rETH
         );
 
+        (bool successOnInit,) =
+            address(proxy).call(abi.encodeWithSelector(UniswapV3SwapperEngine.onInit.selector, poolInfo));
+
+        assertTrue(successOnInit, "onInit should succeed");
+
+        // Execute swap via delegatecall: swap amountIn of USDC (swap) -> get rETH (base)
+        (bool success, bytes memory result) = address(proxy)
+            .call(
+                abi.encodeWithSelector(
+                    UniswapV3SwapperEngine.swapForInput.selector,
+                    poolInfo,
+                    amountIn,
+                    0, // No minimum for test
+                    rETH, // base = output
+                    USDC // swap = input
+                )
+            );
+
+        assertTrue(success, "Multi-hop swap should succeed");
+
+        uint256 amountOut = abi.decode(result, (uint256));
+        assertGt(amountOut, 0, "Should receive rETH");
+
+        // Verify we received rETH (base) as output
+        assertGt(IERC20(rETH).balanceOf(address(proxy)), 0, "Should receive rETH");
+    }
+
+    function test_swapForOutput_multiHop() public {
+        uint256 amountOut = 1e18; // 1 rETH (base is now the output asset)
+
+        // Deal USDC to proxy (swap is now the input asset, more than needed)
+        deal(USDC, address(proxy), 10000e6);
+
+        uint256 usdcStartingBalance = IERC20(USDC).balanceOf(address(proxy));
+
+        // Multi-hop path: rETH -> WETH -> USDC (EXACT_OUT format: output -> intermediate -> input)
+        bytes memory poolInfo = abi.encodePacked(
+            rETH,
+            uint24(100), // 0.01% fee for rETH/WETH
+            WETH,
+            uint24(500), // 0.05% fee for WETH/USDC
+            USDC
+        );
+
         // Initialize approvals via onInit
         (bool successOnInit,) =
             address(proxy).call(abi.encodeWithSelector(UniswapV3SwapperEngine.onInit.selector, poolInfo));
         assertTrue(successOnInit, "onInit should succeed");
 
-        // Execute swap via delegatecall
+        // Execute swap via delegatecall: swap USDC (swap) -> get amountOut of rETH (base)
         (bool success, bytes memory result) = address(proxy)
             .call(
                 abi.encodeWithSelector(
@@ -727,18 +741,43 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
                     poolInfo,
                     amountOut,
                     type(uint256).max, // Allow any input for test
-                    rETH,
-                    USDC
+                    rETH, // base = output
+                    USDC // swap = input
                 )
             );
 
         assertTrue(success, "Multi-hop swap should succeed");
 
         uint256 amountIn = abi.decode(result, (uint256));
-        assertGt(amountIn, 0, "Should spend rETH");
+        assertGt(amountIn, 0, "Should spend USDC");
+
+        // Verify we received rETH (base) as output
+        assertEq(IERC20(rETH).balanceOf(address(proxy)), amountOut, "Should receive exact output amount");
+
+        // Execute swap via delegatecall: swap USDC (swap) -> get amountOut of rETH (base)
+        (, bytes memory qoute) = address(proxy)
+            .call(abi.encodeWithSelector(UniswapV3SwapperEngine.getQuote.selector, poolInfo, amountOut, USDC, rETH));
 
         // Verify we received the exact output
-        assertEq(IERC20(USDC).balanceOf(address(proxy)), amountOut, "Should receive exact USDC amount");
+        assertApproxEqAbs(
+            usdcStartingBalance - IERC20(USDC).balanceOf(address(proxy)),
+            abi.decode(qoute, (uint256)),
+            10e6,
+            "Should receive exact USDC amount"
+        );
+    }
+
+    function test_getQuote_largeAmount() public view {
+        // Multi-hop path: rETH -> WETH -> USDC (EXACT_OUT format: output -> intermediate -> input)
+        bytes memory poolInfo = abi.encodePacked(
+            rETH,
+            uint24(100), // 0.01% fee for rETH/WETH
+            WETH,
+            uint24(500), // 0.05% fee for WETH/USDC
+            USDC
+        );
+
+        swapperEngine.getQuote(poolInfo, 1e23, USDC, rETH);
     }
 
     // ============ onInit() Tests ============ //
