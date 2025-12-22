@@ -380,9 +380,12 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         bytes memory poolInfo = abi.encodePacked(USDC, uint24(500), WETH);
 
         // Execute quote via delegatecall - should revert with InvalidPoolInfo
-        vm.expectRevert(ISwapperEngine.InvalidPoolInfo.selector);
-        address(proxy)
+        (bool success, bytes memory result) = address(proxy)
             .call(abi.encodeWithSelector(UniswapV3SwapperEngine.getQuote.selector, poolInfo, amountIn, USDC, USDT));
+        assertFalse(success, "Should revert with InvalidPoolInfo");
+        // casting to 'bytes4' is safe because error selectors are always 4 bytes
+        // forge-lint: disable-next-line(unsafe-typecast)
+        assertEq(bytes4(result), ISwapperEngine.InvalidPoolInfo.selector, "Should revert with InvalidPoolInfo");
     }
 
     function test_getQuote_rETH_to_USDC() public {
@@ -536,8 +539,7 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         );
 
         // Execute swap via delegatecall - should revert with PoolMismatch
-        vm.expectRevert(UniswapV3SwapperEngine.PoolMismatch.selector);
-        address(proxy)
+        (bool success, bytes memory result) = address(proxy)
             .call(
                 abi.encodeWithSelector(
                     UniswapV3SwapperEngine.swapForInput.selector,
@@ -548,6 +550,10 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
                     USDT // Doesn't match path
                 )
             );
+        assertFalse(success, "Should revert with PoolMismatch");
+        // casting to 'bytes4' is safe because error selectors are always 4 bytes
+        // forge-lint: disable-next-line(unsafe-typecast)
+        assertEq(bytes4(result), UniswapV3SwapperEngine.PoolMismatch.selector, "Should revert with PoolMismatch");
     }
 
     // ============ swapForOutput() via delegatecall Tests ============ //
@@ -635,8 +641,7 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         bytes memory poolInfo = abi.encodePacked(WETH, uint24(500), rETH);
 
         // Execute swap via delegatecall - should revert with PoolMismatch
-        vm.expectRevert(UniswapV3SwapperEngine.PoolMismatch.selector);
-        address(proxy)
+        (bool success, bytes memory result) = address(proxy)
             .call(
                 abi.encodeWithSelector(
                     UniswapV3SwapperEngine.swapForOutput.selector,
@@ -647,6 +652,10 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
                     USDT // Doesn't match path
                 )
             );
+        assertFalse(success, "Should revert with PoolMismatch");
+        // casting to 'bytes4' is safe because error selectors are always 4 bytes
+        // forge-lint: disable-next-line(unsafe-typecast)
+        assertEq(bytes4(result), UniswapV3SwapperEngine.PoolMismatch.selector, "Should revert with PoolMismatch");
     }
 
     // ============ Multi-hop Swap Tests ============ //
@@ -769,7 +778,11 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         bytes memory poolInfo = abi.encodePacked(uint8(1), uint8(2));
 
         // Call onInit via delegatecall - should revert with InvalidPoolInfo
-        vm.expectRevert(ISwapperEngine.InvalidPoolInfo.selector);
-        address(proxy).call(abi.encodeWithSelector(UniswapV3SwapperEngine.onInit.selector, poolInfo));
+        (bool success, bytes memory result) =
+            address(proxy).call(abi.encodeWithSelector(UniswapV3SwapperEngine.onInit.selector, poolInfo));
+        assertFalse(success, "Should revert with InvalidPoolInfo");
+        // casting to 'bytes4' is safe because error selectors are always 4 bytes
+        // forge-lint: disable-next-line(unsafe-typecast)
+        assertEq(bytes4(result), ISwapperEngine.InvalidPoolInfo.selector, "Should revert with InvalidPoolInfo");
     }
 }

@@ -105,18 +105,18 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         mockContract.swapForOutput(amountOut, USDC, address(0));
     }
 
-    function test_quote_oracle_only() public view {
+    function test_getQuote_oracle_only() public view {
         uint256 amountIn = 1000e6;
-        uint256 quote = mockContract.quote(amountIn, USDC, USDT);
+        uint256 quote = mockContract.getQuote(amountIn, USDC, USDT);
         assertEq(quote, amountIn);
 
-        uint256 newQuote = mockContract.quote(amountIn, USDT, USDC);
+        uint256 newQuote = mockContract.getQuote(amountIn, USDT, USDC);
         assertEq(newQuote, amountIn);
     }
 
-    function test_RevertWhen_quote_asset_pair_not_registered() public {
+    function test_RevertWhen_getQuote_asset_pair_not_registered() public {
         uint256 amountIn = 1000e6;
         vm.expectRevert(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.AssetPairNotRegistered.selector));
-        mockContract.quote(amountIn, USDC, address(0));
+        mockContract.getQuote(amountIn, USDC, address(0));
     }
 }

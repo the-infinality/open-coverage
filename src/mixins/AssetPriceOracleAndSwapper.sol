@@ -9,7 +9,6 @@ import {IPriceOracle} from "../interfaces/IPriceOracle.sol";
 /// @title AssetPriceOracleAndSwapper
 /// @author p-dealwis, Infinality
 /// @notice Abstract contract for managing asset price oracles and executing swaps
-/// @dev Extend this contract to add price oracle and swap functionality to your diamond facets
 abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorage, IAssetPriceOracleAndSwapper {
     /// @inheritdoc IAssetPriceOracleAndSwapper
     function register(AssetPair calldata _assetPair) external virtual {
@@ -78,7 +77,7 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
     }
 
     /// @inheritdoc IAssetPriceOracleAndSwapper
-    function quote(uint256 amountIn, address assetA, address assetB) public view virtual returns (uint256) {
+    function getQuote(uint256 amountIn, address assetA, address assetB) public view virtual returns (uint256) {
         AssetPair memory _assetPair = assetPairs[keccak256(abi.encode(assetA, assetB))];
 
         // Should flip around since the price oracle works both ways

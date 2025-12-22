@@ -179,9 +179,9 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
         bytes4[] memory selectors = new bytes4[](5);
         selectors[0] = IAssetPriceOracleAndSwapper.register.selector;
         selectors[1] = IAssetPriceOracleAndSwapper.swapForOutput.selector;
-        selectors[1] = IAssetPriceOracleAndSwapper.swapForInput.selector;
-        selectors[2] = IAssetPriceOracleAndSwapper.assetPair.selector;
-        selectors[3] = IAssetPriceOracleAndSwapper.quote.selector;
+        selectors[2] = IAssetPriceOracleAndSwapper.swapForInput.selector;
+        selectors[3] = IAssetPriceOracleAndSwapper.assetPair.selector;
+        selectors[4] = IAssetPriceOracleAndSwapper.getQuote.selector;
         return selectors;
     }
 }

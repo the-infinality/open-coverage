@@ -7,12 +7,6 @@ enum PriceStrategy {
     SwapperVerified
 }
 
-/// @notice Parameters for configuring a swap
-struct SwapParams {
-    address swapEngine;
-    bytes poolInfo;
-}
-
 /// @notice Asset pair configuration for price oracle and swapping
 struct AssetPair {
     /// @notice The first asset in the pair
@@ -76,6 +70,6 @@ interface IAssetPriceOracleAndSwapper {
     /// @param assetA The first asset
     /// @param assetB The second asset
     /// @return The equivalent amount in the second asset
-    function quote(uint256 amountIn, address assetA, address assetB) external view returns (uint256);
+    function getQuote(uint256 amountIn, address assetA, address assetB) external view returns (uint256);
 }
 
