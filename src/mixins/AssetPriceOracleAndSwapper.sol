@@ -34,7 +34,8 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
     function swapForOutput(uint128 amountOut, address assetA, address assetB) public {
         AssetPair memory _assetPair = _getRegisteredAssetPair(assetA, assetB);
 
-        uint256 maxAmountIn = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountOut, assetA, assetB);
+        uint256 maxAmountIn =
+            ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountOut, assetA, assetB);
 
         // Delegatecall version of swapForOutput
         (bool success,) = _assetPair.swapEngine
@@ -55,7 +56,8 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
     function swapForInput(uint128 amountIn, address assetA, address assetB) public {
         AssetPair memory _assetPair = _getRegisteredAssetPair(assetA, assetB);
 
-        uint256 minAmountOut = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountIn, assetA, assetB);
+        uint256 minAmountOut =
+            ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountIn, assetA, assetB);
 
         // Delegatecall version of swapForInput
         (bool success,) = _assetPair.swapEngine
@@ -115,6 +117,28 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
             uint256 tolerance = (quote * _assetPair.swapperAccuracy) / 10000;
             verified = diff <= tolerance;
         }
+    }
+
+    /// @inheritdoc IAssetPriceOracleAndSwapper
+    function swapForOutputQuote(uint128 amountOut, address assetA, address assetB)
+        external
+        view
+        returns (uint256 maxAmountIn)
+    {
+        AssetPair memory _assetPair = _getRegisteredAssetPair(assetA, assetB);
+        maxAmountIn = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountOut, assetA, assetB);
+        maxAmountIn = maxAmountIn + (_swapSlippage * maxAmountIn) / 10000;
+    }
+
+    /// @inheritdoc IAssetPriceOracleAndSwapper
+    function swapForInputQuote(uint128 amountIn, address assetA, address assetB)
+        external
+        view
+        returns (uint256 minAmountOut)
+    {
+        AssetPair memory _assetPair = _getRegisteredAssetPair(assetA, assetB);
+        minAmountOut = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountIn, assetA, assetB);
+        minAmountOut = minAmountOut - (minAmountOut * _swapSlippage) / 10000;
     }
 
     /// @notice Gets the registered asset pair and reverts if not registered
