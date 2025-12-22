@@ -11,9 +11,9 @@ import {console2} from "forge-std/console2.sol";
 /// @author p-dealwis, Infinality
 /// @notice Mixin contract for quoting and swapping assets
 /// @dev This contract utlised Swapper Engines with optional price oracles
-contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorage, IAssetPriceOracleAndSwapper {
+abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorage, IAssetPriceOracleAndSwapper {
     /// @inheritdoc IAssetPriceOracleAndSwapper
-    function register(AssetPair calldata _assetPair) external {
+    function register(AssetPair calldata _assetPair) public virtual {
         bool priceOracleRequired =
             _assetPair.priceStrategy != PriceStrategy.SwapperOnly || _assetPair.swapperAccuracy != 0;
         if (_assetPair.priceOracle == address(0) && priceOracleRequired) revert PriceOracleRequired();
@@ -90,13 +90,8 @@ contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorage, IAsset
             }
         }
 
-        console2.log("assetA", assetA);
-        console2.log("assetB", assetB);
-        console2.log("amountIn", amountIn);
-        console2.log("swapperQuote", swapperQuote);
-        console2.log("oracleQuote", oracleQuote);
         swapperQuote = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountIn, assetA, assetB);
-        // swapperQuote = 0;
+
         if (address(_assetPair.priceOracle) != address(0)) {
             oracleQuote = IPriceOracle(_assetPair.priceOracle).getQuote(amountIn, assetA, assetB);
         }

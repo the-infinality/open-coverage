@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {TestDeployer} from "test/utils/TestDeployer.sol";
-import {AssetPriceOracleAndSwapper} from "../../src/mixins/AssetPriceOracleAndSwapper.sol";
+import {MockAssetPriceOracleAndSwapper} from "../utils/MockAssetPriceOracleAndSwapper.sol";
 import {IAssetPriceOracleAndSwapper} from "../../src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {UniswapHelper, UniswapAddressbook} from "utils/UniswapHelper.sol";
 import {MockPriceOracle} from "../utils/MockPriceOracle.sol";
@@ -12,7 +12,7 @@ import {UniswapV3SwapperEngine} from "src/swapper-engines/UniswapV3SwapperEngine
 import {PriceStrategy, AssetPair} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 
 contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
-    AssetPriceOracleAndSwapper public assetPriceOracleAndSwapper;
+    MockAssetPriceOracleAndSwapper public assetPriceOracleAndSwapper;
     MockPriceOracle public mockPriceOracle;
     ISwapperEngine public uniswapV3SwapperEngine;
 
@@ -23,7 +23,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
 
         bytes memory USDC_USDT_V3_POOL_INFO = abi.encodePacked(USDC, uint24(500), USDT);
 
-        assetPriceOracleAndSwapper = new AssetPriceOracleAndSwapper();
+        assetPriceOracleAndSwapper = new MockAssetPriceOracleAndSwapper(address(this));
 
         UniswapAddressbook memory uniswapAddressBook = _getUniswapAddressBook();
 
