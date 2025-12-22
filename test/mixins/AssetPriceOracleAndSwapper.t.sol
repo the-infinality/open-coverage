@@ -4,73 +4,76 @@ pragma solidity ^0.8.24;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {TestDeployer} from "test/utils/TestDeployer.sol";
 import {AssetPriceOracleAndSwapper} from "../../src/mixins/AssetPriceOracleAndSwapper.sol";
-import {
-    IAssetPriceOracleAndSwapper,
-    SwapEngine,
-    SwapParams,
-    UniswapV4PoolInfo
-} from "../../src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {IAssetPriceOracleAndSwapper} from "../../src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {UniswapHelper, UniswapAddressbook} from "utils/UniswapHelper.sol";
-import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
-import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
-import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {MockPriceOracle} from "../utils/MockPriceOracle.sol";
+import {ISwapperEngine} from "src/interfaces/ISwapperEngine.sol";
+import {UniswapV3SwapperEngine} from "src/swapper-engines/UniswapV3SwapperEngine.sol";
+import {PriceStrategy, AssetPair} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 
 contract MockContract is AssetPriceOracleAndSwapper, Initializable {
     constructor() {}
-
-    function initialize(address universalRouter_, address permit2_) public initializer {
-        __AssetPriceOracleAndSwapper_init(universalRouter_, permit2_);
-    }
 }
 
 contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
     MockContract public mockContract;
     MockPriceOracle public mockPriceOracle;
+    ISwapperEngine public uniswapV3SwapperEngine;
 
     /// ===== Constants =====
-    bytes32 public USDC_USDT_POOL_PATH;
-    bytes public USDC_USDT_V4_POOL_INFO;
 
     function setUp() public override {
         super.setUp();
 
-        UniswapAddressbook memory uniswapAddressBook = _getUniswapAddressBook();
+        bytes memory USDC_USDT_V3_POOL_INFO = abi.encodePacked(USDC, uint24(500), USDT);
 
         mockContract = new MockContract();
-        mockContract.initialize(
-            uniswapAddressBook.uniswapAddresses.universalRouter, uniswapAddressBook.uniswapAddresses.permit2
+
+        UniswapAddressbook memory uniswapAddressBook = _getUniswapAddressBook();
+
+        uniswapV3SwapperEngine = new UniswapV3SwapperEngine(
+            uniswapAddressBook.uniswapAddresses.universalRouter,
+            uniswapAddressBook.uniswapAddresses.permit2,
+            uniswapAddressBook.uniswapAddresses.quoterV2
         );
         mockPriceOracle = new MockPriceOracle(1e18, USDC, USDT);
 
-        // Add V4 pool
-        PoolKey memory poolKey = PoolKey({
-            currency0: Currency.wrap(USDC),
-            currency1: Currency.wrap(USDT),
-            fee: 100,
-            tickSpacing: 1,
-            hooks: IHooks(address(0))
-        });
+        mockContract.register(
+            AssetPair({
+                assetA: USDC,
+                assetB: USDT,
+                swapEngine: address(uniswapV3SwapperEngine),
+                poolInfo: USDC_USDT_V3_POOL_INFO,
+                priceStrategy: PriceStrategy.OracleOnly,
+                swapperAccuracy: 10,
+                priceOracle: address(mockPriceOracle)
+            })
+        );
 
-        UniswapV4PoolInfo memory uniswapV4PoolInfo = UniswapV4PoolInfo({poolKey: poolKey, zeroForOne: true});
-
-        SwapParams memory swapParams =
-            SwapParams({swapEngine: SwapEngine.UNISWAP_V4_SINGLE_HOP, poolInfo: abi.encode(uniswapV4PoolInfo)});
-        mockContract.register(address(mockPriceOracle), USDC, USDT, swapParams);
+        // Register rETH to USDC pair using UniswapV3SwapperEngine (multi-hop: rETH -> WETH -> USDC)
+        bytes memory rETH_WETH_USDC_V3_POOL_INFO = abi.encodePacked(
+            rETH,
+            uint24(100), // 0.01% fee rETH-WETH
+            WETH,
+            uint24(500), // 0.05% fee WETH-USDC
+            USDC
+        );
+        mockContract.register(
+            AssetPair({
+                assetA: rETH,
+                assetB: USDC,
+                swapEngine: address(uniswapV3SwapperEngine),
+                poolInfo: rETH_WETH_USDC_V3_POOL_INFO,
+                priceStrategy: PriceStrategy.SwapperOnly,
+                swapperAccuracy: 0,
+                priceOracle: address(0)
+            })
+        );
     }
 
     function test_register() public view {
         assertEq(mockContract.assetPair(USDC, USDT).priceOracle, address(mockPriceOracle));
-    }
-
-    function test_swap_uniswap_v4() public {
-        uint128 amountOut = 1000e6;
-        deal(USDC, address(mockContract), amountOut * 2);
-
-        mockContract.swap(amountOut, USDC, USDT);
-
-        assertEq(IERC20(USDT).balanceOf(address(mockContract)), amountOut);
     }
 
     function test_swap_uniswap_v3() public {
@@ -78,16 +81,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         deal(USDC, address(mockContract), amountOut * 2);
 
         // Token 0 needs to be first for exact output
-        bytes memory poolInfo = abi.encodePacked(
-            USDT, // 20 bytes - output token first for exact output
-            uint24(100), // 3 bytes - 0.01% fee for stablecoin pairs
-            USDC // 20 bytes - input token last for exact output
-        );
-
-        SwapParams memory swapParams = SwapParams({swapEngine: SwapEngine.UNISWAP_V3, poolInfo: poolInfo});
-        mockContract.register(address(mockPriceOracle), USDC, USDT, swapParams);
-
-        mockContract.swap(amountOut, USDC, USDT);
+        mockContract.swapForOutput(amountOut, USDC, USDT);
 
         assertEq(IERC20(USDT).balanceOf(address(mockContract)), amountOut);
     }
@@ -98,19 +92,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
 
         // V3 multi-hop path: rETH -> WETH (fee: 100) -> USDC (fee: 500)
         // For EXACT_OUT, path is reversed: output -> fee -> intermediate -> fee -> input
-        bytes memory poolInfo = abi.encodePacked(
-            USDC, // output token (20 bytes)
-            uint24(500), // fee for WETH->USDC pool (3 bytes)
-            WETH, // intermediate token (20 bytes)
-            uint24(100), // fee for rETH->WETH pool (3 bytes)
-            rETH // input token (20 bytes)
-        );
-
-        MockPriceOracle rethUsdcOracle = new MockPriceOracle(3300e6, rETH, USDC);
-        SwapParams memory swapParams = SwapParams({swapEngine: SwapEngine.UNISWAP_V3, poolInfo: poolInfo});
-        mockContract.register(address(rethUsdcOracle), rETH, USDC, swapParams);
-
-        mockContract.swap(amountOut, rETH, USDC);
+        mockContract.swapForOutput(amountOut, rETH, USDC);
 
         assertEq(IERC20(USDC).balanceOf(address(mockContract)), amountOut);
     }
@@ -120,10 +102,10 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         deal(USDC, address(mockContract), amountOut * 2);
 
         vm.expectRevert(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.AssetPairNotRegistered.selector));
-        mockContract.swap(amountOut, USDC, address(0));
+        mockContract.swapForOutput(amountOut, USDC, address(0));
     }
 
-    function test_quote() public view {
+    function test_quote_oracle_only() public view {
         uint256 amountIn = 1000e6;
         uint256 quote = mockContract.quote(amountIn, USDC, USDT);
         assertEq(quote, amountIn);

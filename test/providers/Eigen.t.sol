@@ -18,9 +18,13 @@ import {CoverageProviderData} from "src/interfaces/ICoverageAgent.sol";
 import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
 import {IStrategyManager} from "eigenlayer-contracts/interfaces/IStrategyManager.sol";
 import {ISignatureUtilsMixinTypes} from "eigenlayer-contracts/interfaces/ISignatureUtilsMixin.sol";
-import {SwapParams, SwapEngine, IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {MockPriceOracle} from "../utils/MockPriceOracle.sol";
 import {CoverageClaim, CoverageClaimStatus} from "src/interfaces/ICoverageProvider.sol";
+import {UniswapV3SwapperEngine} from "src/swapper-engines/UniswapV3SwapperEngine.sol";
+import {UniswapAddressbook} from "utils/UniswapHelper.sol";
+import {ISwapperEngine} from "src/interfaces/ISwapperEngine.sol";
+import {PriceStrategy, AssetPair} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 
 contract EigenTest is EigenTestDeployer {
     IEigenOperatorProxy public operator;
@@ -31,6 +35,7 @@ contract EigenTest is EigenTestDeployer {
     IEigenServiceManager eigenServiceManager;
     ICoverageProvider eigenCoverageProvider;
     IAssetPriceOracleAndSwapper eigenPriceOracle;
+    ISwapperEngine public uniswapV3SwapperEngine;
 
     function _setupwithAllocations() internal {
         vm.roll(block.number + 126001);
@@ -87,6 +92,13 @@ contract EigenTest is EigenTestDeployer {
 
         mockPriceOracle = new MockPriceOracle(100000e18, rETH, USDC);
 
+        UniswapAddressbook memory uniswapAddressBook = _getUniswapAddressBook();
+        uniswapV3SwapperEngine = new UniswapV3SwapperEngine(
+            uniswapAddressBook.uniswapAddresses.universalRouter,
+            uniswapAddressBook.uniswapAddresses.permit2,
+            uniswapAddressBook.uniswapAddresses.quoterV2
+        );
+
         // V3 multi-hop path: rETH -> WETH (fee: 100) -> USDC (fee: 500)
         // For EXACT_OUT, path is reversed: output -> fee -> intermediate -> fee -> input
         bytes memory poolInfo = abi.encodePacked(
@@ -97,8 +109,18 @@ contract EigenTest is EigenTestDeployer {
             rETH // input token (20 bytes)
         );
 
-        SwapParams memory swapParams = SwapParams({swapEngine: SwapEngine.UNISWAP_V3, poolInfo: poolInfo});
-        eigenPriceOracle.register(address(mockPriceOracle), rETH, USDC, swapParams);
+        // SwapParams memory swapParams = SwapParams({swapEngine: SwapEngine.UNISWAP_V3, poolInfo: poolInfo});
+        eigenPriceOracle.register(
+            AssetPair({
+                assetA: rETH,
+                assetB: USDC,
+                swapEngine: address(uniswapV3SwapperEngine),
+                poolInfo: poolInfo,
+                priceStrategy: PriceStrategy.OracleOnly,
+                swapperAccuracy: 0,
+                priceOracle: address(mockPriceOracle)
+            })
+        );
     }
 
     function test_checkCoverageProviderRegistered() public view {

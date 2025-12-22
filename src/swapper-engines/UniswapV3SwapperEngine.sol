@@ -8,6 +8,7 @@ import {IQuoterV2} from "@uniswap/v3-periphery/contracts/interfaces/IQuoterV2.so
 import {Commands} from "@uniswap/universal-router/libraries/Commands.sol";
 import {Constants} from "@uniswap/universal-router/libraries/Constants.sol";
 import {IERC20} from "@openzeppelin-v5/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin-v5/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract UniswapV3SwapperEngineStorage {
     IUniversalRouter public universalRouter;
@@ -16,6 +17,8 @@ contract UniswapV3SwapperEngineStorage {
 }
 
 contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage {
+    using SafeERC20 for IERC20;
+
     /// @notice Error thrown when the pool doesn't match expected base/swap tokens
     error PoolMismatch();
 
@@ -41,17 +44,12 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         quoterV2 = IQuoterV2(_quoterV2);
     }
 
+    /// @inheritdoc ISwapperEngine
     function name() external pure returns (string memory) {
         return "UniswapV3 Swapper Engine";
     }
 
-    /// @notice Swaps with an exact amount of input tokens
-    /// @param poolInfo The pool information (path) to use for the swap
-    /// @param amountIn The exact amount of input tokens to spend
-    /// @param amountOutMin The minimum amount of output tokens to receive
-    /// @param base The asset to swap from (input token)
-    /// @param swap The asset to swap to (output token)
-    /// @return amountOut The actual amount of output tokens received
+    /// @inheritdoc ISwapperEngine
     function swapForInput(bytes memory poolInfo, uint256 amountIn, uint256 amountOutMin, address base, address swap)
         external
         onlyDelegateCall
@@ -110,13 +108,7 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         amountOut = balanceAfter - balanceBefore;
     }
 
-    /// @notice Swaps to an exact amount of output tokens
-    /// @param poolInfo The pool information (path) to use for the swap
-    /// @param amountOut The exact amount of output tokens to receive
-    /// @param amountInMax The maximum amount of input tokens to spend
-    /// @param base The asset to swap from (input token)
-    /// @param swap The asset to swap to (output token)
-    /// @return amountIn The actual amount of input tokens spent
+    /// @inheritdoc ISwapperEngine
     function swapForOutput(bytes memory poolInfo, uint256 amountOut, uint256 amountInMax, address base, address swap)
         external
         onlyDelegateCall
@@ -172,12 +164,7 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         amountIn = balanceBefore - balanceAfter;
     }
 
-    /// @notice Quotes the amount of `quote` that is equivalent to `amountIn` of `base`
-    /// @param poolInfo The pool information (path) to use for the quote
-    /// @param amountIn The amount of `base` token to quote
-    /// @param base The asset to get value for (input token)
-    /// @param quote The asset to quote from (output token)
-    /// @return amountOut The amount of `quote` that is equivalent to `amountIn` of `base`
+    /// @inheritdoc ISwapperEngine
     function getQuote(bytes memory poolInfo, uint256 amountIn, address base, address quote)
         external
         returns (uint256 amountOut)
@@ -198,13 +185,26 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
             pathToUse = _reversePath(poolInfo);
         } else {
             // Pool doesn't match expected tokens
-            revert PoolMismatch();
+            revert InvalidPoolInfo();
         }
 
         // Use QuoterV2 to get the quote
         // Note: quoteExactInput is not marked as view but can be called in view context
         // It uses staticcall internally and reverts to compute the result
         (amountOut,,,) = _getQuoterV2().quoteExactInput(pathToUse, amountIn);
+    }
+
+    function onInit(bytes memory poolInfo) external {
+        (address assetA, address assetB) = _getAssetAddresses(poolInfo);
+        if (assetA == address(0) || assetB == address(0)) revert InvalidPoolInfo();
+
+        address permit2Address = address(_getPermit2());
+        uint256 maxApproval = type(uint160).max;
+
+        // Allow Permit2 to spend tokens - use forceApprove to handle USDT and other tokens
+        // that revert when changing from non-zero to non-zero allowance
+        IERC20(assetA).forceApprove(permit2Address, maxApproval);
+        IERC20(assetB).forceApprove(permit2Address, maxApproval);
     }
 
     /// @notice Returns the asset addresses from the pool information
@@ -221,7 +221,7 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
     /// @return assetA The first asset in the pool info data
     /// @return assetB The last asset in the pool info data
     function _getAssetAddresses(bytes memory poolInfo) internal pure returns (address assetA, address assetB) {
-        require(poolInfo.length >= Constants.ADDR_SIZE, "PoolInfo too short");
+        if (poolInfo.length < Constants.ADDR_SIZE) revert InvalidPoolInfo();
 
         // Extract first token (first 20 bytes)
         assembly {

@@ -8,6 +8,9 @@ interface ISwapperEngine {
     /// @notice Error thrown when the contract is called directly instead of via delegatecall
     error OnlyDelegateCall();
 
+    /// @notice Error thrown when the pool information is invalid
+    error InvalidPoolInfo();
+
     /// @notice The name of the swapper engine
     function name() external pure returns (string memory);
 
@@ -44,4 +47,7 @@ interface ISwapperEngine {
     function getQuote(bytes memory poolInfo, uint256 amountIn, address base, address quote)
         external
         returns (uint256 amountOut);
+
+    /// @notice Called when the swapper engine is initialized
+    function onInit(bytes memory poolInfo) external;
 }

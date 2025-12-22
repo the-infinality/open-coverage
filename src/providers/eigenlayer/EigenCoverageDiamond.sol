@@ -13,8 +13,6 @@ import {AssetPriceOracleAndSwapperStorage} from "../../storage/AssetPriceOracleA
 import {IEigenServiceManager} from "./interfaces/IEigenServiceManager.sol";
 import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
-import {IUniversalRouter} from "@uniswap/universal-router/interfaces/IUniversalRouter.sol";
-import {IPermit2} from "@uniswap/permit2/src/interfaces/IPermit2.sol";
 
 /// @title EigenCoverageDiamond
 /// @author p-dealwis, Infinality
@@ -55,11 +53,6 @@ contract EigenCoverageDiamond is EigenCoverageStorage, AssetPriceOracleAndSwappe
 
         // Initialize app-specific storage
         _eigenAddresses = _args.eigenAddresses;
-
-        // Initialize the AssetPriceOracleAndSwapper storage
-        SwapperStorage storage ss = _swapperStorage();
-        ss.universalRouter = IUniversalRouter(_args.universalRouter);
-        ss.permit2 = IPermit2(_args.permit2);
 
         // Update AVS metadata URI (required for AVS registration)
         // Note: This is called directly during construction; post-deployment updates should use

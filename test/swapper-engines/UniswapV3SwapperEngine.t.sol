@@ -99,7 +99,7 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
     function test_RevertWhen_getAssetAddresses_poolInfoTooShort() public {
         bytes memory poolInfo = abi.encodePacked(uint8(1), uint8(2)); // Only 2 bytes
 
-        vm.expectRevert("PoolInfo too short");
+        vm.expectRevert(ISwapperEngine.InvalidPoolInfo.selector);
         swapperEngine.getAssetAddresses(poolInfo);
     }
 
@@ -379,19 +379,10 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         // Path: USDC -> WETH (but we're asking for USDC -> USDT)
         bytes memory poolInfo = abi.encodePacked(USDC, uint24(500), WETH);
 
-        // Execute quote via delegatecall - should revert with PoolMismatch
-        (bool success, bytes memory result) = address(proxy)
+        // Execute quote via delegatecall - should revert with InvalidPoolInfo
+        vm.expectRevert(ISwapperEngine.InvalidPoolInfo.selector);
+        address(proxy)
             .call(abi.encodeWithSelector(UniswapV3SwapperEngine.getQuote.selector, poolInfo, amountIn, USDC, USDT));
-
-        assertFalse(success, "Quote should fail with pool mismatch");
-
-        // Check that it reverted with PoolMismatch error
-        if (result.length > 0) {
-            // casting to 'bytes4' is safe because error selectors are always 4 bytes
-            // forge-lint: disable-next-line(unsafe-typecast)
-            bytes4 errorSelector = bytes4(result);
-            assertEq(errorSelector, UniswapV3SwapperEngine.PoolMismatch.selector, "Should revert with PoolMismatch");
-        }
     }
 
     function test_getQuote_rETH_to_USDC() public {
@@ -472,16 +463,17 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         // Deal USDC to proxy
         deal(USDC, address(proxy), amountIn);
 
-        // Approve permit2 to spend USDC
-        vm.prank(address(proxy));
-        IERC20(USDC).approve(_getUniswapAddressBook().uniswapAddresses.permit2, type(uint256).max);
-
         // Path: USDC -> USDT (EXACT_IN format: input -> fee -> output)
         bytes memory poolInfo = abi.encodePacked(
             USDC,
             uint24(100), // 0.01% fee for stablecoin pairs
             USDT
         );
+
+        // Initialize approvals via onInit
+        (bool successOnInit,) =
+            address(proxy).call(abi.encodeWithSelector(UniswapV3SwapperEngine.onInit.selector, poolInfo));
+        assertTrue(successOnInit, "onInit should succeed");
 
         // Execute swap via delegatecall
         (bool success, bytes memory result) = address(proxy)
@@ -505,13 +497,14 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         // Deal USDC to proxy
         deal(USDC, address(proxy), amountIn);
 
-        // Approve permit2 to spend USDC
-        vm.prank(address(proxy));
-        IERC20(USDC).approve(_getUniswapAddressBook().uniswapAddresses.permit2, type(uint256).max);
-
         // Path is reversed: USDT -> USDC (but we're swapping USDC -> USDT)
         // The contract should handle this by detecting the reversal
         bytes memory poolInfo = abi.encodePacked(USDT, uint24(100), USDC);
+
+        // Initialize approvals via onInit
+        (bool successOnInit,) =
+            address(proxy).call(abi.encodeWithSelector(UniswapV3SwapperEngine.onInit.selector, poolInfo));
+        assertTrue(successOnInit, "onInit should succeed");
 
         // Execute swap via delegatecall
         (bool success, bytes memory result) = address(proxy)
@@ -543,7 +536,8 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         );
 
         // Execute swap via delegatecall - should revert with PoolMismatch
-        (bool success, bytes memory result) = address(proxy)
+        vm.expectRevert(UniswapV3SwapperEngine.PoolMismatch.selector);
+        address(proxy)
             .call(
                 abi.encodeWithSelector(
                     UniswapV3SwapperEngine.swapForInput.selector,
@@ -554,12 +548,6 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
                     USDT // Doesn't match path
                 )
             );
-
-        assertFalse(success, "Should fail with pool mismatch");
-        // Check for PoolMismatch error
-        // casting to 'bytes4' is safe because error selectors are always 4 bytes
-        // forge-lint: disable-next-line(unsafe-typecast)
-        assertEq(bytes4(result), UniswapV3SwapperEngine.PoolMismatch.selector);
     }
 
     // ============ swapForOutput() via delegatecall Tests ============ //
@@ -571,16 +559,17 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         // Deal USDC to proxy (more than needed for slippage)
         deal(USDC, address(proxy), amountInMax);
 
-        // Approve permit2 to spend USDC
-        vm.prank(address(proxy));
-        IERC20(USDC).approve(_getUniswapAddressBook().uniswapAddresses.permit2, type(uint256).max);
-
         // Path: USDT -> USDC (EXACT_OUT format: output -> fee -> input)
         bytes memory poolInfo = abi.encodePacked(
             USDT,
             uint24(100), // 0.01% fee for stablecoin pairs
             USDC
         );
+
+        // Initialize approvals via onInit
+        (bool successOnInit,) =
+            address(proxy).call(abi.encodeWithSelector(UniswapV3SwapperEngine.onInit.selector, poolInfo));
+        assertTrue(successOnInit, "onInit should succeed");
 
         // Execute swap via delegatecall
         (bool success, bytes memory result) = address(proxy)
@@ -612,12 +601,13 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         // Deal USDC to proxy
         deal(USDC, address(proxy), amountInMax);
 
-        // Approve permit2 to spend USDC
-        vm.prank(address(proxy));
-        IERC20(USDC).approve(_getUniswapAddressBook().uniswapAddresses.permit2, type(uint256).max);
-
         // Path is reversed: USDC -> USDT (but for EXACT_OUT we want USDT as output)
         bytes memory poolInfo = abi.encodePacked(USDC, uint24(100), USDT);
+
+        // Initialize approvals via onInit
+        (bool successOnInit,) =
+            address(proxy).call(abi.encodeWithSelector(UniswapV3SwapperEngine.onInit.selector, poolInfo));
+        assertTrue(successOnInit, "onInit should succeed");
 
         // Execute swap via delegatecall
         (bool success, bytes memory result) = address(proxy)
@@ -645,7 +635,8 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         bytes memory poolInfo = abi.encodePacked(WETH, uint24(500), rETH);
 
         // Execute swap via delegatecall - should revert with PoolMismatch
-        (bool success, bytes memory result) = address(proxy)
+        vm.expectRevert(UniswapV3SwapperEngine.PoolMismatch.selector);
+        address(proxy)
             .call(
                 abi.encodeWithSelector(
                     UniswapV3SwapperEngine.swapForOutput.selector,
@@ -656,11 +647,6 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
                     USDT // Doesn't match path
                 )
             );
-
-        assertFalse(success, "Should fail with pool mismatch");
-        // casting to 'bytes4' is safe because error selectors are always 4 bytes
-        // forge-lint: disable-next-line(unsafe-typecast)
-        assertEq(bytes4(result), UniswapV3SwapperEngine.PoolMismatch.selector);
     }
 
     // ============ Multi-hop Swap Tests ============ //
@@ -671,10 +657,6 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         // Deal rETH to proxy
         deal(rETH, address(proxy), amountIn);
 
-        // Approve permit2 to spend rETH
-        vm.prank(address(proxy));
-        IERC20(rETH).approve(_getUniswapAddressBook().uniswapAddresses.permit2, type(uint256).max);
-
         // Multi-hop path: rETH -> WETH -> USDC (EXACT_IN)
         bytes memory poolInfo = abi.encodePacked(
             rETH,
@@ -683,6 +665,11 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
             uint24(500), // 0.05% fee for WETH/USDC
             USDC
         );
+
+        (bool successOnInit,) =
+            address(proxy).call(abi.encodeWithSelector(UniswapV3SwapperEngine.onInit.selector, poolInfo));
+
+        assertTrue(successOnInit, "onInit should succeed");
 
         // Execute swap via delegatecall
         (bool success, bytes memory result) = address(proxy)
@@ -709,10 +696,6 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         // Deal rETH to proxy (more than needed)
         deal(rETH, address(proxy), 10e18);
 
-        // Approve permit2 to spend rETH
-        vm.prank(address(proxy));
-        IERC20(rETH).approve(_getUniswapAddressBook().uniswapAddresses.permit2, type(uint256).max);
-
         // Multi-hop path: USDC -> WETH -> rETH (EXACT_OUT format: output -> intermediate -> input)
         bytes memory poolInfo = abi.encodePacked(
             USDC,
@@ -721,6 +704,11 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
             uint24(100), // 0.01% fee for rETH/WETH
             rETH
         );
+
+        // Initialize approvals via onInit
+        (bool successOnInit,) =
+            address(proxy).call(abi.encodeWithSelector(UniswapV3SwapperEngine.onInit.selector, poolInfo));
+        assertTrue(successOnInit, "onInit should succeed");
 
         // Execute swap via delegatecall
         (bool success, bytes memory result) = address(proxy)
@@ -742,5 +730,46 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
 
         // Verify we received the exact output
         assertEq(IERC20(USDC).balanceOf(address(proxy)), amountOut, "Should receive exact USDC amount");
+    }
+
+    // ============ onInit() Tests ============ //
+
+    function test_onInit() public {
+        // Path: USDC -> USDT (EXACT_IN format: input -> fee -> output)
+        bytes memory poolInfo = abi.encodePacked(
+            USDC,
+            uint24(100), // 0.01% fee for stablecoin pairs
+            USDT
+        );
+
+        // Call onInit via delegatecall
+        (bool success,) = address(proxy).call(abi.encodeWithSelector(UniswapV3SwapperEngine.onInit.selector, poolInfo));
+
+        assertTrue(success, "onInit should succeed");
+    }
+
+    function test_onInit_canBeCalledMultipleTimes() public {
+        // Path: USDC -> USDT (EXACT_IN format: input -> fee -> output)
+        bytes memory poolInfo = abi.encodePacked(
+            USDC,
+            uint24(100), // 0.01% fee for stablecoin pairs
+            USDT
+        );
+
+        // Call onInit multiple times - should not revert
+        (bool success1,) = address(proxy).call(abi.encodeWithSelector(UniswapV3SwapperEngine.onInit.selector, poolInfo));
+        assertTrue(success1, "First onInit call should succeed");
+
+        (bool success2,) = address(proxy).call(abi.encodeWithSelector(UniswapV3SwapperEngine.onInit.selector, poolInfo));
+        assertTrue(success2, "Second onInit call should succeed");
+    }
+
+    function test_RevertWhen_onInit_invalidPoolInfo() public {
+        // Invalid pool info (too short)
+        bytes memory poolInfo = abi.encodePacked(uint8(1), uint8(2));
+
+        // Call onInit via delegatecall - should revert with InvalidPoolInfo
+        vm.expectRevert(ISwapperEngine.InvalidPoolInfo.selector);
+        address(proxy).call(abi.encodeWithSelector(UniswapV3SwapperEngine.onInit.selector, poolInfo));
     }
 }

@@ -7,6 +7,7 @@ fs_permissions = [{ access = "read", path = "./config"}]
 # Optimizer settings for contract size reduction
 optimizer = true
 optimizer_runs = 1000000
+via_ir = false
 
 # Default chain ID for testing (Ethereum mainnet fork)
 # Can be overridden for other operations with --chain-id <id>
