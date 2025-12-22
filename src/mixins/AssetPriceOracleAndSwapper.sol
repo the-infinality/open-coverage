@@ -8,10 +8,10 @@ import {IPriceOracle} from "../interfaces/IPriceOracle.sol";
 
 /// @title AssetPriceOracleAndSwapper
 /// @author p-dealwis, Infinality
-/// @notice Abstract contract for managing asset price oracles and executing swaps
-abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorage, IAssetPriceOracleAndSwapper {
+/// @notice Mixin contract for managing asset price oracles and executing swaps
+contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorage, IAssetPriceOracleAndSwapper {
     /// @inheritdoc IAssetPriceOracleAndSwapper
-    function register(AssetPair calldata _assetPair) external virtual {
+    function register(AssetPair calldata _assetPair) external {
         bool priceOracleRequired =
             _assetPair.priceStrategy != PriceStrategy.SwapperOnly || _assetPair.swapperAccuracy != 0;
         if (_assetPair.priceOracle == address(0) && priceOracleRequired) revert PriceOracleRequired();
@@ -30,10 +30,8 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
     }
 
     /// @inheritdoc IAssetPriceOracleAndSwapper
-    function swapForOutput(uint128 amountOut, address assetA, address assetB) public virtual {
-        AssetPair memory _assetPair = assetPairs[keccak256(abi.encode(assetA, assetB))];
-
-        if (address(_assetPair.swapEngine) == address(0)) revert AssetPairNotRegistered();
+    function swapForOutput(uint128 amountOut, address assetA, address assetB) public {
+        AssetPair memory _assetPair = _getRegisteredAssetPair(assetA, assetB);
 
         // Delegatecall version of swapForOutput
         (bool success,) = _assetPair.swapEngine
@@ -51,10 +49,8 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
     }
 
     /// @inheritdoc IAssetPriceOracleAndSwapper
-    function swapForInput(uint128 amountIn, address assetA, address assetB) public virtual {
-        AssetPair memory _assetPair = assetPairs[keccak256(abi.encode(assetA, assetB))];
-
-        if (address(_assetPair.swapEngine) == address(0)) revert AssetPairNotRegistered();
+    function swapForInput(uint128 amountIn, address assetA, address assetB) public {
+        AssetPair memory _assetPair = _getRegisteredAssetPair(assetA, assetB);
 
         // Delegatecall version of swapForInput
         (bool success,) = _assetPair.swapEngine
@@ -72,12 +68,12 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
     }
 
     /// @inheritdoc IAssetPriceOracleAndSwapper
-    function assetPair(address assetA, address assetB) public view virtual returns (AssetPair memory) {
+    function assetPair(address assetA, address assetB) public view returns (AssetPair memory) {
         return assetPairs[keccak256(abi.encode(assetA, assetB))];
     }
 
     /// @inheritdoc IAssetPriceOracleAndSwapper
-    function getQuote(uint256 amountIn, address assetA, address assetB) public view virtual returns (uint256) {
+    function getQuote(uint256 amountIn, address assetA, address assetB) public view returns (uint256) {
         AssetPair memory _assetPair = assetPairs[keccak256(abi.encode(assetA, assetB))];
 
         // Should flip around since the price oracle works both ways
@@ -88,6 +84,20 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
             }
         }
         return IPriceOracle(_assetPair.priceOracle).getQuote(amountIn, assetA, assetB);
+    }
+
+    /// @notice Gets the registered asset pair and reverts if not registered
+    /// @param assetA The first asset
+    /// @param assetB The second asset
+    /// @return _assetPair The registered asset pair
+    function _getRegisteredAssetPair(address assetA, address assetB)
+        private
+        view
+        returns (AssetPair memory _assetPair)
+    {
+        _assetPair = assetPairs[keccak256(abi.encode(assetA, assetB))];
+
+        if (address(_assetPair.swapEngine) == address(0)) revert AssetPairNotRegistered();
     }
 }
 
