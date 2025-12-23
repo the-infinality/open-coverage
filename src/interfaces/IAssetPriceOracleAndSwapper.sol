@@ -1,78 +1,113 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
-
-/// @notice Enum for swap engine types
-enum SwapEngine {
-    UNISWAP_V3,
-    UNISWAP_V4_SINGLE_HOP
-}
-
-/// @notice Parameters for configuring a swap
-struct SwapParams {
-    SwapEngine swapEngine;
-    bytes poolInfo;
-}
-
-/// @notice Uniswap V4 pool information
-struct UniswapV4PoolInfo {
-    PoolKey poolKey;
-    bool zeroForOne;
+enum PriceStrategy {
+    /// @notice Only use the oracle to get the quote
+    OracleOnly,
+    /// @notice Only use the swapper to get the quote
+    SwapperOnly,
+    /// @notice Use the swapper to get the quote and verify it with the oracle
+    SwapperVerified,
+    /// @notice Use the oracle to get the quote and verify it with the swapper
+    OracleVerified
 }
 
 /// @notice Asset pair configuration for price oracle and swapping
 struct AssetPair {
-    /// @notice The price oracle implementing the IPriceOracle
+    /// @notice The first asset in the pair
+    address assetA;
+    /// @notice The second asset in the pair
+    address assetB;
+
+    /// @notice The swap engine to use for swapping
+    address swapEngine;
+    /// @notice The pool information to use for swapping
+    bytes poolInfo;
+
+    /// @notice The price strategy to use for the asset pair
+    PriceStrategy priceStrategy;
+
+    /// @notice The accuracy of the swapper
+    /// @dev This is the accuracy of the swapper in basis points i.e. 1 = 0.01%
+    uint16 swapperAccuracy;
+
+    /// @notice Optional price oracle implementing the IPriceOracle
+    /// @dev If not set, the price strategy must be SwapperOnly and swapperAccuracy must be 0
     address priceOracle;
-    /// @notice The asset used to swap from
-    address asset1;
-    /// @notice The asset used to swap to
-    address asset2;
-    /// @notice The pool path to use for swapping via a configured SwapEngine
-    SwapParams swapParams;
 }
 
 /// @title IAssetPriceOracleAndSwapper
 /// @notice Interface for the asset price oracle and swapper facet
 interface IAssetPriceOracleAndSwapper {
-    error InvalidSwapEngine();
+    event AssetPairRegistered(address assetA, address assetB);
+
+    error PriceMismatch();
+    error SwapFailed();
+    error InvalidPoolInfo();
     error AssetPairNotRegistered();
-    error InvalidPriceOracle();
+    error PriceOracleRequired();
     error InvalidAssetPair();
-    error SliceOutOfBounds();
+    error InvalidSwapSlippage();
 
     /// @notice Registers a price adaptor for an asset pair
-    /// @param priceOracle The price oracle address
-    /// @param asset1 The first asset (swap from)
-    /// @param asset2 The second asset (swap to)
-    /// @param swapParams The swap parameters including engine and pool info
-    function registerPriceAdaptor(address priceOracle, address asset1, address asset2, SwapParams calldata swapParams)
-        external;
+    /// @param _assetPair The asset pair configuration
+    function register(AssetPair calldata _assetPair) external;
 
-    /// @notice Swaps an exact amount of output tokens
-    /// @param amountOut The exact amount of tokens to receive
-    /// @param asset1 The input asset
-    /// @param asset2 The output asset
-    function swap(uint128 amountOut, address asset1, address asset2) external;
+    /// @notice Swaps an exact amount to receive output tokens specified
+    /// @param amountOut The exact amount of `assetA` tokens to receive
+    /// @param assetA The asset to receive (output/base)
+    /// @param assetB The asset to spend (input/swap)
+    function swapForOutput(uint128 amountOut, address assetA, address assetB) external;
+
+    /// @notice Swaps an exact amount of input tokens
+    /// @param amountIn The exact amount of `assetB` tokens to spend
+    /// @param assetA The asset to receive (output/base)
+    /// @param assetB The asset to spend (input/swap)
+    function swapForInput(uint128 amountIn, address assetA, address assetB) external;
+
+    /// @notice Sets the swap slippage
+    /// @param swapSlippage_ The swap slippage in basis points i.e. 1 = 0.01%
+    function setSwapSlippage(uint16 swapSlippage_) external;
 
     /// @notice Gets the asset pair configuration for two assets
-    /// @param asset1 The first asset
-    /// @param asset2 The second asset
+    /// @param assetA The first asset
+    /// @param assetB The second asset
     /// @return The asset pair configuration
-    function assetPair(address asset1, address asset2) external view returns (AssetPair memory);
+    function assetPair(address assetA, address assetB) external view returns (AssetPair memory);
+
+    /// @notice Gets the swap slippage
+    /// @return The swap slippage
+    function swapSlippage() external view returns (uint16);
 
     /// @notice Gets a price quote for an asset pair
-    /// @param amountIn The amount of the first asset
-    /// @param asset1 The first asset
-    /// @param asset2 The second asset
-    /// @return The equivalent amount in the second asset
-    function quote(uint256 amountIn, address asset1, address asset2) external view returns (uint256);
+    /// @param amountIn The amount of `assetB` to get value for `assetA`
+    /// @param assetA The asset to quote the value for (output/base)
+    /// @param assetB The asset to get value from (input/swap)
+    /// @return quote The equivalent amount of `assetA` for `amountIn` of `assetB`
+    /// @return verified Whether the quote has been verified by an oracle (if applicable)
+    function getQuote(uint256 amountIn, address assetA, address assetB)
+        external
+        view
+        returns (uint256 quote, bool verified);
 
-    /// @notice Returns the universal router address
-    function universalRouter() external view returns (address);
+    /// @notice Gets the maximum amount of `assetB` tokens that can be spent to receive `amountOut` of `assetA`
+    /// @param amountOut The exact amount of `assetA` tokens to receive
+    /// @param assetA The asset to receive (output/base)
+    /// @param assetB The asset to spend (input/swap)
+    /// @return maxAmountIn The maximum amount of `assetB` tokens that can be spent
+    function swapForOutputQuote(uint128 amountOut, address assetA, address assetB)
+        external
+        view
+        returns (uint256 maxAmountIn);
 
-    /// @notice Returns the permit2 address
-    function permit2() external view returns (address);
+    /// @notice Gets the minimum amount of `assetA` tokens that can be received for `amountIn` of `assetB`
+    /// @param amountIn The exact amount of `assetB` tokens to spend
+    /// @param assetA The asset to receive (output/base)
+    /// @param assetB The asset to spend (input/swap)
+    /// @return minAmountOut The minimum amount of `assetA` tokens that can be received
+    function swapForInputQuote(uint128 amountIn, address assetA, address assetB)
+        external
+        view
+        returns (uint256 minAmountOut);
 }
 

@@ -2,6 +2,8 @@
     "1": {
         "universalRouter": "0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af",
         "permit2": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+        "viewQuoterV3": "0x5e55c9e631fae526cd4b0526c4818d6e0a9ef0e3",
+        "v4PositionManager": "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
         "poolPaths": {
             "v4:": {
                 "USDC/USDT": {
@@ -16,7 +18,7 @@
             },
             "v3:": {
                 "USDC/USDT": {
-                    "poolInfo": "0x0000000000000000000000000000000000000000000000000000000000000000"
+                    "poolInfo": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000064dac17f958d2ee523a2206206994597c13d831ec7"
                 }
             }
         }

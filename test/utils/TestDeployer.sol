@@ -30,5 +30,10 @@ contract TestDeployer is Test {
         USDT = chainJson.readAddress(string.concat(selectorPrefix, ".assets.USDT"));
         WETH = chainJson.readAddress(string.concat(selectorPrefix, ".assets.WETH"));
         rETH = chainJson.readAddress(string.concat(selectorPrefix, ".assets.rETH"));
+
+        vm.label(USDC, "USDC");
+        vm.label(USDT, "USDT");
+        vm.label(WETH, "WETH");
+        vm.label(rETH, "rETH");
     }
 }

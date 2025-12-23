@@ -18,9 +18,14 @@ import {CoverageProviderData} from "src/interfaces/ICoverageAgent.sol";
 import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
 import {IStrategyManager} from "eigenlayer-contracts/interfaces/IStrategyManager.sol";
 import {ISignatureUtilsMixinTypes} from "eigenlayer-contracts/interfaces/ISignatureUtilsMixin.sol";
-import {SwapParams, SwapEngine, IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {MockPriceOracle} from "../utils/MockPriceOracle.sol";
 import {CoverageClaim, CoverageClaimStatus} from "src/interfaces/ICoverageProvider.sol";
+import {UniswapV3SwapperEngine} from "src/swapper-engines/UniswapV3SwapperEngine.sol";
+import {UniswapAddressbook} from "utils/UniswapHelper.sol";
+import {ISwapperEngine} from "src/interfaces/ISwapperEngine.sol";
+import {PriceStrategy, AssetPair} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
 
 contract EigenTest is EigenTestDeployer {
     IEigenOperatorProxy public operator;
@@ -31,6 +36,7 @@ contract EigenTest is EigenTestDeployer {
     IEigenServiceManager eigenServiceManager;
     ICoverageProvider eigenCoverageProvider;
     IAssetPriceOracleAndSwapper eigenPriceOracle;
+    ISwapperEngine public uniswapV3SwapperEngine;
 
     function _setupwithAllocations() internal {
         vm.roll(block.number + 126001);
@@ -87,24 +93,60 @@ contract EigenTest is EigenTestDeployer {
 
         mockPriceOracle = new MockPriceOracle(100000e18, rETH, USDC);
 
+        UniswapAddressbook memory uniswapAddressBook = _getUniswapAddressBook();
+        uniswapV3SwapperEngine = new UniswapV3SwapperEngine(
+            uniswapAddressBook.uniswapAddresses.universalRouter,
+            uniswapAddressBook.uniswapAddresses.permit2,
+            uniswapAddressBook.uniswapAddresses.viewQuoterV3
+        );
+
         // V3 multi-hop path: rETH -> WETH (fee: 100) -> USDC (fee: 500)
         // For EXACT_OUT, path is reversed: output -> fee -> intermediate -> fee -> input
         bytes memory poolInfo = abi.encodePacked(
-            USDC, // output token (20 bytes)
-            uint24(500), // fee for WETH->USDC pool (3 bytes)
-            WETH, // intermediate token (20 bytes)
-            uint24(100), // fee for rETH->WETH pool (3 bytes)
-            rETH // input token (20 bytes)
+            rETH,
+            uint24(100), // 0.01% fee rETH-WETH
+            WETH,
+            uint24(500), // 0.05% fee WETH-USDC
+            USDC
         );
 
-        SwapParams memory swapParams = SwapParams({swapEngine: SwapEngine.UNISWAP_V3, poolInfo: poolInfo});
-        eigenPriceOracle.registerPriceAdaptor(address(mockPriceOracle), rETH, USDC, swapParams);
+        // SwapParams memory swapParams = SwapParams({swapEngine: SwapEngine.UNISWAP_V3, poolInfo: poolInfo});
+        eigenPriceOracle.register(
+            AssetPair({
+                assetA: rETH,
+                assetB: USDC,
+                swapEngine: address(uniswapV3SwapperEngine),
+                poolInfo: poolInfo,
+                priceStrategy: PriceStrategy.SwapperOnly,
+                swapperAccuracy: 0,
+                priceOracle: address(0)
+            })
+        );
     }
 
     function test_checkCoverageProviderRegistered() public view {
         CoverageProviderData memory coverageProviderData =
             coverageAgent.coverageProviderData(address(eigenCoverageDiamond));
         assertEq(coverageProviderData.active, true);
+    }
+
+    function test_RevertWhen_register_not_owner() public {
+        address nonOwner = makeAddr("nonOwner");
+        bytes memory poolInfo = abi.encodePacked(rETH, uint24(100), WETH, uint24(500), USDC);
+
+        vm.prank(nonOwner);
+        vm.expectRevert(abi.encodeWithSelector(LibDiamond.NotContractOwner.selector, nonOwner, address(this)));
+        eigenPriceOracle.register(
+            AssetPair({
+                assetA: rETH,
+                assetB: USDC,
+                swapEngine: address(uniswapV3SwapperEngine),
+                poolInfo: poolInfo,
+                priceStrategy: PriceStrategy.SwapperOnly,
+                swapperAccuracy: 0,
+                priceOracle: address(0)
+            })
+        );
     }
 
     function test_registerCoverageAgent() public {
@@ -161,26 +203,10 @@ contract EigenTest is EigenTestDeployer {
         assertEq(eigenCoverageProvider.position(positionId).expiryTimestamp, block.timestamp);
     }
 
-    function test_mockPriceOracleQuotes() public view {
-        uint256 quote = mockPriceOracle.getQuote(1e18, rETH, USDC);
-        assertEq(quote, 100000e18);
-
-        (uint256 bidOutAmount, uint256 askOutAmount) = mockPriceOracle.getQuotes(1e18, rETH, USDC);
-        assertEq(bidOutAmount, 100000e18);
-        assertEq(askOutAmount, 100000e18);
-
-        quote = mockPriceOracle.getQuote(100000e18, USDC, rETH);
-        assertEq(quote, 1e18);
-
-        (bidOutAmount, askOutAmount) = mockPriceOracle.getQuotes(100000e18, USDC, rETH);
-        assertEq(bidOutAmount, 1e18);
-        assertEq(askOutAmount, 1e18);
-    }
-
     function test_claimPosition() public {
         _setupwithAllocations();
 
-        _stakeAndDelegateToOperator(1000e18);
+        _stakeAndDelegateToOperator(10e18);
 
         // Create the position
         CoveragePosition memory data = CoveragePosition({
@@ -288,7 +314,7 @@ contract EigenTest is EigenTestDeployer {
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
         uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
-        assertApproxEqAbs(eigenCoverageProvider.positionMaxAmount(positionId), 1000e6, 4e5);
+        assertApproxEqAbs(eigenCoverageProvider.positionMaxAmount(positionId), 35735542, 4e5);
     }
 
     function test_RevertWhen_claimPosition_durationExceedsMax() public {

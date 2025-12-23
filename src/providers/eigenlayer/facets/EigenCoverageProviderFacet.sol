@@ -3,7 +3,6 @@ pragma solidity ^0.8.24;
 
 import {NotImplemented} from "../Errors.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {ERC20} from "@openzeppelin-v5/contracts/token/ERC20/ERC20.sol";
 import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/EnumerableMap.sol";
 import {IAllocationManager, IAllocationManagerTypes} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
@@ -321,17 +320,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
                 _operators,
                 strategies
             );
-        uint256 quotedPrice =
-            IAssetPriceOracleAndSwapper(address(this)).quote(allocatedStake[0][0], strategyAsset, coverageAsset);
-
-        uint8 strategyDecimals = ERC20(strategyAsset).decimals();
-        uint8 coverageDecimals = ERC20(coverageAsset).decimals();
-
-        if (strategyDecimals > coverageDecimals) {
-            return quotedPrice / (10 ** (strategyDecimals - coverageDecimals));
-        } else {
-            return quotedPrice * (10 ** (coverageDecimals - strategyDecimals));
-        }
+        (total,) =
+            IAssetPriceOracleAndSwapper(address(this)).getQuote(allocatedStake[0][0], coverageAsset, strategyAsset);
     }
 
     function _registerPosition(
@@ -363,10 +353,10 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         IEigenServiceManager(address(this))
             .slashOperator(eigenPosition.operator, eigenPosition.strategy, _position.coverageAgent, amount);
 
-        // Swap the slashed strategy asset to the coverage agent's asset
-        // forge-lint: disable-next-line(unsafe-typecast)
-        IAssetPriceOracleAndSwapper(address(this))
-            .swap(uint128(amount), _position.asset, ICoverageAgent(_position.coverageAgent).asset());
+        IAssetPriceOracleAndSwapper(address(this)).
+            // Swap the slashed strategy asset to the coverage agent's asset
+            // forge-lint: disable-next-line(unsafe-typecast)
+            swapForOutput(uint128(amount), _position.asset, ICoverageAgent(_position.coverageAgent).asset());
 
         // Transfer swapped tokens to coverage agent
         bool success = IERC20(ICoverageAgent(_position.coverageAgent).asset()).transfer(_position.coverageAgent, amount);
