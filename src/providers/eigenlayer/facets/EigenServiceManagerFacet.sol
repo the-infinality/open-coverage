@@ -10,14 +10,13 @@ import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
 import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
 import {IRewardsCoordinatorTypes} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
 import {Refundable, CoverageClaimStatus} from "src/interfaces/ICoverageProvider.sol";
-
-import {LibDiamond} from "../../../diamond/libraries/LibDiamond.sol";
+import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
 import {EigenAddresses} from "../Types.sol";
 import {InvalidAVS, NotAllocated} from "../Errors.sol";
 import {IEigenServiceManager, EigenCoveragePosition} from "../interfaces/IEigenServiceManager.sol";
-import {CoverageClaim} from "../../../interfaces/ICoverageProvider.sol";
-import {ICoverageAgent} from "../../../interfaces/ICoverageAgent.sol";
-import {IAssetPriceOracleAndSwapper} from "../../../interfaces/IAssetPriceOracleAndSwapper.sol";
+import {CoverageClaim} from "src/interfaces/ICoverageProvider.sol";
+import {ICoverageAgent} from "src/interfaces/ICoverageAgent.sol";
+import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {EigenCoverageStorage, ClaimRewardDistribution} from "../EigenCoverageStorage.sol";
 import {WAD} from "eigenlayer-contracts/libraries/SlashingLib.sol";
 
