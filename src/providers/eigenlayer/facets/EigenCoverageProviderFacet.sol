@@ -83,7 +83,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         // Ensure strategy is in operator set and operator has non-zero allocations
         IEigenServiceManager(address(this))
             .ensureAllocations(
-                coverageAgent, createPositionAddtionalData.operator, createPositionAddtionalData.strategy
+                createPositionAddtionalData.operator, coverageAgent, createPositionAddtionalData.strategy
             );
 
         positionId = _registerPosition(coverageAgent, data, createPositionAddtionalData);
@@ -107,6 +107,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         external
         returns (uint256 claimId)
     {
+        if(amount == 0) revert InvalidAmount();
+
         EigenCoveragePosition storage positionData = positions[positionId];
         if (msg.sender != positionData.data.coverageAgent) {
             revert NotCoverageAgent(msg.sender, positionData.data.coverageAgent);

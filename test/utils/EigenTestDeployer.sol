@@ -144,7 +144,7 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
     }
 
     function _getEigenServiceManagerSelectors() internal pure returns (bytes4[] memory) {
-        bytes4[] memory selectors = new bytes4[](10);
+        bytes4[] memory selectors = new bytes4[](11);
         selectors[0] = IEigenServiceManager.eigenAddresses.selector;
         selectors[1] = IEigenServiceManager.registerOperator.selector;
         selectors[2] = IEigenServiceManager.setStrategyWhitelist.selector;
@@ -155,6 +155,7 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
         selectors[7] = IEigenServiceManager.updateAVSMetadataURI.selector;
         selectors[8] = IEigenServiceManager.slashOperator.selector;
         selectors[9] = IEigenServiceManager.ensureAllocations.selector;
+        selectors[10] = IEigenServiceManager.getAllocationedStrategies.selector;
         return selectors;
     }
 

@@ -78,8 +78,14 @@ interface IEigenServiceManager {
         returns (uint256 tokensReceived);
 
     /// @notice Ensures strategy is added to the operator set and operator has non-zero allocations for given operator.
-    /// @param coverageAgent The coverage agent whose operator set to check
     /// @param operator The operator to verify allocations for
+    /// @param coverageAgent The coverage agent whose operator set to check
     /// @param strategy The strategy to ensure is allocated
-    function ensureAllocations(address coverageAgent, address operator, address strategy) external;
+    function ensureAllocations(address operator, address coverageAgent, address strategy) external;
+
+    /// @notice Returns the strategies allocated to by any operator for a coverage agent
+    /// @param operator The operator to get the allocated strategies for
+    /// @param coverageAgent The coverage agent to get the allocated strategies for
+    /// @return strategies The strategy addresses allocated to 
+    function getAllocationedStrategies(address operator, address coverageAgent) external view returns (address[] memory);
 }

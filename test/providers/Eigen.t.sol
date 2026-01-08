@@ -238,10 +238,109 @@ contract EigenTest is EigenTestDeployer {
         assertEq(claim.positionId, positionId);
     }
 
+    /// @notice Fuzz test to verify claim coverage with various claim amounts up to the maximum staked coverage
+    /// @param claimAmountBps The claim amount as a percentage of maximum coverage in basis points (1-10000)
+    ///                       This will be bounded to ensure we don't exceed available coverage
+    function testFuzz_claimPosition(uint256 claimAmountBps) public {
+        _setupwithAllocations();
+
+        uint256 stakeAmount = 10e18;
+        _stakeAndDelegateToOperator(stakeAmount);
+
+        // Create the position
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0)
+        });
+        bytes memory additionalData = abi.encode(
+            CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
+        );
+        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+
+        // Calculate the maximum coverage available based on allocated stake
+        uint256 maxCoverage = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+
+        // Bound claimAmountBps to 1-10000 (0.01% to 100% of max coverage)
+        // Ensure we have at least 1 unit of claim amount
+        claimAmountBps = bound(claimAmountBps, 1, 10000);
+        uint256 claimAmount = (maxCoverage * claimAmountBps) / 10000;
+        
+        // Ensure claimAmount is at least 1 to pass validation
+        if (claimAmount == 0) {
+            claimAmount = 1;
+        }
+
+        // Calculate reward proportionally (using a reasonable reward rate)
+        // Using 1% of claim amount as reward, minimum 1e6
+        uint256 reward = claimAmount / 100;
+        if (reward < 1e6) {
+            reward = 1e6;
+        }
+
+        // Give the coverage agent a large balance to handle rewards for any claim amount
+        // Reward is at most maxCoverage/100 (when claimAmount = maxCoverage), but ensure we have enough
+        // Set balance to maxCoverage to provide ample buffer for any reward calculation
+        deal(coverageAgent.asset(), address(coverageAgent), maxCoverage);
+
+        vm.startPrank(address(coverageAgent));
+        // Approve enough tokens for the reward
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), reward);
+        
+        // Track the expected claim ID (should be 0 for first claim in a fresh test)
+        // Since each fuzz test run is independent, this will be the first claim
+        uint256 expectedClaimId = 0;
+        uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, claimAmount, 30 days, reward);
+        vm.stopPrank();
+
+        // Verify claim ID (should be 0 for first claim)
+        assertEq(claimId, expectedClaimId);
+
+        // Verify claim properties
+        CoverageClaim memory claim = eigenCoverageProvider.claim(claimId);
+        assertEq(claim.amount, claimAmount);
+        assertEq(claim.duration, 30 days);
+        assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Issued));
+        assertEq(claim.reward, reward);
+        assertEq(claim.positionId, positionId);
+    }
+
+    function test_getAllocationedStrategies() public {
+        // Setup with allocations
+        _setupwithAllocations();
+
+        address[] memory strategies = eigenServiceManager.getAllocationedStrategies(address(operator), address(coverageAgent));
+        assertEq(strategies.length, 1);
+        assertEq(strategies[0], address(_getTestStrategy()));
+    }
+
     function test_RevertWhen_claimPosition_insufficientCoverageOnClaim() public {
         _setupwithAllocations();
 
-        _stakeAndDelegateToOperator(1e15);
+        // Calculate the minimum stake needed to cover 1000e6 USDC
+        // The coverage calculation converts allocated stake (in strategy asset) to coverage asset (USDC)
+        // We need to find what stake amount would result in coverage < 1000e6 USDC
+        address strategyAsset = address(_getTestStrategy().underlyingToken());
+        address coverageAsset = address(coverageAgent.asset());
+        uint256 claimAmount = 1000e6; // USDC
+        
+        // The coverage calculation does: getQuote(allocatedStake, coverageAsset, strategyAsset)
+        // This converts allocatedStake FROM coverageAsset TO strategyAsset
+        // To find the stake that gives us exactly claimAmount coverage, we reverse it:
+        // getQuote(claimAmount, strategyAsset, coverageAsset) gives us the stake amount
+        (uint256 requiredStake,) = eigenPriceOracle.getQuote(claimAmount, strategyAsset, coverageAsset);
+        
+        // Stake slightly less than required to trigger insufficient coverage error
+        // Use 99% of required stake to ensure we're under the threshold
+        uint256 stakeAmount = (requiredStake * 90) / 100;
+        
+        _stakeAndDelegateToOperator(stakeAmount);
 
         // Create the position
         CoveragePosition memory data = CoveragePosition({
@@ -266,9 +365,90 @@ contract EigenTest is EigenTestDeployer {
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
 
         vm.expectRevert(
-            abi.encodeWithSelector(ICoverageProvider.InsufficientCoverageAvailable.selector, 1000e6 - coverageAllocated)
+            abi.encodeWithSelector(ICoverageProvider.InsufficientCoverageAvailable.selector, claimAmount - coverageAllocated)
         );
-        eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
+        eigenCoverageProvider.claimCoverage(positionId, claimAmount, 30 days, 10e6);
+    }
+
+    /// @notice Fuzz test to verify insufficient coverage error with various stake amounts
+    /// @param stakePercentBps The stake amount as a percentage of required stake in basis points (0-10000)
+    ///                         Values < 10000 (100%) will trigger insufficient coverage
+    function testFuzz_RevertWhen_claimPosition_insufficientCoverageOnClaim(uint256 stakePercentBps) public {
+        _setupwithAllocations();
+
+        address strategyAsset = address(_getTestStrategy().underlyingToken());
+        address coverageAsset = address(coverageAgent.asset());
+        uint256 claimAmount = 1000e6; // USDC
+        
+        // Calculate the minimum stake needed to cover the claim amount
+        (uint256 requiredStake,) = eigenPriceOracle.getQuote(claimAmount, strategyAsset, coverageAsset);
+        
+        // Bound stakePercentBps to a reasonable range: 0-99% of required stake
+        // This ensures we always have insufficient coverage
+        // Using basis points: 0 = 0%, 9900 = 99%
+        stakePercentBps = bound(stakePercentBps, 0, 9900);
+        uint256 stakeAmount = (requiredStake * stakePercentBps) / 10000;
+        
+        // Skip if stakeAmount is 0 (would cause issues with staking)
+        if (stakeAmount < 1e3) {
+            stakeAmount = 1e3;
+        }
+        
+        _stakeAndDelegateToOperator(stakeAmount);
+
+        // Create the position
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0)
+        });
+        bytes memory additionalData = abi.encode(
+            CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
+        );
+        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+
+        uint256 coverageAllocated = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.InsufficientCoverageAvailable.selector, claimAmount - coverageAllocated)
+        );
+        eigenCoverageProvider.claimCoverage(positionId, claimAmount, 30 days, 10e6);
+    }
+
+    function test_RevertWhen_claimPosition_invalidAmount() public {
+        _setupwithAllocations();
+
+        _stakeAndDelegateToOperator(10e18);
+
+        // Create the position
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0)
+        });
+        bytes memory additionalData = abi.encode(
+            CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
+        );
+        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+        vm.expectRevert(ICoverageProvider.InvalidAmount.selector);
+        eigenCoverageProvider.claimCoverage(positionId, 0, 30 days, 10e6);
+        vm.stopPrank();
     }
 
     function test_RevertWhen_claimPosition_notCoverageAgent() public {

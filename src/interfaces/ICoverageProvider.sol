@@ -74,6 +74,7 @@ interface ICoverageProvider {
     event ClaimSlashed(uint256 indexed claimId, uint256 amount);
     event ClaimSlashPending(uint256 indexed claimId, address slashCoordinator);
 
+    error InvalidAmount();
     error PositionExpired(uint256 positionId);
     error TimestampInvalid(uint256 timestamp);
     error MinRateInvalid(uint16 minRate);

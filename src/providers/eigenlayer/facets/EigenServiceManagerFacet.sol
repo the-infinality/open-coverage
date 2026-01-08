@@ -178,7 +178,7 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
     }
 
     /// @inheritdoc IEigenServiceManager
-    function ensureAllocations(address coverageAgent, address operator, address strategy) external {
+    function ensureAllocations(address operator, address coverageAgent, address strategy) external {
         uint32 operatorSetId = coverageAgentToOperatorSetId[coverageAgent];
         OperatorSet memory operatorSet = OperatorSet({avs: address(this), id: operatorSetId});
         IAllocationManager allocationManager = IAllocationManager(_eigenAddresses.allocationManager);
@@ -203,6 +203,18 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
             allocationManager.getAllocation(operator, operatorSet, IStrategy(strategy));
 
         if (allocation.currentMagnitude == 0) revert NotAllocated();
+    }
+
+    /// @inheritdoc IEigenServiceManager
+    function getAllocationedStrategies(address operator, address coverageAgent) external view returns (address[] memory) {
+        uint32 operatorSetId = coverageAgentToOperatorSetId[coverageAgent];
+        OperatorSet memory operatorSet = OperatorSet({avs: address(this), id: operatorSetId});
+        IStrategy[] memory strategies = IAllocationManager(_eigenAddresses.allocationManager).getAllocatedStrategies(operator, operatorSet);
+        address[] memory strategiesAddresses = new address[](strategies.length);
+        for (uint256 i = 0; i < strategies.length; i++) {
+            strategiesAddresses[i] = address(strategies[i]);
+        }
+        return strategiesAddresses;
     }
 
     /// ============ Internal functions ============ //
