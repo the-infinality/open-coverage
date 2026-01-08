@@ -46,7 +46,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
             IAllocationManagerTypes.CreateSetParams({operatorSetId: operatorSetId, strategies: new IStrategy[](0)});
 
         address[] memory redistributionRecipients = new address[](1);
-        redistributionRecipients[0] = address(this); // Diamond receives slashed tokens to swap before forwarding
+        // Diamond receives slashed tokens to swap before forwarding back to coverage agent
+        redistributionRecipients[0] = address(this); 
 
         IAllocationManager(_eigenAddresses.allocationManager)
             .createRedistributingOperatorSets(address(this), params, redistributionRecipients);
@@ -351,6 +352,10 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         EigenCoveragePosition storage eigenPosition = positions[_claim.positionId];
         CoveragePosition storage _position = eigenPosition.data;
 
+        // Get balance of strategy asset in this address
+        address strategyAsset = address(IStrategy(eigenPosition.strategy).underlyingToken());
+        uint256 openingStrategyAssetBalance = IERC20(strategyAsset).balanceOf(address(this));
+
         // Slash the operator through EigenLayer and claim redistributed tokens
         IEigenServiceManager(address(this))
             .slashOperator(eigenPosition.operator, eigenPosition.strategy, _position.coverageAgent, amount);
@@ -368,6 +373,17 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         _claim.status = CoverageClaimStatus.Slashed;
         ICoverageAgent(_position.coverageAgent).onSlashCompleted(claimId);
         emit ClaimSlashed(claimId, amount);
+
+        // Calculate the difference in strategy asset balance
+        uint256 closingStrategyAssetBalance = IERC20(strategyAsset).balanceOf(address(this));
+
+        // If the closing strategy asset balance is less than the opening strategy asset balance then more than
+        // the slashed amount was used to swap for the coverage agent's asset. This is unlikely but an edge case
+        // that needs to be handled.
+        if(closingStrategyAssetBalance < openingStrategyAssetBalance) revert SlashFailed(claimId);
+
+        // TODO: Redistribute any remaining amount of staked assets back to the operator as a reward
+        // uint256 difference = closingStrategyAssetBalance - openingStrategyAssetBalance;
     }
 
     function _checkOperatorPermissions(address operator, address target, bytes4 selector) private returns (bool) {

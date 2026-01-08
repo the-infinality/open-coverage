@@ -636,7 +636,7 @@ contract EigenTest is EigenTestDeployer {
         assertEq(distributionStartTime, toRewardsInterval(block.timestamp - 25 days));
     }
 
-    function xtest_slashClaims() public {
+    function test_slashClaims() public {
         _setupwithAllocations();
 
         _stakeAndDelegateToOperator(1000e18);

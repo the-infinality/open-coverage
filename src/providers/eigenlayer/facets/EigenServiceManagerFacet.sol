@@ -14,7 +14,7 @@ import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
 import {EigenAddresses} from "../Types.sol";
 import {InvalidAVS, NotAllocated} from "../Errors.sol";
 import {IEigenServiceManager, EigenCoveragePosition} from "../interfaces/IEigenServiceManager.sol";
-import {CoverageClaim} from "src/interfaces/ICoverageProvider.sol";
+import {CoverageClaim, ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
 import {ICoverageAgent} from "src/interfaces/ICoverageAgent.sol";
 import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {EigenCoverageStorage, ClaimRewardDistribution} from "../EigenCoverageStorage.sol";
@@ -268,15 +268,25 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
                 OperatorSet({avs: address(this), id: coverageAgentToOperatorSetId[coverageAgent]}), ops, strats
             )[0][0];
 
-        if (totalAllocatedStake == 0) revert NotAllocated();
-
         // Convert amount to strategy asset and calculate proportion
-        (uint256 quotedPrice,) = IAssetPriceOracleAndSwapper(address(this))
+        (uint256 requiredSlashAmount,) = IAssetPriceOracleAndSwapper(address(this))
             .getQuote(
                 amount, address(IStrategy(strategy).underlyingToken()), address(ICoverageAgent(coverageAgent).asset())
             );
-        wadToSlash = (quotedPrice * WAD) / totalAllocatedStake;
-        if (wadToSlash > WAD) wadToSlash = WAD;
+        wadToSlash = (requiredSlashAmount * WAD) / totalAllocatedStake;
+        // Revert if the required slash amount is greater than the total allocated stake
+        if (wadToSlash > WAD) {
+            (uint256 totalAllocatedStakeValue,) = IAssetPriceOracleAndSwapper(address(this))
+                .getQuote(
+                    totalAllocatedStake, address(ICoverageAgent(coverageAgent).asset()), address(IStrategy(strategy).underlyingToken())
+                );
+            
+            // Capture edge case rounding issues
+            if (totalAllocatedStakeValue > amount) {
+                revert ICoverageProvider.InsufficientCoverageAvailable(0);
+            }
+            revert ICoverageProvider.InsufficientCoverageAvailable(amount - totalAllocatedStakeValue);
+        }
     }
 }
 
