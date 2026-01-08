@@ -271,7 +271,7 @@ contract EigenTest is EigenTestDeployer {
         // Ensure we have at least 1 unit of claim amount
         claimAmountBps = bound(claimAmountBps, 1, 10000);
         uint256 claimAmount = (maxCoverage * claimAmountBps) / 10000;
-        
+
         // Ensure claimAmount is at least 1 to pass validation
         if (claimAmount == 0) {
             claimAmount = 1;
@@ -292,7 +292,7 @@ contract EigenTest is EigenTestDeployer {
         vm.startPrank(address(coverageAgent));
         // Approve enough tokens for the reward
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), reward);
-        
+
         // Track the expected claim ID (should be 0 for first claim in a fresh test)
         // Since each fuzz test run is independent, this will be the first claim
         uint256 expectedClaimId = 0;
@@ -315,7 +315,8 @@ contract EigenTest is EigenTestDeployer {
         // Setup with allocations
         _setupwithAllocations();
 
-        address[] memory strategies = eigenServiceManager.getAllocationedStrategies(address(operator), address(coverageAgent));
+        address[] memory strategies =
+            eigenServiceManager.getAllocationedStrategies(address(operator), address(coverageAgent));
         assertEq(strategies.length, 1);
         assertEq(strategies[0], address(_getTestStrategy()));
     }
@@ -329,17 +330,17 @@ contract EigenTest is EigenTestDeployer {
         address strategyAsset = address(_getTestStrategy().underlyingToken());
         address coverageAsset = address(coverageAgent.asset());
         uint256 claimAmount = 1000e6; // USDC
-        
+
         // The coverage calculation does: getQuote(allocatedStake, coverageAsset, strategyAsset)
         // This converts allocatedStake FROM coverageAsset TO strategyAsset
         // To find the stake that gives us exactly claimAmount coverage, we reverse it:
         // getQuote(claimAmount, strategyAsset, coverageAsset) gives us the stake amount
         (uint256 requiredStake,) = eigenPriceOracle.getQuote(claimAmount, strategyAsset, coverageAsset);
-        
+
         // Stake slightly less than required to trigger insufficient coverage error
         // Use 99% of required stake to ensure we're under the threshold
         uint256 stakeAmount = (requiredStake * 90) / 100;
-        
+
         _stakeAndDelegateToOperator(stakeAmount);
 
         // Create the position
@@ -365,7 +366,9 @@ contract EigenTest is EigenTestDeployer {
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
 
         vm.expectRevert(
-            abi.encodeWithSelector(ICoverageProvider.InsufficientCoverageAvailable.selector, claimAmount - coverageAllocated)
+            abi.encodeWithSelector(
+                ICoverageProvider.InsufficientCoverageAvailable.selector, claimAmount - coverageAllocated
+            )
         );
         eigenCoverageProvider.claimCoverage(positionId, claimAmount, 30 days, 10e6);
     }
@@ -379,21 +382,21 @@ contract EigenTest is EigenTestDeployer {
         address strategyAsset = address(_getTestStrategy().underlyingToken());
         address coverageAsset = address(coverageAgent.asset());
         uint256 claimAmount = 1000e6; // USDC
-        
+
         // Calculate the minimum stake needed to cover the claim amount
         (uint256 requiredStake,) = eigenPriceOracle.getQuote(claimAmount, strategyAsset, coverageAsset);
-        
+
         // Bound stakePercentBps to a reasonable range: 0-99% of required stake
         // This ensures we always have insufficient coverage
         // Using basis points: 0 = 0%, 9900 = 99%
         stakePercentBps = bound(stakePercentBps, 0, 9900);
         uint256 stakeAmount = (requiredStake * stakePercentBps) / 10000;
-        
+
         // Skip if stakeAmount is 0 (would cause issues with staking)
         if (stakeAmount < 1e3) {
             stakeAmount = 1e3;
         }
-        
+
         _stakeAndDelegateToOperator(stakeAmount);
 
         // Create the position
@@ -419,7 +422,9 @@ contract EigenTest is EigenTestDeployer {
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
 
         vm.expectRevert(
-            abi.encodeWithSelector(ICoverageProvider.InsufficientCoverageAvailable.selector, claimAmount - coverageAllocated)
+            abi.encodeWithSelector(
+                ICoverageProvider.InsufficientCoverageAvailable.selector, claimAmount - coverageAllocated
+            )
         );
         eigenCoverageProvider.claimCoverage(positionId, claimAmount, 30 days, 10e6);
     }

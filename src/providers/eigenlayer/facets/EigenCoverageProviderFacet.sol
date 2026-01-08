@@ -107,7 +107,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         external
         returns (uint256 claimId)
     {
-        if(amount == 0) revert InvalidAmount();
+        if (amount == 0) revert InvalidAmount();
 
         EigenCoveragePosition storage positionData = positions[positionId];
         if (msg.sender != positionData.data.coverageAgent) {

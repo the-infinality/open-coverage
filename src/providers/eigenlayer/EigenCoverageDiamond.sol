@@ -20,7 +20,6 @@ import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
 /// @dev Uses the diamond pattern with fallback-based selector routing.
 ///      All function calls are routed to the appropriate facet via delegatecall.
 contract EigenCoverageDiamond is Diamond, EigenCoverageStorage, AssetPriceOracleAndSwapperStorage {
-
     /// @notice Struct for initialization arguments
     struct DiamondArgs {
         address owner;
