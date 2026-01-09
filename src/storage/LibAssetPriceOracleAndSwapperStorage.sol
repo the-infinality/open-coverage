@@ -23,11 +23,7 @@ library LibAssetPriceOracleAndSwapperStorage {
 
     /// @notice Get the diamond storage for AssetPriceOracleAndSwapper
     /// @return ds Storage pointer
-    function assetPriceOracleAndSwapperStorage()
-        internal
-        pure
-        returns (AssetPriceOracleAndSwapperStorage storage ds)
-    {
+    function assetPriceOracleAndSwapperStorage() internal pure returns (AssetPriceOracleAndSwapperStorage storage ds) {
         bytes32 position = ASSET_PRICE_ORACLE_AND_SWAPPER_STORAGE_POSITION;
         assembly {
             ds.slot := position

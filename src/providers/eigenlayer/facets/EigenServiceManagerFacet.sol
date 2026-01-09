@@ -278,9 +278,11 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         if (wadToSlash > WAD) {
             (uint256 totalAllocatedStakeValue,) = IAssetPriceOracleAndSwapper(address(this))
                 .getQuote(
-                    totalAllocatedStake, address(ICoverageAgent(coverageAgent).asset()), address(IStrategy(strategy).underlyingToken())
+                    totalAllocatedStake,
+                    address(ICoverageAgent(coverageAgent).asset()),
+                    address(IStrategy(strategy).underlyingToken())
                 );
-            
+
             // Capture edge case rounding issues
             if (totalAllocatedStakeValue > amount) {
                 revert ICoverageProvider.InsufficientCoverageAvailable(0);

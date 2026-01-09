@@ -47,7 +47,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
 
         address[] memory redistributionRecipients = new address[](1);
         // Diamond receives slashed tokens to swap before forwarding back to coverage agent
-        redistributionRecipients[0] = address(this); 
+        redistributionRecipients[0] = address(this);
 
         IAllocationManager(_eigenAddresses.allocationManager)
             .createRedistributingOperatorSets(address(this), params, redistributionRecipients);
@@ -362,8 +362,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
             .slashOperator(eigenPosition.operator, eigenPosition.strategy, _position.coverageAgent, amount);
 
         // Swap the slashed strategy asset to the coverage agent's asset
-        IAssetPriceOracleAndSwapper(address(this)).
-            swapForOutput(amount, ICoverageAgent(_position.coverageAgent).asset(), _position.asset);
+        IAssetPriceOracleAndSwapper(address(this))
+            .swapForOutput(amount, ICoverageAgent(_position.coverageAgent).asset(), _position.asset);
 
         // Transfer swapped tokens to coverage agent
         bool success = IERC20(ICoverageAgent(_position.coverageAgent).asset()).transfer(_position.coverageAgent, amount);
@@ -379,7 +379,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         // If the closing strategy asset balance is less than the opening strategy asset balance then more than
         // the slashed amount was used to swap for the coverage agent's asset. This is unlikely but an edge case
         // that needs to be handled.
-        if(closingStrategyAssetBalance < openingStrategyAssetBalance) revert SlashFailed(claimId);
+        if (closingStrategyAssetBalance < openingStrategyAssetBalance) revert SlashFailed(claimId);
 
         // TODO: Redistribute any remaining amount of staked assets back to the operator as a reward
         // uint256 difference = closingStrategyAssetBalance - openingStrategyAssetBalance;

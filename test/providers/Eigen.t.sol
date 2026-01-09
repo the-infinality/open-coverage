@@ -644,11 +644,10 @@ contract EigenTest is EigenTestDeployer {
     /// @param slashCoordinator Address of slash coordinator (address(0) for direct slashing)
     /// @param refundable Refundable type for the position
     /// @return positionId The created position ID
-    function _setupSlashingPosition(
-        uint256 stakeAmount,
-        address slashCoordinator,
-        Refundable refundable
-    ) internal returns (uint256 positionId) {
+    function _setupSlashingPosition(uint256 stakeAmount, address slashCoordinator, Refundable refundable)
+        internal
+        returns (uint256 positionId)
+    {
         _setupwithAllocations();
         _stakeAndDelegateToOperator(stakeAmount);
 
@@ -691,12 +690,12 @@ contract EigenTest is EigenTestDeployer {
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), reward);
         claimId = eigenCoverageProvider.claimCoverage(positionId, claimAmount, duration, reward);
-        
+
         if (timeOffset > 0) {
             vm.warp(block.timestamp + timeOffset);
         }
         vm.stopPrank();
-        
+
         return claimId;
     }
 
@@ -705,11 +704,10 @@ contract EigenTest is EigenTestDeployer {
     /// @param claimAmount Amount of coverage to claim
     /// @param reward Reward amount for the coverage provider
     /// @return claimId The created claim ID
-    function _createAndApproveClaim(
-        uint256 positionId,
-        uint256 claimAmount,
-        uint256 reward
-    ) internal returns (uint256 claimId) {
+    function _createAndApproveClaim(uint256 positionId, uint256 claimAmount, uint256 reward)
+        internal
+        returns (uint256 claimId)
+    {
         return _createAndApproveClaim(positionId, claimAmount, 30 days, reward, 0);
     }
 
@@ -718,19 +716,18 @@ contract EigenTest is EigenTestDeployer {
     /// @param amounts Array of amounts to slash (must match claimIds length)
     /// @param timeOffset Optional time offset to warp before slashing (0 = no warp)
     /// @return statuses Array of slash statuses returned from slashClaims
-    function _executeSlash(
-        uint256[] memory claimIds,
-        uint256[] memory amounts,
-        uint256 timeOffset
-    ) internal returns (CoverageClaimStatus[] memory statuses) {
+    function _executeSlash(uint256[] memory claimIds, uint256[] memory amounts, uint256 timeOffset)
+        internal
+        returns (CoverageClaimStatus[] memory statuses)
+    {
         if (timeOffset > 0) {
             vm.warp(block.timestamp + timeOffset);
         }
-        
+
         vm.startPrank(address(coverageAgent));
         statuses = eigenCoverageProvider.slashClaims(claimIds, amounts);
         vm.stopPrank();
-        
+
         return statuses;
     }
 
@@ -738,10 +735,10 @@ contract EigenTest is EigenTestDeployer {
     /// @param claimIds Array of claim IDs to slash
     /// @param amounts Array of amounts to slash (must match claimIds length)
     /// @return statuses Array of slash statuses returned from slashClaims
-    function _executeSlash(
-        uint256[] memory claimIds,
-        uint256[] memory amounts
-    ) internal returns (CoverageClaimStatus[] memory statuses) {
+    function _executeSlash(uint256[] memory claimIds, uint256[] memory amounts)
+        internal
+        returns (CoverageClaimStatus[] memory statuses)
+    {
         return _executeSlash(claimIds, amounts, 0);
     }
 
@@ -764,7 +761,7 @@ contract EigenTest is EigenTestDeployer {
     function test_slashClaims() public {
         uint256 positionId = _setupSlashingPosition(1000e18);
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
-        
+
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 10e6);
         _executeSlash(claimIds, amounts);
 
@@ -886,8 +883,7 @@ contract EigenTest is EigenTestDeployer {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                ICoverageProvider.TimestampInvalid.selector, 
-                eigenCoverageProvider.claim(claimId).createdAt + 30 days
+                ICoverageProvider.TimestampInvalid.selector, eigenCoverageProvider.claim(claimId).createdAt + 30 days
             )
         );
         _executeSlash(claimIds, amounts, 31 days);
@@ -901,9 +897,7 @@ contract EigenTest is EigenTestDeployer {
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1001e6);
 
         vm.expectRevert(
-            abi.encodeWithSelector(
-                ICoverageProvider.SlashAmountExceedsClaim.selector, claimId, 1001e6, 1000e6
-            )
+            abi.encodeWithSelector(ICoverageProvider.SlashAmountExceedsClaim.selector, claimId, 1001e6, 1000e6)
         );
         _executeSlash(claimIds, amounts, 15 days);
     }
