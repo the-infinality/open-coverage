@@ -210,7 +210,7 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         // Calculate exchange rate: how much base per unit of quote
         // Then multiply by amountIn to get the final quote
         // Use checked math to prevent overflow
-        amountOut = (unitAmountOut * amountIn) / unitAmount;
+        amountOut = unitAmountOut * amountIn / unitAmount;
     }
 
     function onInit(bytes memory poolInfo) external {

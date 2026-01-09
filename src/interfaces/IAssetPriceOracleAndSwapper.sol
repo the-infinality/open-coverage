@@ -57,13 +57,13 @@ interface IAssetPriceOracleAndSwapper {
     /// @param amountOut The exact amount of `assetA` tokens to receive
     /// @param assetA The asset to receive (output/base)
     /// @param assetB The asset to spend (input/swap)
-    function swapForOutput(uint128 amountOut, address assetA, address assetB) external;
+    function swapForOutput(uint256 amountOut, address assetA, address assetB) external;
 
     /// @notice Swaps an exact amount of input tokens
     /// @param amountIn The exact amount of `assetB` tokens to spend
     /// @param assetA The asset to receive (output/base)
     /// @param assetB The asset to spend (input/swap)
-    function swapForInput(uint128 amountIn, address assetA, address assetB) external;
+    function swapForInput(uint256 amountIn, address assetA, address assetB) external;
 
     /// @notice Sets the swap slippage
     /// @param swapSlippage_ The swap slippage in basis points i.e. 1 = 0.01%
@@ -95,7 +95,7 @@ interface IAssetPriceOracleAndSwapper {
     /// @param assetA The asset to receive (output/base)
     /// @param assetB The asset to spend (input/swap)
     /// @return maxAmountIn The maximum amount of `assetB` tokens that can be spent
-    function swapForOutputQuote(uint128 amountOut, address assetA, address assetB)
+    function swapForOutputQuote(uint256 amountOut, address assetA, address assetB)
         external
         view
         returns (uint256 maxAmountIn);
@@ -105,7 +105,7 @@ interface IAssetPriceOracleAndSwapper {
     /// @param assetA The asset to receive (output/base)
     /// @param assetB The asset to spend (input/swap)
     /// @return minAmountOut The minimum amount of `assetA` tokens that can be received
-    function swapForInputQuote(uint128 amountIn, address assetA, address assetB)
+    function swapForInputQuote(uint256 amountIn, address assetA, address assetB)
         external
         view
         returns (uint256 minAmountOut);

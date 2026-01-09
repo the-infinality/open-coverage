@@ -269,8 +269,8 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
             )[0][0];
 
         // Convert amount to strategy asset and calculate proportion
-        (uint256 requiredSlashAmount,) = IAssetPriceOracleAndSwapper(address(this))
-            .getQuote(
+        uint256 requiredSlashAmount = IAssetPriceOracleAndSwapper(address(this))
+            .swapForOutputQuote(
                 amount, address(IStrategy(strategy).underlyingToken()), address(ICoverageAgent(coverageAgent).asset())
             );
         wadToSlash = (requiredSlashAmount * WAD) / totalAllocatedStake;
