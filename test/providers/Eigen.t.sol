@@ -26,6 +26,7 @@ import {UniswapAddressbook} from "utils/UniswapHelper.sol";
 import {ISwapperEngine} from "src/interfaces/ISwapperEngine.sol";
 import {PriceStrategy, AssetPair} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
+import {ISlashCoordinator, SlashStatus} from "src/interfaces/ISlashCoordinator.sol";
 
 contract EigenTest is EigenTestDeployer {
     IEigenOperatorProxy public operator;
@@ -636,12 +637,215 @@ contract EigenTest is EigenTestDeployer {
         assertEq(distributionStartTime, toRewardsInterval(block.timestamp - 25 days));
     }
 
-    function test_slashClaims() public {
-        _setupwithAllocations();
+    // ============ Slashing Test Helper Functions ============
 
+    /// @notice Sets up a slashing test: allocations, staking, and position creation
+    /// @param stakeAmount Amount to stake and delegate to operator
+    /// @param slashCoordinator Address of slash coordinator (address(0) for direct slashing)
+    /// @param refundable Refundable type for the position
+    /// @return positionId The created position ID
+    function _setupSlashingPosition(
+        uint256 stakeAmount,
+        address slashCoordinator,
+        Refundable refundable
+    ) internal returns (uint256 positionId) {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(stakeAmount);
+
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: refundable,
+            slashCoordinator: slashCoordinator
+        });
+        bytes memory additionalData = abi.encode(
+            CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
+        );
+        positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+    }
+
+    /// @notice Sets up a slashing test with default parameters (no coordinator, Refundable.None)
+    /// @param stakeAmount Amount to stake and delegate to operator
+    /// @return positionId The created position ID
+    function _setupSlashingPosition(uint256 stakeAmount) internal returns (uint256 positionId) {
+        return _setupSlashingPosition(stakeAmount, address(0), Refundable.None);
+    }
+
+    /// @notice Creates a claim and approves tokens for reward payment
+    /// @param positionId The position ID to create claim for
+    /// @param claimAmount Amount of coverage to claim
+    /// @param duration Duration of the coverage claim
+    /// @param reward Reward amount for the coverage provider
+    /// @param timeOffset Optional time offset to warp after claim creation (0 = no warp)
+    /// @return claimId The created claim ID
+    function _createAndApproveClaim(
+        uint256 positionId,
+        uint256 claimAmount,
+        uint256 duration,
+        uint256 reward,
+        uint256 timeOffset
+    ) internal returns (uint256 claimId) {
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), reward);
+        claimId = eigenCoverageProvider.claimCoverage(positionId, claimAmount, duration, reward);
+        
+        if (timeOffset > 0) {
+            vm.warp(block.timestamp + timeOffset);
+        }
+        vm.stopPrank();
+        
+        return claimId;
+    }
+
+    /// @notice Creates a claim with default duration (30 days) and no time warp
+    /// @param positionId The position ID to create claim for
+    /// @param claimAmount Amount of coverage to claim
+    /// @param reward Reward amount for the coverage provider
+    /// @return claimId The created claim ID
+    function _createAndApproveClaim(
+        uint256 positionId,
+        uint256 claimAmount,
+        uint256 reward
+    ) internal returns (uint256 claimId) {
+        return _createAndApproveClaim(positionId, claimAmount, 30 days, reward, 0);
+    }
+
+    /// @notice Executes slashing for given claim IDs and amounts
+    /// @param claimIds Array of claim IDs to slash
+    /// @param amounts Array of amounts to slash (must match claimIds length)
+    /// @param timeOffset Optional time offset to warp before slashing (0 = no warp)
+    /// @return statuses Array of slash statuses returned from slashClaims
+    function _executeSlash(
+        uint256[] memory claimIds,
+        uint256[] memory amounts,
+        uint256 timeOffset
+    ) internal returns (CoverageClaimStatus[] memory statuses) {
+        if (timeOffset > 0) {
+            vm.warp(block.timestamp + timeOffset);
+        }
+        
+        vm.startPrank(address(coverageAgent));
+        statuses = eigenCoverageProvider.slashClaims(claimIds, amounts);
+        vm.stopPrank();
+        
+        return statuses;
+    }
+
+    /// @notice Executes slashing with no time warp
+    /// @param claimIds Array of claim IDs to slash
+    /// @param amounts Array of amounts to slash (must match claimIds length)
+    /// @return statuses Array of slash statuses returned from slashClaims
+    function _executeSlash(
+        uint256[] memory claimIds,
+        uint256[] memory amounts
+    ) internal returns (CoverageClaimStatus[] memory statuses) {
+        return _executeSlash(claimIds, amounts, 0);
+    }
+
+    /// @notice Helper to create claimIds and amounts arrays for a single claim
+    /// @param claimId The claim ID to slash
+    /// @param amount The amount to slash
+    /// @return claimIds Array with single claim ID
+    /// @return amounts Array with single amount
+    function _prepareSingleSlash(uint256 claimId, uint256 amount)
+        internal
+        pure
+        returns (uint256[] memory claimIds, uint256[] memory amounts)
+    {
+        claimIds = new uint256[](1);
+        amounts = new uint256[](1);
+        claimIds[0] = claimId;
+        amounts[0] = amount;
+    }
+
+    function test_slashClaims() public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+        
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 10e6);
+        _executeSlash(claimIds, amounts);
+
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
+    }
+
+    // ============ Comprehensive Slashing Flow Tests ============
+
+    /// @notice Test slashing a claim with partial amount
+    function test_slashClaims_partialAmount() public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 500e6);
+        CoverageClaimStatus[] memory statuses = _executeSlash(claimIds, amounts);
+
+        assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.Slashed));
+        assertEq(eigenCoverageDiamond.claimSlashAmounts(claimId), 500e6);
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
+    }
+
+    /// @notice Test slashing multiple claims at once
+    function test_slashClaims_multipleClaims() public {
+        deal(rETH, staker, 2000e18);
+        uint256 positionId = _setupSlashingPosition(2000e18);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 20e6);
+        uint256 claimId1 = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
+        uint256 claimId2 = eigenCoverageProvider.claimCoverage(positionId, 500e6, 30 days, 5e6);
+        vm.stopPrank();
+
+        uint256[] memory claimIds = new uint256[](2);
+        uint256[] memory amounts = new uint256[](2);
+        claimIds[0] = claimId1;
+        claimIds[1] = claimId2;
+        amounts[0] = 1000e6;
+        amounts[1] = 500e6;
+
+        CoverageClaimStatus[] memory statuses = _executeSlash(claimIds, amounts);
+
+        assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.Slashed));
+        assertEq(uint8(statuses[1]), uint8(CoverageClaimStatus.Slashed));
+        assertEq(uint8(eigenCoverageProvider.claim(claimId1).status), uint8(CoverageClaimStatus.Slashed));
+        assertEq(uint8(eigenCoverageProvider.claim(claimId2).status), uint8(CoverageClaimStatus.Slashed));
+    }
+
+    /// @notice Test slashing with exact claim amount
+    function test_slashClaims_exactAmount() public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1000e6);
+        CoverageClaimStatus[] memory statuses = _executeSlash(claimIds, amounts);
+
+        assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.Slashed));
+        assertEq(eigenCoverageDiamond.claimSlashAmounts(claimId), 1000e6);
+    }
+
+    /// @notice Test that slashing transfers tokens to coverage agent
+    function test_slashClaims_tokenTransfer() public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        uint256 initialBalance = IERC20(coverageAgent.asset()).balanceOf(address(coverageAgent));
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1000e6);
+        _executeSlash(claimIds, amounts);
+
+        uint256 finalBalance = IERC20(coverageAgent.asset()).balanceOf(address(coverageAgent));
+        // The coverage agent should receive the slashed amount (1000e6 USDC)
+        // Account for potential swap slippage - allow 1% tolerance
+        uint256 expectedMinBalance = initialBalance + (1000e6 * 99) / 100;
+        assertGe(finalBalance, expectedMinBalance);
+    }
+
+    /// @notice Test slashing immediately after claim creation should succeed
+    /// @dev The code allows slashing at any time during the coverage period (createdAt <= block.timestamp <= createdAt + duration)
+    function test_slashClaims_immediatelyAfterCreation() public {
+        _setupwithAllocations();
         _stakeAndDelegateToOperator(1000e18);
 
-        // Create the position
         CoveragePosition memory data = CoveragePosition({
             coverageAgent: address(coverageAgent),
             minRate: 100,
@@ -656,18 +860,269 @@ contract EigenTest is EigenTestDeployer {
         );
         uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
 
-        uint256[] memory claimIds = new uint256[](1);
-        uint256[] memory amounts = new uint256[](1);
-
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
         uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
 
+        // Slash immediately after creation (should succeed)
+        uint256[] memory claimIds = new uint256[](1);
+        uint256[] memory amounts = new uint256[](1);
         claimIds[0] = claimId;
-        amounts[0] = 10e6;
-        eigenCoverageProvider.slashClaims(claimIds, amounts);
+        amounts[0] = 1000e6;
+
+        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts);
         vm.stopPrank();
 
+        assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.Slashed));
         assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
+    }
+
+    /// @notice Test slashing after duration elapsed should revert
+    function test_RevertWhen_slashClaims_afterDuration() public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1000e6);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ICoverageProvider.TimestampInvalid.selector, 
+                eigenCoverageProvider.claim(claimId).createdAt + 30 days
+            )
+        );
+        _executeSlash(claimIds, amounts, 31 days);
+    }
+
+    /// @notice Test slashing with amount exceeding claim should revert
+    function test_RevertWhen_slashClaims_amountExceedsClaim() public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 30 days, 10e6, 0);
+
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1001e6);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ICoverageProvider.SlashAmountExceedsClaim.selector, claimId, 1001e6, 1000e6
+            )
+        );
+        _executeSlash(claimIds, amounts, 15 days);
+    }
+
+    /// @notice Test slashing with invalid claim status should revert
+    function test_RevertWhen_slashClaims_invalidStatus() public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 30 days, 10e6, 31 days);
+
+        vm.startPrank(address(coverageAgent));
+        eigenCoverageProvider.completeClaims(claimId);
+        vm.stopPrank();
+
+        // Try to slash a completed claim
+        vm.warp(block.timestamp - 1 days); // Go back to within duration window
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1000e6);
+
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId));
+        _executeSlash(claimIds, amounts);
+    }
+
+    /// @notice Test slashing from non-coverage-agent should revert
+    function test_RevertWhen_slashClaims_notCoverageAgent() public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        vm.warp(block.timestamp + 15 days);
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1000e6);
+
+        address attacker = makeAddr("attacker");
+        vm.startPrank(attacker);
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.NotCoverageAgent.selector, attacker, address(coverageAgent))
+        );
+        eigenCoverageProvider.slashClaims(claimIds, amounts);
+        vm.stopPrank();
+    }
+
+    /// @notice Fuzz test for slashing with various amounts
+    /// @param slashAmountBps The slash amount as percentage of claim amount in basis points (1-10000)
+    function testFuzz_slashClaims_variousAmounts(uint256 slashAmountBps) public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        uint256 claimAmount = 1000e6;
+        uint256 claimId = _createAndApproveClaim(positionId, claimAmount, 10e6);
+
+        // Bound slash amount to 1-100% of claim amount
+        slashAmountBps = bound(slashAmountBps, 1, 10000);
+        uint256 slashAmount = (claimAmount * slashAmountBps) / 10000;
+        if (slashAmount == 0) {
+            slashAmount = 1;
+        }
+
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, slashAmount);
+        CoverageClaimStatus[] memory statuses = _executeSlash(claimIds, amounts, 15 days);
+
+        assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.Slashed));
+        assertEq(eigenCoverageDiamond.claimSlashAmounts(claimId), slashAmount);
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
+    }
+
+    /// @notice Fuzz test for slashing timing (within valid window)
+    /// @param timeOffset The time offset from claim creation in seconds (must be within duration)
+    function testFuzz_slashClaims_timing(uint256 timeOffset) public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        uint256 duration = 30 days;
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, duration, 10e6, 0);
+        uint256 createdAt = eigenCoverageProvider.claim(claimId).createdAt;
+
+        // Bound time offset to be within valid slashing window (after creation, before duration ends)
+        timeOffset = bound(timeOffset, 1, duration);
+
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1000e6);
+        // Warp to the correct time based on createdAt
+        vm.warp(createdAt + timeOffset);
+        CoverageClaimStatus[] memory statuses = _executeSlash(claimIds, amounts);
+
+        assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.Slashed));
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
+    }
+
+    /// @notice Fuzz test for multiple claims slashing with various amounts
+    /// @param numClaims Number of claims to create and slash (1-10)
+    function testFuzz_slashClaims_multipleClaims(uint256 numClaims) public {
+        deal(rETH, staker, 10000e18);
+        uint256 positionId = _setupSlashingPosition(10000e18);
+
+        numClaims = bound(numClaims, 1, 10);
+        uint256[] memory claimIds = new uint256[](numClaims);
+        uint256[] memory amounts = new uint256[](numClaims);
+
+        // Calculate total reward needed (sum of all rewards)
+        uint256 totalReward = 0;
+        for (uint256 i = 0; i < numClaims; i++) {
+            totalReward += (10e6 + (i * 1e6));
+        }
+
+        // Ensure coverage agent has enough tokens
+        deal(coverageAgent.asset(), address(coverageAgent), totalReward);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), totalReward);
+
+        // Create multiple claims
+        for (uint256 i = 0; i < numClaims; i++) {
+            uint256 claimAmount = 1000e6 + (i * 100e6); // Varying amounts
+            uint256 reward = 10e6 + (i * 1e6);
+            claimIds[i] = eigenCoverageProvider.claimCoverage(positionId, claimAmount, 30 days, reward);
+            amounts[i] = claimAmount; // Slash full amount
+        }
+        vm.stopPrank();
+
+        CoverageClaimStatus[] memory statuses = _executeSlash(claimIds, amounts, 15 days);
+
+        // Verify all claims are slashed
+        for (uint256 i = 0; i < numClaims; i++) {
+            assertEq(uint8(statuses[i]), uint8(CoverageClaimStatus.Slashed));
+            assertEq(uint8(eigenCoverageProvider.claim(claimIds[i]).status), uint8(CoverageClaimStatus.Slashed));
+            assertEq(eigenCoverageDiamond.claimSlashAmounts(claimIds[i]), amounts[i]);
+        }
+    }
+
+    /// @notice Test slashing with slash coordinator (pending -> complete flow)
+    function test_slashClaims_withCoordinator() public {
+        MockSlashCoordinator coordinator = new MockSlashCoordinator();
+        uint256 positionId = _setupSlashingPosition(1000e18, address(coordinator), Refundable.None);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1000e6);
+        CoverageClaimStatus[] memory statuses = _executeSlash(claimIds, amounts, 15 days);
+
+        assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.PendingSlash));
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.PendingSlash));
+        assertEq(eigenCoverageDiamond.claimSlashAmounts(claimId), 1000e6);
+
+        // Complete the slash through coordinator
+        coordinator.setStatus(claimId, SlashStatus.Completed);
+        eigenCoverageProvider.completeSlash(claimId);
+
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
+    }
+
+    /// @notice Test completeSlash with invalid status should revert
+    function test_RevertWhen_completeSlash_invalidStatus() public {
+        MockSlashCoordinator coordinator = new MockSlashCoordinator();
+        uint256 positionId = _setupSlashingPosition(1000e18, address(coordinator), Refundable.None);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        // Try to complete slash without initiating it first
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId));
+        eigenCoverageProvider.completeSlash(claimId);
+    }
+
+    /// @notice Test completeSlash with coordinator status not completed should revert
+    function test_RevertWhen_completeSlash_coordinatorNotCompleted() public {
+        MockSlashCoordinator coordinator = new MockSlashCoordinator();
+        uint256 positionId = _setupSlashingPosition(1000e18, address(coordinator), Refundable.None);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1000e6);
+        _executeSlash(claimIds, amounts, 15 days);
+
+        // Coordinator status is still Pending
+        assertEq(uint8(coordinator.status(claimId)), uint8(SlashStatus.Pending));
+
+        // Try to complete slash
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.SlashFailed.selector, claimId));
+        eigenCoverageProvider.completeSlash(claimId);
+    }
+
+    /// @notice Test that slashing updates claim status correctly
+    function test_slashClaims_statusUpdate() public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        // Verify initial status
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Issued));
+
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1000e6);
+        _executeSlash(claimIds, amounts, 15 days);
+
+        // Verify status updated to Slashed
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
+    }
+
+    /// @notice Test that slashing cannot be done twice on the same claim
+    function test_RevertWhen_slashClaims_alreadySlashed() public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1000e6);
+        _executeSlash(claimIds, amounts, 15 days);
+
+        // Second slash should fail
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId));
+        _executeSlash(claimIds, amounts);
+    }
+}
+
+// ============ Mock Slash Coordinator ============
+
+contract MockSlashCoordinator is ISlashCoordinator {
+    mapping(uint256 => SlashStatus) private _statuses;
+
+    function initiateSlash(uint256 claimId, uint256) external returns (SlashStatus) {
+        _statuses[claimId] = SlashStatus.Pending;
+        emit SlashRequested(claimId, 0);
+        return SlashStatus.Pending;
+    }
+
+    function status(uint256 claimId) external view returns (SlashStatus) {
+        return _statuses[claimId];
+    }
+
+    function setStatus(uint256 claimId, SlashStatus _status) external {
+        _statuses[claimId] = _status;
+        if (_status == SlashStatus.Completed) {
+            emit SlashCompleted(claimId, 0);
+        } else if (_status == SlashStatus.Failed) {
+            emit SlashFailed(claimId);
+        }
     }
 }

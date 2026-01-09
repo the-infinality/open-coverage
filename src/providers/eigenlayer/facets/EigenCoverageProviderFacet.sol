@@ -197,6 +197,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
                 _initiateSlash(claimIds[i], amounts[i]);
             } else {
                 slashStatuses[i] = CoverageClaimStatus.PendingSlash;
+                _claim.status = CoverageClaimStatus.PendingSlash;
                 ISlashCoordinator(_position.data.slashCoordinator).initiateSlash(claimIds[i], amounts[i]);
                 emit ClaimSlashPending(claimIds[i], _position.data.slashCoordinator);
             }
