@@ -6,7 +6,6 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/EnumerableMap.sol";
 import {IAllocationManager, IAllocationManagerTypes} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
-import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
 import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermissionController.sol";
 import {Refundable} from "src/interfaces/ICoverageProvider.sol";
 import {CoverageAgentAlreadyRegistered, NotOperatorAuthorized, InvalidAsset} from "../Errors.sol";
@@ -226,8 +225,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     function positionMaxAmount(uint256 positionId) external view returns (uint256 maxAmount) {
         EigenCoveragePosition memory _position = positions[positionId];
 
-        uint256 allocatedCoverage =
-            _totalAllocatedValueToCoverageAgent(_position.operator, _position.strategy, _position.data.coverageAgent);
+        uint256 allocatedCoverage = IEigenServiceManager(address(this))
+            .coverageAllocated(_position.operator, _position.strategy, _position.data.coverageAgent);
         uint256 totalCoverageByOperator =
             _totalCoverageByOperatorStrategy(_position.operator, _position.strategy, _position.data.coverageAgent);
         if (allocatedCoverage > totalCoverageByOperator) {
@@ -285,7 +284,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         view
         returns (uint256 deficit)
     {
-        uint256 totalAllocatedCoverage = _totalAllocatedValueToCoverageAgent(operator, strategy, coverageAgent);
+        uint256 totalAllocatedCoverage =
+            IEigenServiceManager(address(this)).coverageAllocated(operator, strategy, coverageAgent);
         uint256 totalCoverageByOperator = _totalCoverageByOperatorStrategy(operator, strategy, coverageAgent);
 
         if (totalAllocatedCoverage < totalCoverageByOperator) {
@@ -304,28 +304,6 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
             return value;
         }
         return 0;
-    }
-
-    /// @notice Returns the total coverage allocated to a coverage agent for a strategy in the operators asset
-    function _totalAllocatedValueToCoverageAgent(address operator, address strategy, address coverageAgent)
-        private
-        view
-        returns (uint256 total)
-    {
-        address[] memory _operators = new address[](1);
-        _operators[0] = operator;
-        IStrategy[] memory strategies = new IStrategy[](1);
-        strategies[0] = IStrategy(strategy);
-        address strategyAsset = address(IStrategy(strategy).underlyingToken());
-        address coverageAsset = address(ICoverageAgent(coverageAgent).asset());
-        uint256[][] memory allocatedStake = IAllocationManager(_eigenAddresses.allocationManager)
-            .getAllocatedStake(
-                OperatorSet({avs: address(this), id: coverageAgentToOperatorSetId[coverageAgent]}),
-                _operators,
-                strategies
-            );
-        (total,) =
-            IAssetPriceOracleAndSwapper(address(this)).getQuote(allocatedStake[0][0], coverageAsset, strategyAsset);
     }
 
     function _registerPosition(
