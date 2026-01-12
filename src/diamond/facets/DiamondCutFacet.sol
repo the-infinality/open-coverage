@@ -7,7 +7,11 @@ import {LibDiamond} from "../libraries/LibDiamond.sol";
 /// @title DiamondCutFacet
 /// @author EIP-2535 Diamonds
 /// @notice Facet for adding/replacing/removing diamond functions
-/// @dev Implements IDiamondCut interface
+/// @dev Implements IDiamondCut interface as specified in EIP-2535.
+///      This facet provides the diamondCut function which allows adding, replacing,
+///      or removing functions atomically. Access to this function must be carefully
+///      restricted (typically to contract owner) as it allows arbitrary execution.
+///      See https://eips.ethereum.org/EIPS/eip-2535
 contract DiamondCutFacet is IDiamondCut {
     /// @inheritdoc IDiamondCut
     /// @dev Only callable by the contract owner
