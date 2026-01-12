@@ -20,8 +20,6 @@ import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSw
 import {EigenCoverageStorage, ClaimRewardDistribution} from "../EigenCoverageStorage.sol";
 import {WAD} from "eigenlayer-contracts/libraries/SlashingLib.sol";
 
-import {console2} from "forge-std/console2.sol";
-
 /// @title EigenServiceManagerFacet
 /// @author p-dealwis, Infinality
 /// @notice Facet contract implementing IEigenServiceManager interface
@@ -79,8 +77,6 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         external
         returns (uint256 amount, uint32 resolvedDuration, uint32 resolvedDistributionStartTime)
     {
-        IRewardsCoordinator rewardsCoordinator = IRewardsCoordinator(_eigenAddresses.rewardsCoordinator);
-
         CoverageClaim memory _claim = claims[claimId];
         EigenCoveragePosition memory _position = positions[_claim.positionId];
         ClaimRewardDistribution memory _claimRewardDistribution = claimRewardDistributions[claimId];

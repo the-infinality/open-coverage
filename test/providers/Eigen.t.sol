@@ -771,10 +771,42 @@ contract EigenTest is EigenTestDeployer {
         uint256 positionId = _setupSlashingPosition(1000e18);
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
 
-        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 10e6);
+        // Get asset addresses
+        address coverageAsset = coverageAgent.asset();
+        address positionAsset = eigenCoverageProvider.position(positionId).asset;
+
+        // Check balances before slashing
+        uint256 contractCoverageBalanceBefore = IERC20(coverageAsset).balanceOf(address(eigenCoverageDiamond));
+        uint256 coverageAgentBalanceBefore = IERC20(coverageAsset).balanceOf(address(coverageAgent));
+        uint256 contractPositionBalanceBefore = IERC20(positionAsset).balanceOf(address(eigenCoverageDiamond));
+
+        uint256 slashAmount = 10e6;
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, slashAmount);
         _executeSlash(claimIds, amounts);
 
         assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
+        assertEq(eigenCoverageDiamond.claimSlashAmounts(claimId), slashAmount);
+
+        // Verify coverage agent receives exactly the slashed amount
+        assertEq(
+            IERC20(coverageAsset).balanceOf(address(coverageAgent)) - coverageAgentBalanceBefore,
+            slashAmount,
+            "Coverage agent should receive exact slashed amount"
+        );
+
+        // Verify contract coverage asset balance returns to baseline (tokens transferred out)
+        assertEq(
+            IERC20(coverageAsset).balanceOf(address(eigenCoverageDiamond)),
+            contractCoverageBalanceBefore,
+            "Contract should transfer out all slashed coverage tokens"
+        );
+
+        // Verify position asset balance returns to baseline (no tokens left over)
+        assertEq(
+            IERC20(positionAsset).balanceOf(address(eigenCoverageDiamond)),
+            contractPositionBalanceBefore,
+            "No position asset should remain after conversion to coverage asset"
+        );
     }
 
     // ============ Comprehensive Slashing Flow Tests ============
@@ -948,16 +980,27 @@ contract EigenTest is EigenTestDeployer {
     /// @notice Fuzz test for slashing with various amounts
     /// @param slashAmountBps The slash amount as percentage of claim amount in basis points (1-10000)
     function testFuzz_slashClaims_variousAmounts(uint256 slashAmountBps) public {
-        uint256 positionId = _setupSlashingPosition(1000e18);
+        // Bound early to skip invalid cases before expensive setup
+        slashAmountBps = bound(slashAmountBps, 1, 10000);
+        
+        // Use smaller stake amount for faster setup (still sufficient for 1000e6 claim)
+        uint256 positionId = _setupSlashingPosition(100e18);
         uint256 claimAmount = 1000e6;
         uint256 claimId = _createAndApproveClaim(positionId, claimAmount, 10e6);
 
-        // Bound slash amount to 1-100% of claim amount
-        slashAmountBps = bound(slashAmountBps, 1, 10000);
         uint256 slashAmount = (claimAmount * slashAmountBps) / 10000;
         if (slashAmount == 0) {
             slashAmount = 1;
         }
+
+        // Get asset addresses
+        address coverageAsset = coverageAgent.asset();
+        address positionAsset = eigenCoverageProvider.position(positionId).asset;
+
+        // Check balances before slashing
+        uint256 contractCoverageBalanceBefore = IERC20(coverageAsset).balanceOf(address(eigenCoverageDiamond));
+        uint256 coverageAgentBalanceBefore = IERC20(coverageAsset).balanceOf(address(coverageAgent));
+        uint256 contractPositionBalanceBefore = IERC20(positionAsset).balanceOf(address(eigenCoverageDiamond));
 
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, slashAmount);
         CoverageClaimStatus[] memory statuses = _executeSlash(claimIds, amounts, 15 days);
@@ -965,18 +1008,40 @@ contract EigenTest is EigenTestDeployer {
         assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.Slashed));
         assertEq(eigenCoverageDiamond.claimSlashAmounts(claimId), slashAmount);
         assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
+        
+        // Verify coverage agent receives exactly the slashed amount
+        assertEq(
+            IERC20(coverageAsset).balanceOf(address(coverageAgent)) - coverageAgentBalanceBefore,
+            slashAmount,
+            "Coverage agent should receive exact slashed amount"
+        );
+        
+        // Verify contract coverage asset balance returns to baseline (tokens transferred out)
+        assertEq(
+            IERC20(coverageAsset).balanceOf(address(eigenCoverageDiamond)),
+            contractCoverageBalanceBefore,
+            "Contract should transfer out all slashed coverage tokens"
+        );
+        
+        // Verify position asset balance returns to baseline (no tokens left over)
+        assertEq(
+            IERC20(positionAsset).balanceOf(address(eigenCoverageDiamond)),
+            contractPositionBalanceBefore,
+            "No position asset should remain after conversion to coverage asset"
+        );
     }
 
     /// @notice Fuzz test for slashing timing (within valid window)
     /// @param timeOffset The time offset from claim creation in seconds (must be within duration)
     function testFuzz_slashClaims_timing(uint256 timeOffset) public {
-        uint256 positionId = _setupSlashingPosition(1000e18);
         uint256 duration = 30 days;
+        // Bound early to skip invalid cases before expensive setup
+        timeOffset = bound(timeOffset, 1, duration);
+        
+        // Use smaller stake amount for faster setup (still sufficient for 1000e6 claim)
+        uint256 positionId = _setupSlashingPosition(100e18);
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, duration, 10e6, 0);
         uint256 createdAt = eigenCoverageProvider.claim(claimId).createdAt;
-
-        // Bound time offset to be within valid slashing window (after creation, before duration ends)
-        timeOffset = bound(timeOffset, 1, duration);
 
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1000e6);
         // Warp to the correct time based on createdAt
@@ -990,10 +1055,13 @@ contract EigenTest is EigenTestDeployer {
     /// @notice Fuzz test for multiple claims slashing with various amounts
     /// @param numClaims Number of claims to create and slash (1-10)
     function testFuzz_slashClaims_multipleClaims(uint256 numClaims) public {
-        deal(rETH, staker, 10000e18);
-        uint256 positionId = _setupSlashingPosition(10000e18);
-
+        // Bound early to skip invalid cases before expensive setup
         numClaims = bound(numClaims, 1, 10);
+        
+        // Calculate required stake: max claim is 1000e6 + (9 * 100e6) = 1900e6, use 2000e18 stake
+        uint256 maxStakeNeeded = 2000e18;
+        deal(rETH, staker, maxStakeNeeded);
+        uint256 positionId = _setupSlashingPosition(maxStakeNeeded);
         uint256[] memory claimIds = new uint256[](numClaims);
         uint256[] memory amounts = new uint256[](numClaims);
 

@@ -24,6 +24,7 @@ import {ICoverageAgent} from "src/interfaces/ICoverageAgent.sol";
 import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {EigenCoverageStorage, ClaimRewardDistribution} from "../EigenCoverageStorage.sol";
 import {ISlashCoordinator, SlashStatus} from "src/interfaces/ISlashCoordinator.sol";
+import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
 
 /// @title EigenCoverageProviderFacet
 /// @author p-dealwis, Infinality
@@ -355,12 +356,28 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         uint256 closingStrategyAssetBalance = IERC20(strategyAsset).balanceOf(address(this));
 
         // If the closing strategy asset balance is less than the opening strategy asset balance then more than
-        // the slashed amount was used to swap for the coverage agent's asset. This is unlikely but an edge case
+        // the slashed amount was used to swap for the coverage agent's asset. This is unlikely but is stil an edge case
         // that needs to be handled.
         if (closingStrategyAssetBalance < openingStrategyAssetBalance) revert SlashFailed(claimId);
 
-        // TODO: Redistribute any remaining amount of staked assets back to the operator as a reward
-        // uint256 difference = closingStrategyAssetBalance - openingStrategyAssetBalance;
+        // Redistribute any remaining amount of staked assets back to the operator as a reward
+        uint256 difference = closingStrategyAssetBalance - openingStrategyAssetBalance;
+        
+        if (difference > 0) {
+            IRewardsCoordinator rewardsCoordinator = IRewardsCoordinator(_eigenAddresses.rewardsCoordinator);
+            uint32 calculationInterval = rewardsCoordinator.CALCULATION_INTERVAL_SECONDS();
+            
+            // Pass 0 for startTimestamp to auto-calculate using the next interval
+            IEigenServiceManager(address(this)).submitOperatorReward(
+                eigenPosition.operator,
+                IStrategy(eigenPosition.strategy),
+                IERC20(strategyAsset),
+                difference,
+                0, // Auto-calculate startTimestamp
+                calculationInterval,
+                "Slash Refund"
+            );
+        }
     }
 
     function _checkOperatorPermissions(address operator, address target, bytes4 selector) private returns (bool) {
