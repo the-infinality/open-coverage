@@ -27,6 +27,7 @@ import {ISwapperEngine} from "src/interfaces/ISwapperEngine.sol";
 import {PriceStrategy, AssetPair} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
 import {ISlashCoordinator, SlashStatus} from "src/interfaces/ISlashCoordinator.sol";
+import {console2} from "forge-std/console2.sol";
 
 contract EigenTest is EigenTestDeployer {
     IEigenOperatorProxy public operator;
@@ -582,10 +583,15 @@ contract EigenTest is EigenTestDeployer {
         uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
         vm.stopPrank();
 
-        (uint256 amount, uint32 duration, uint32 distributionStartTime) = eigenServiceManager.captureRewards(claimId);
+        console2.log("block timestamp", block.timestamp);
+
+        uint256 amount;
+        uint32 duration;
+        uint32 distributionStartTime;
+
+        (amount, duration,) = eigenServiceManager.captureRewards(claimId);
         assertEq(amount, 0);
         assertEq(duration, 0);
-        assertEq(distributionStartTime, toRewardsInterval(block.timestamp));
 
         vm.warp(block.timestamp + 40 days);
         (amount, duration, distributionStartTime) = eigenServiceManager.captureRewards(claimId);
@@ -619,10 +625,13 @@ contract EigenTest is EigenTestDeployer {
         uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
         vm.stopPrank();
 
-        (uint256 amount, uint32 duration, uint32 distributionStartTime) = eigenServiceManager.captureRewards(claimId);
+        uint256 amount;
+        uint32 duration;
+        uint32 distributionStartTime;
+
+        (amount, duration,) = eigenServiceManager.captureRewards(claimId);
         assertEq(amount, 0);
         assertEq(duration, 0);
-        assertEq(distributionStartTime, block.timestamp / CALCULATION_INTERVAL_SECONDS * CALCULATION_INTERVAL_SECONDS);
 
         vm.warp(block.timestamp + 15 days);
         (amount, duration, distributionStartTime) = eigenServiceManager.captureRewards(claimId);

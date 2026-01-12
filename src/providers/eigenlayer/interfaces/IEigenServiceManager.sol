@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
 import {EigenAddresses} from "../Types.sol";
 import {CoveragePosition} from "../../../interfaces/ICoverageProvider.sol";
 
@@ -60,6 +62,27 @@ interface IEigenServiceManager {
     function captureRewards(uint256 claimId)
         external
         returns (uint256 amount, uint32 duration, uint32 distributionStartTime);
+
+    /// @notice Submits an operator-directed reward to the RewardsCoordinator
+    /// @dev Can be called by other facets to distribute rewards to operators
+    /// @dev If startTimestamp is 0, calculates distributionStartTime automatically using the next interval to avoid retroactive submissions
+    /// @dev If duration is 0, uses CALCULATION_INTERVAL_SECONDS as the duration
+    /// @param operator The operator to reward
+    /// @param strategy The strategy associated with the reward
+    /// @param token The token to distribute as reward
+    /// @param amount The amount of tokens to reward
+    /// @param startTimestamp The start timestamp (0 to auto-calculate using next interval)
+    /// @param duration The duration of the reward distribution (0 to use calculation interval)
+    /// @param description Description of the reward
+    function submitOperatorReward(
+        address operator,
+        IStrategy strategy,
+        IERC20 token,
+        uint256 amount,
+        uint32 startTimestamp,
+        uint32 duration,
+        string memory description
+    ) external returns (uint32 resolvedDistributionStartTime, uint32 resolvedDuration);
 
     /// @notice Updates the metadata URI for this AVS
     /// @dev Only callable by the contract owner
