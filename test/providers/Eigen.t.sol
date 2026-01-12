@@ -982,7 +982,7 @@ contract EigenTest is EigenTestDeployer {
     function testFuzz_slashClaims_variousAmounts(uint256 slashAmountBps) public {
         // Bound early to skip invalid cases before expensive setup
         slashAmountBps = bound(slashAmountBps, 1, 10000);
-        
+
         // Use smaller stake amount for faster setup (still sufficient for 1000e6 claim)
         uint256 positionId = _setupSlashingPosition(100e18);
         uint256 claimAmount = 1000e6;
@@ -1008,21 +1008,21 @@ contract EigenTest is EigenTestDeployer {
         assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.Slashed));
         assertEq(eigenCoverageDiamond.claimSlashAmounts(claimId), slashAmount);
         assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
-        
+
         // Verify coverage agent receives exactly the slashed amount
         assertEq(
             IERC20(coverageAsset).balanceOf(address(coverageAgent)) - coverageAgentBalanceBefore,
             slashAmount,
             "Coverage agent should receive exact slashed amount"
         );
-        
+
         // Verify contract coverage asset balance returns to baseline (tokens transferred out)
         assertEq(
             IERC20(coverageAsset).balanceOf(address(eigenCoverageDiamond)),
             contractCoverageBalanceBefore,
             "Contract should transfer out all slashed coverage tokens"
         );
-        
+
         // Verify position asset balance returns to baseline (no tokens left over)
         assertEq(
             IERC20(positionAsset).balanceOf(address(eigenCoverageDiamond)),
@@ -1037,7 +1037,7 @@ contract EigenTest is EigenTestDeployer {
         uint256 duration = 30 days;
         // Bound early to skip invalid cases before expensive setup
         timeOffset = bound(timeOffset, 1, duration);
-        
+
         // Use smaller stake amount for faster setup (still sufficient for 1000e6 claim)
         uint256 positionId = _setupSlashingPosition(100e18);
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, duration, 10e6, 0);
@@ -1057,7 +1057,7 @@ contract EigenTest is EigenTestDeployer {
     function testFuzz_slashClaims_multipleClaims(uint256 numClaims) public {
         // Bound early to skip invalid cases before expensive setup
         numClaims = bound(numClaims, 1, 10);
-        
+
         // Calculate required stake: max claim is 1000e6 + (9 * 100e6) = 1900e6, use 2000e18 stake
         uint256 maxStakeNeeded = 2000e18;
         deal(rETH, staker, maxStakeNeeded);

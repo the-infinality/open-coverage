@@ -84,10 +84,7 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         uint32 distributionStartTime = _claimRewardDistribution.lastDistributedTimestamp;
 
         uint32 duration = uint32(
-            _min(
-                block.timestamp - distributionStartTime,
-                _claim.duration + _claim.createdAt - distributionStartTime
-            )
+            _min(block.timestamp - distributionStartTime, _claim.duration + _claim.createdAt - distributionStartTime)
         );
 
         if (duration == 0) {
@@ -117,7 +114,7 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
             duration,
             "Coverage reward"
         );
-        
+
         return (amount, resolvedDuration, resolvedDistributionStartTime);
     }
 
@@ -157,8 +154,7 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
     ) private returns (uint32 resolvedDistributionStartTime, uint32 resolvedDuration) {
         IRewardsCoordinator rewardsCoordinator = IRewardsCoordinator(_eigenAddresses.rewardsCoordinator);
         uint32 calculationInterval = rewardsCoordinator.CALCULATION_INTERVAL_SECONDS();
-        
-        
+
         // Calculate duration if not provided (0 means use calculation interval)
         // Also align duration to calculation interval boundaries
         resolvedDuration = duration;
@@ -181,7 +177,7 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         if ((resolvedDistributionStartTime + resolvedDuration) > block.timestamp) {
             resolvedDistributionStartTime -= resolvedDuration;
         }
-        
+
         // Approve the rewards coordinator to spend the tokens
         token.approve(address(rewardsCoordinator), amount);
 
@@ -207,7 +203,6 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
 
         rewardsCoordinator.createOperatorDirectedAVSRewardsSubmission(address(this), operatorDirectedRewardsSubmissions);
     }
-
 
     /// @inheritdoc IEigenServiceManager
     function updateAVSMetadataURI(string calldata metadataURI) external {

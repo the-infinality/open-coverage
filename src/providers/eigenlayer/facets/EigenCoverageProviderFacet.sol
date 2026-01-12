@@ -362,21 +362,22 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
 
         // Redistribute any remaining amount of staked assets back to the operator as a reward
         uint256 difference = closingStrategyAssetBalance - openingStrategyAssetBalance;
-        
+
         if (difference > 0) {
             IRewardsCoordinator rewardsCoordinator = IRewardsCoordinator(_eigenAddresses.rewardsCoordinator);
             uint32 calculationInterval = rewardsCoordinator.CALCULATION_INTERVAL_SECONDS();
-            
+
             // Pass 0 for startTimestamp to auto-calculate using the next interval
-            IEigenServiceManager(address(this)).submitOperatorReward(
-                eigenPosition.operator,
-                IStrategy(eigenPosition.strategy),
-                IERC20(strategyAsset),
-                difference,
-                0, // Auto-calculate startTimestamp
-                calculationInterval,
-                "Slash Refund"
-            );
+            IEigenServiceManager(address(this))
+                .submitOperatorReward(
+                    eigenPosition.operator,
+                    IStrategy(eigenPosition.strategy),
+                    IERC20(strategyAsset),
+                    difference,
+                    0, // Auto-calculate startTimestamp
+                    calculationInterval,
+                    "Slash Refund"
+                );
         }
     }
 
