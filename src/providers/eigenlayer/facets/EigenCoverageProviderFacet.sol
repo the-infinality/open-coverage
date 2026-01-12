@@ -6,7 +6,6 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/EnumerableMap.sol";
 import {IAllocationManager, IAllocationManagerTypes} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
-import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
 import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermissionController.sol";
 import {Refundable} from "src/interfaces/ICoverageProvider.sol";
 import {CoverageAgentAlreadyRegistered, NotOperatorAuthorized, InvalidAsset} from "../Errors.sol";
@@ -25,6 +24,7 @@ import {ICoverageAgent} from "src/interfaces/ICoverageAgent.sol";
 import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {EigenCoverageStorage, ClaimRewardDistribution} from "../EigenCoverageStorage.sol";
 import {ISlashCoordinator, SlashStatus} from "src/interfaces/ISlashCoordinator.sol";
+import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
 
 /// @title EigenCoverageProviderFacet
 /// @author p-dealwis, Infinality
@@ -46,7 +46,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
             IAllocationManagerTypes.CreateSetParams({operatorSetId: operatorSetId, strategies: new IStrategy[](0)});
 
         address[] memory redistributionRecipients = new address[](1);
-        redistributionRecipients[0] = address(this); // Diamond receives slashed tokens to swap before forwarding
+        // Diamond receives slashed tokens to swap before forwarding back to coverage agent
+        redistributionRecipients[0] = address(this);
 
         IAllocationManager(_eigenAddresses.allocationManager)
             .createRedistributingOperatorSets(address(this), params, redistributionRecipients);
@@ -83,7 +84,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         // Ensure strategy is in operator set and operator has non-zero allocations
         IEigenServiceManager(address(this))
             .ensureAllocations(
-                coverageAgent, createPositionAddtionalData.operator, createPositionAddtionalData.strategy
+                createPositionAddtionalData.operator, coverageAgent, createPositionAddtionalData.strategy
             );
 
         positionId = _registerPosition(coverageAgent, data, createPositionAddtionalData);
@@ -107,6 +108,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         external
         returns (uint256 claimId)
     {
+        if (amount == 0) revert InvalidAmount();
+
         EigenCoveragePosition storage positionData = positions[positionId];
         if (msg.sender != positionData.data.coverageAgent) {
             revert NotCoverageAgent(msg.sender, positionData.data.coverageAgent);
@@ -194,6 +197,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
                 _initiateSlash(claimIds[i], amounts[i]);
             } else {
                 slashStatuses[i] = CoverageClaimStatus.PendingSlash;
+                _claim.status = CoverageClaimStatus.PendingSlash;
                 ISlashCoordinator(_position.data.slashCoordinator).initiateSlash(claimIds[i], amounts[i]);
                 emit ClaimSlashPending(claimIds[i], _position.data.slashCoordinator);
             }
@@ -222,8 +226,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     function positionMaxAmount(uint256 positionId) external view returns (uint256 maxAmount) {
         EigenCoveragePosition memory _position = positions[positionId];
 
-        uint256 allocatedCoverage =
-            _totalAllocatedValueToCoverageAgent(_position.operator, _position.strategy, _position.data.coverageAgent);
+        uint256 allocatedCoverage = IEigenServiceManager(address(this))
+            .coverageAllocated(_position.operator, _position.strategy, _position.data.coverageAgent);
         uint256 totalCoverageByOperator =
             _totalCoverageByOperatorStrategy(_position.operator, _position.strategy, _position.data.coverageAgent);
         if (allocatedCoverage > totalCoverageByOperator) {
@@ -281,7 +285,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         view
         returns (uint256 deficit)
     {
-        uint256 totalAllocatedCoverage = _totalAllocatedValueToCoverageAgent(operator, strategy, coverageAgent);
+        uint256 totalAllocatedCoverage =
+            IEigenServiceManager(address(this)).coverageAllocated(operator, strategy, coverageAgent);
         uint256 totalCoverageByOperator = _totalCoverageByOperatorStrategy(operator, strategy, coverageAgent);
 
         if (totalAllocatedCoverage < totalCoverageByOperator) {
@@ -300,28 +305,6 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
             return value;
         }
         return 0;
-    }
-
-    /// @notice Returns the total coverage allocated to a coverage agent for a strategy in the operators asset
-    function _totalAllocatedValueToCoverageAgent(address operator, address strategy, address coverageAgent)
-        private
-        view
-        returns (uint256 total)
-    {
-        address[] memory _operators = new address[](1);
-        _operators[0] = operator;
-        IStrategy[] memory strategies = new IStrategy[](1);
-        strategies[0] = IStrategy(strategy);
-        address strategyAsset = address(IStrategy(strategy).underlyingToken());
-        address coverageAsset = address(ICoverageAgent(coverageAgent).asset());
-        uint256[][] memory allocatedStake = IAllocationManager(_eigenAddresses.allocationManager)
-            .getAllocatedStake(
-                OperatorSet({avs: address(this), id: coverageAgentToOperatorSetId[coverageAgent]}),
-                _operators,
-                strategies
-            );
-        (total,) =
-            IAssetPriceOracleAndSwapper(address(this)).getQuote(allocatedStake[0][0], coverageAsset, strategyAsset);
     }
 
     function _registerPosition(
@@ -349,14 +332,17 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         EigenCoveragePosition storage eigenPosition = positions[_claim.positionId];
         CoveragePosition storage _position = eigenPosition.data;
 
+        // Get balance of strategy asset in this address
+        address strategyAsset = address(IStrategy(eigenPosition.strategy).underlyingToken());
+        uint256 openingStrategyAssetBalance = IERC20(strategyAsset).balanceOf(address(this));
+
         // Slash the operator through EigenLayer and claim redistributed tokens
         IEigenServiceManager(address(this))
             .slashOperator(eigenPosition.operator, eigenPosition.strategy, _position.coverageAgent, amount);
 
-        IAssetPriceOracleAndSwapper(address(this)).
-            // Swap the slashed strategy asset to the coverage agent's asset
-            // forge-lint: disable-next-line(unsafe-typecast)
-            swapForOutput(uint128(amount), _position.asset, ICoverageAgent(_position.coverageAgent).asset());
+        // Swap the slashed strategy asset to the coverage agent's asset
+        IAssetPriceOracleAndSwapper(address(this))
+            .swapForOutput(amount, ICoverageAgent(_position.coverageAgent).asset(), _position.asset);
 
         // Transfer swapped tokens to coverage agent
         bool success = IERC20(ICoverageAgent(_position.coverageAgent).asset()).transfer(_position.coverageAgent, amount);
@@ -365,6 +351,34 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         _claim.status = CoverageClaimStatus.Slashed;
         ICoverageAgent(_position.coverageAgent).onSlashCompleted(claimId);
         emit ClaimSlashed(claimId, amount);
+
+        // Calculate the difference in strategy asset balance
+        uint256 closingStrategyAssetBalance = IERC20(strategyAsset).balanceOf(address(this));
+
+        // If the closing strategy asset balance is less than the opening strategy asset balance then more than
+        // the slashed amount was used to swap for the coverage agent's asset. This is unlikely but is stil an edge case
+        // that needs to be handled.
+        if (closingStrategyAssetBalance < openingStrategyAssetBalance) revert SlashFailed(claimId);
+
+        // Redistribute any remaining amount of staked assets back to the operator as a reward
+        uint256 difference = closingStrategyAssetBalance - openingStrategyAssetBalance;
+
+        if (difference > 0) {
+            IRewardsCoordinator rewardsCoordinator = IRewardsCoordinator(_eigenAddresses.rewardsCoordinator);
+            uint32 calculationInterval = rewardsCoordinator.CALCULATION_INTERVAL_SECONDS();
+
+            // Pass 0 for startTimestamp to auto-calculate using the next interval
+            IEigenServiceManager(address(this))
+                .submitOperatorReward(
+                    eigenPosition.operator,
+                    IStrategy(eigenPosition.strategy),
+                    IERC20(strategyAsset),
+                    difference,
+                    0, // Auto-calculate startTimestamp
+                    calculationInterval,
+                    "Slash Refund"
+                );
+        }
     }
 
     function _checkOperatorPermissions(address operator, address target, bytes4 selector) private returns (bool) {

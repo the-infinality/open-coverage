@@ -2,11 +2,11 @@
 pragma solidity ^0.8.24;
 
 import {IAllocationManager} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
-
-import {IDiamondCut} from "../../diamond/interfaces/IDiamondCut.sol";
-import {IDiamondLoupe} from "../../diamond/interfaces/IDiamondLoupe.sol";
-import {IERC165} from "../../diamond/interfaces/IERC165.sol";
-import {LibDiamond} from "../../diamond/libraries/LibDiamond.sol";
+import {IDiamondCut} from "src/diamond/interfaces/IDiamondCut.sol";
+import {IDiamondLoupe} from "src/diamond/interfaces/IDiamondLoupe.sol";
+import {IERC165} from "src/diamond/interfaces/IERC165.sol";
+import {Diamond} from "src/diamond/Diamond.sol";
+import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
 import {EigenAddresses} from "./Types.sol";
 import {EigenCoverageStorage} from "./EigenCoverageStorage.sol";
 import {AssetPriceOracleAndSwapperStorage} from "../../storage/AssetPriceOracleAndSwapperStorage.sol";
@@ -19,10 +19,7 @@ import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
 /// @notice EIP-2535 Diamond proxy for Eigen coverage management
 /// @dev Uses the diamond pattern with fallback-based selector routing.
 ///      All function calls are routed to the appropriate facet via delegatecall.
-contract EigenCoverageDiamond is EigenCoverageStorage, AssetPriceOracleAndSwapperStorage {
-    /// @notice Error when function selector is not found in any facet
-    error FunctionNotFound(bytes4 _functionSelector);
-
+contract EigenCoverageDiamond is Diamond, EigenCoverageStorage, AssetPriceOracleAndSwapperStorage {
     /// @notice Struct for initialization arguments
     struct DiamondArgs {
         address owner;
@@ -54,43 +51,14 @@ contract EigenCoverageDiamond is EigenCoverageStorage, AssetPriceOracleAndSwappe
         // Initialize app-specific storage
         _eigenAddresses = _args.eigenAddresses;
 
+        // Initialize default swap slippage (1%)
+        _initializeSwapSlippage();
+
         // Update AVS metadata URI (required for AVS registration)
         // Note: This is called directly during construction; post-deployment updates should use
         // IEigenServiceManager.updateAVSMetadataURI() via the facet
         _initializeAVSMetadataURI(_args.metadataURI);
     }
-
-    /// @notice Fallback function that delegates calls to facets based on function selector
-    /// @dev Find facet for function that is called and execute the function if found
-    fallback() external payable {
-        LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
-
-        // Get facet from function selector
-        address facet = ds.selectorToFacetAndPosition[msg.sig].facetAddress;
-        if (facet == address(0)) {
-            revert FunctionNotFound(msg.sig);
-        }
-
-        // Execute external function from facet using delegatecall
-        assembly {
-            // Copy function selector and any arguments
-            calldatacopy(0, 0, calldatasize())
-
-            // Execute function call using the facet
-            let result := delegatecall(gas(), facet, 0, calldatasize(), 0, 0)
-
-            // Get any return value
-            returndatacopy(0, 0, returndatasize())
-
-            // Return any return value or error back to the caller
-            switch result
-            case 0 { revert(0, returndatasize()) }
-            default { return(0, returndatasize()) }
-        }
-    }
-
-    /// @notice Receive function to accept ETH
-    receive() external payable {}
 
     /// @notice Updates the metadata URI for the AVS during initialization
     /// @dev This is only used during construction before facets are callable

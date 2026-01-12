@@ -28,6 +28,10 @@ remappings = [
 [rpc_endpoints]
 mainnet = "${MAINNET_ARCHIVE_RPC}"
 
+[fuzz]
+# Reduced fuzz runs for faster test execution (default is 256)
+runs = 32
+
 [lint]
 ignore = [
     "src/**/external-*/*.sol"

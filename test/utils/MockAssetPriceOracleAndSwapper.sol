@@ -19,6 +19,8 @@ contract MockAssetPriceOracleAndSwapper is AssetPriceOracleAndSwapper {
 
     constructor(address owner_) {
         owner = owner_;
+        // Initialize default swap slippage (1%)
+        _initializeSwapSlippage();
     }
 
     /// @notice Override register to add owner check

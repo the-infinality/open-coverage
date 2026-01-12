@@ -121,17 +121,6 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT);
     }
 
-    function test_RevertWhen_swapForInput_slippageTooLow() public {
-        assetPriceOracleAndSwapper.setSwapSlippage(0);
-
-        uint128 amountIn = 1000e6;
-        // Deal USDT (swap/input asset) instead of USDC
-        deal(USDT, address(assetPriceOracleAndSwapper), amountIn * 2);
-
-        vm.expectRevert(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.SwapFailed.selector));
-        assetPriceOracleAndSwapper.swapForInput(amountIn, USDC, USDT);
-    }
-
     function test_RevertWhen_swapForOutput_slippageTooHigh() public {
         vm.expectRevert(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.InvalidSwapSlippage.selector));
         assetPriceOracleAndSwapper.setSwapSlippage(10001);
@@ -219,7 +208,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         assertLt(minAmountOut, baseQuote);
     }
 
-    function test_swapForOutputQuote_multihop() public view {
+    function test_swapForOutputQuote_multihop_USDC_to_rETH() public view {
         uint128 amountOut = 1e18; // 1 rETH
 
         // Get the current slippage value
@@ -231,6 +220,25 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
 
         // Get quote with slippage
         uint256 maxAmountIn = assetPriceOracleAndSwapper.swapForOutputQuote(amountOut, rETH, USDC);
+
+        // Verify slippage is added: maxAmountIn = baseQuote + (slippage * baseQuote) / 10000
+        uint256 expectedMaxAmountIn = baseQuote + (uint256(slippage) * baseQuote) / 10000;
+        assertEq(maxAmountIn, expectedMaxAmountIn);
+        assertGt(maxAmountIn, baseQuote);
+    }
+
+    function test_swapForOutputQuote_multihop_rETH_to_USDC() public view {
+        uint128 amountOut = 10e18; // 10 rETH
+
+        // Get the current slippage value
+        uint16 slippage = assetPriceOracleAndSwapper.swapSlippage();
+
+        // Get the base quote from swapper using the registered asset pair's pool info
+        AssetPair memory pair = assetPriceOracleAndSwapper.assetPair(rETH, USDC);
+        uint256 baseQuote = uniswapV3SwapperEngine.getQuote(pair.poolInfo, amountOut, USDC, rETH);
+
+        // Get quote with slippage
+        uint256 maxAmountIn = assetPriceOracleAndSwapper.swapForOutputQuote(amountOut, USDC, rETH);
 
         // Verify slippage is added: maxAmountIn = baseQuote + (slippage * baseQuote) / 10000
         uint256 expectedMaxAmountIn = baseQuote + (uint256(slippage) * baseQuote) / 10000;

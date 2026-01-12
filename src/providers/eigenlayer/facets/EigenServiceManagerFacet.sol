@@ -10,14 +10,13 @@ import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
 import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
 import {IRewardsCoordinatorTypes} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
 import {Refundable, CoverageClaimStatus} from "src/interfaces/ICoverageProvider.sol";
-
-import {LibDiamond} from "../../../diamond/libraries/LibDiamond.sol";
+import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
 import {EigenAddresses} from "../Types.sol";
 import {InvalidAVS, NotAllocated} from "../Errors.sol";
 import {IEigenServiceManager, EigenCoveragePosition} from "../interfaces/IEigenServiceManager.sol";
-import {CoverageClaim} from "../../../interfaces/ICoverageProvider.sol";
-import {ICoverageAgent} from "../../../interfaces/ICoverageAgent.sol";
-import {IAssetPriceOracleAndSwapper} from "../../../interfaces/IAssetPriceOracleAndSwapper.sol";
+import {CoverageClaim, ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
+import {ICoverageAgent} from "src/interfaces/ICoverageAgent.sol";
+import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {EigenCoverageStorage, ClaimRewardDistribution} from "../EigenCoverageStorage.sol";
 import {WAD} from "eigenlayer-contracts/libraries/SlashingLib.sol";
 
@@ -76,23 +75,16 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
     /// @inheritdoc IEigenServiceManager
     function captureRewards(uint256 claimId)
         external
-        returns (uint256 amount, uint32 duration, uint32 distributionStartTime)
+        returns (uint256 amount, uint32 resolvedDuration, uint32 resolvedDistributionStartTime)
     {
-        IRewardsCoordinator rewardsCoordinator = IRewardsCoordinator(_eigenAddresses.rewardsCoordinator);
-
         CoverageClaim memory _claim = claims[claimId];
         EigenCoveragePosition memory _position = positions[_claim.positionId];
         ClaimRewardDistribution memory _claimRewardDistribution = claimRewardDistributions[claimId];
 
-        uint32 calculationInterval = rewardsCoordinator.CALCULATION_INTERVAL_SECONDS();
-        distributionStartTime =
-            uint32(_claimRewardDistribution.lastDistributedTimestamp / calculationInterval) * calculationInterval;
+        uint32 distributionStartTime = _claimRewardDistribution.lastDistributedTimestamp;
 
-        duration = uint32(
-            _min(
-                _min(block.timestamp - distributionStartTime, rewardsCoordinator.MAX_REWARDS_DURATION()),
-                _claim.duration + _claim.createdAt - distributionStartTime
-            ) / calculationInterval * calculationInterval
+        uint32 duration = uint32(
+            _min(block.timestamp - distributionStartTime, _claim.duration + _claim.createdAt - distributionStartTime)
         );
 
         if (duration == 0) {
@@ -112,26 +104,101 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         }
 
         IERC20 coverageAsset = IERC20(ICoverageAgent(_position.data.coverageAgent).asset());
-        coverageAsset.approve(address(rewardsCoordinator), amount);
+
+        (resolvedDistributionStartTime, resolvedDuration) = _submitOperatorReward(
+            _position.operator,
+            IStrategy(_position.strategy),
+            coverageAsset,
+            amount,
+            distributionStartTime,
+            duration,
+            "Coverage reward"
+        );
+
+        return (amount, resolvedDuration, resolvedDistributionStartTime);
+    }
+
+    /// @inheritdoc IEigenServiceManager
+    function submitOperatorReward(
+        address operator,
+        IStrategy strategy,
+        IERC20 token,
+        uint256 amount,
+        uint32 distributionStartTime,
+        uint32 duration,
+        string memory description
+    ) public returns (uint32 resolvedDistributionStartTime, uint32 resolvedDuration) {
+        require(msg.sender == address(this), "Only internal calls");
+
+        return _submitOperatorReward(operator, strategy, token, amount, distributionStartTime, duration, description);
+    }
+
+    /// @notice Submits an operator-directed reward to the RewardsCoordinator
+    /// @dev If startTimestamp is 0, calculates distributionStartTime automatically using the next interval to avoid retroactive submissions
+    /// @dev If duration is 0, uses CALCULATION_INTERVAL_SECONDS as the duration
+    /// @param operator The operator to reward
+    /// @param strategy The strategy associated with the reward
+    /// @param token The token to distribute as reward
+    /// @param amount The amount of tokens to reward
+    /// @param distributionStartTime The start timestamp (0 to auto-calculate using next interval)
+    /// @param duration The duration of the reward distribution (0 to use calculation interval)
+    /// @param description Description of the reward
+    function _submitOperatorReward(
+        address operator,
+        IStrategy strategy,
+        IERC20 token,
+        uint256 amount,
+        uint32 distributionStartTime,
+        uint32 duration,
+        string memory description
+    ) private returns (uint32 resolvedDistributionStartTime, uint32 resolvedDuration) {
+        IRewardsCoordinator rewardsCoordinator = IRewardsCoordinator(_eigenAddresses.rewardsCoordinator);
+        uint32 calculationInterval = rewardsCoordinator.CALCULATION_INTERVAL_SECONDS();
+
+        // Calculate duration if not provided (0 means use calculation interval)
+        // Also align duration to calculation interval boundaries
+        resolvedDuration = duration;
+        resolvedDuration = uint32((duration / calculationInterval) * calculationInterval);
+        // Ensure minimum duration is at least one interval
+        if (resolvedDuration == 0) {
+            resolvedDuration = calculationInterval;
+        }
+        resolvedDuration = uint32(_min(resolvedDuration, rewardsCoordinator.MAX_REWARDS_DURATION()));
+
+        resolvedDistributionStartTime = distributionStartTime;
+
+        // Calculate distributionStartTime if not provided (0 means auto-calculate)
+        if (resolvedDistributionStartTime == 0) {
+            resolvedDistributionStartTime = uint32(block.timestamp - resolvedDuration);
+        }
+
+        resolvedDistributionStartTime = (resolvedDistributionStartTime / calculationInterval) * calculationInterval;
+
+        if ((resolvedDistributionStartTime + resolvedDuration) > block.timestamp) {
+            resolvedDistributionStartTime -= resolvedDuration;
+        }
+
+        // Approve the rewards coordinator to spend the tokens
+        token.approve(address(rewardsCoordinator), amount);
 
         IRewardsCoordinatorTypes.StrategyAndMultiplier[] memory strategiesAndMultipliers =
             new IRewardsCoordinatorTypes.StrategyAndMultiplier[](1);
         strategiesAndMultipliers[0] =
-            IRewardsCoordinatorTypes.StrategyAndMultiplier({strategy: IStrategy(_position.strategy), multiplier: 1});
+            IRewardsCoordinatorTypes.StrategyAndMultiplier({strategy: strategy, multiplier: 1});
 
         IRewardsCoordinatorTypes.OperatorReward[] memory operatorRewards =
             new IRewardsCoordinatorTypes.OperatorReward[](1);
-        operatorRewards[0] = IRewardsCoordinatorTypes.OperatorReward({operator: _position.operator, amount: amount});
+        operatorRewards[0] = IRewardsCoordinatorTypes.OperatorReward({operator: operator, amount: amount});
 
         IRewardsCoordinatorTypes.OperatorDirectedRewardsSubmission[] memory operatorDirectedRewardsSubmissions =
             new IRewardsCoordinatorTypes.OperatorDirectedRewardsSubmission[](1);
         operatorDirectedRewardsSubmissions[0] = IRewardsCoordinatorTypes.OperatorDirectedRewardsSubmission({
             strategiesAndMultipliers: strategiesAndMultipliers,
-            token: coverageAsset,
+            token: token,
             operatorRewards: operatorRewards,
-            startTimestamp: distributionStartTime,
-            duration: duration,
-            description: "Coverage reward"
+            startTimestamp: resolvedDistributionStartTime,
+            duration: resolvedDuration,
+            description: description
         });
 
         rewardsCoordinator.createOperatorDirectedAVSRewardsSubmission(address(this), operatorDirectedRewardsSubmissions);
@@ -179,7 +246,7 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
     }
 
     /// @inheritdoc IEigenServiceManager
-    function ensureAllocations(address coverageAgent, address operator, address strategy) external {
+    function ensureAllocations(address operator, address coverageAgent, address strategy) external {
         uint32 operatorSetId = coverageAgentToOperatorSetId[coverageAgent];
         OperatorSet memory operatorSet = OperatorSet({avs: address(this), id: operatorSetId});
         IAllocationManager allocationManager = IAllocationManager(_eigenAddresses.allocationManager);
@@ -204,6 +271,23 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
             allocationManager.getAllocation(operator, operatorSet, IStrategy(strategy));
 
         if (allocation.currentMagnitude == 0) revert NotAllocated();
+    }
+
+    /// @inheritdoc IEigenServiceManager
+    function getAllocationedStrategies(address operator, address coverageAgent)
+        external
+        view
+        returns (address[] memory)
+    {
+        uint32 operatorSetId = coverageAgentToOperatorSetId[coverageAgent];
+        OperatorSet memory operatorSet = OperatorSet({avs: address(this), id: operatorSetId});
+        IStrategy[] memory strategies =
+            IAllocationManager(_eigenAddresses.allocationManager).getAllocatedStrategies(operator, operatorSet);
+        address[] memory strategiesAddresses = new address[](strategies.length);
+        for (uint256 i = 0; i < strategies.length; i++) {
+            strategiesAddresses[i] = address(strategies[i]);
+        }
+        return strategiesAddresses;
     }
 
     /// ============ Internal functions ============ //
@@ -252,15 +336,27 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
                 OperatorSet({avs: address(this), id: coverageAgentToOperatorSetId[coverageAgent]}), ops, strats
             )[0][0];
 
-        if (totalAllocatedStake == 0) revert NotAllocated();
-
         // Convert amount to strategy asset and calculate proportion
-        (uint256 quotedPrice,) = IAssetPriceOracleAndSwapper(address(this))
-            .getQuote(
+        uint256 requiredSlashAmount = IAssetPriceOracleAndSwapper(address(this))
+            .swapForOutputQuote(
                 amount, address(IStrategy(strategy).underlyingToken()), address(ICoverageAgent(coverageAgent).asset())
             );
-        wadToSlash = (quotedPrice * WAD) / totalAllocatedStake;
-        if (wadToSlash > WAD) wadToSlash = WAD;
+        wadToSlash = (requiredSlashAmount * WAD) / totalAllocatedStake;
+        // Revert if the required slash amount is greater than the total allocated stake
+        if (wadToSlash > WAD) {
+            (uint256 totalAllocatedStakeValue,) = IAssetPriceOracleAndSwapper(address(this))
+                .getQuote(
+                    totalAllocatedStake,
+                    address(ICoverageAgent(coverageAgent).asset()),
+                    address(IStrategy(strategy).underlyingToken())
+                );
+
+            // Capture edge case rounding issues
+            if (totalAllocatedStakeValue > amount) {
+                revert ICoverageProvider.InsufficientCoverageAvailable(0);
+            }
+            revert ICoverageProvider.InsufficientCoverageAvailable(amount - totalAllocatedStakeValue);
+        }
     }
 }
 

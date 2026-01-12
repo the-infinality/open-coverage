@@ -371,6 +371,31 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         assertEq(bytes4(result), ISwapperEngine.InvalidPoolInfo.selector, "Should revert with InvalidPoolInfo");
     }
 
+    function test_getQuote_USDC_to_rETH() public {
+        uint256 amountIn = 1e18; // 1 rETH (quote)
+
+        // Path: USDC -> WETH -> rETH (EXACT_OUT format: output -> fee -> input)
+        bytes memory poolInfo = abi.encodePacked(
+            USDC,
+            uint24(500), // 0.05% fee
+            WETH,
+            uint24(100), // 0.01% fee
+            rETH
+        );
+
+        // Execute quote via delegatecall: given amountIn of USDC (quote), how much rETH (base)?
+        (bool success, bytes memory result) = address(proxy)
+            .call(abi.encodeWithSelector(UniswapV3SwapperEngine.getQuote.selector, poolInfo, amountIn, USDC, rETH));
+
+        require(success, "USDC to rETH quote should succeed");
+        uint256 amountOut = abi.decode(result, (uint256));
+
+        // Verify we got a valid quote
+        assertGt(amountOut, 0, "Amount out should be greater than 0");
+        assertGt(amountOut, 2500e6, "Should get significant 3000 USDC for 1 rETH");
+        assertLt(amountOut, 7500e6, "Should get significant less than 7500 USDC for 1 rETH");
+    }
+
     function test_getQuote_rETH_to_USDC() public {
         uint256 amountIn = 3000e6; // 3000 USDC (quote)
 
@@ -762,7 +787,22 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
             USDC
         );
 
-        swapperEngine.getQuote(poolInfo, 1e23, USDC, rETH);
+        uint256 amountOut = swapperEngine.getQuote(poolInfo, 1e15, rETH, USDC);
+        assertGt(amountOut, 0, "Should receive amount out");
+    }
+
+    function test_getQuote_smallAmount() public view {
+        // Multi-hop path: rETH -> WETH -> USDC (EXACT_OUT format: output -> intermediate -> input)
+        bytes memory poolInfo = abi.encodePacked(
+            rETH,
+            uint24(100), // 0.01% fee for rETH/WETH
+            WETH,
+            uint24(500), // 0.05% fee for WETH/USDC
+            USDC
+        );
+
+        uint256 amountOut = swapperEngine.getQuote(poolInfo, 1e7, rETH, USDC);
+        assertGt(amountOut, 0, "Should receive amount out");
     }
 
     // ============ onInit() Tests ============ //
