@@ -18,7 +18,9 @@ import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoord
 import {EigenOperatorProxy} from "src/providers/eigenlayer/EigenOperatorProxy.sol";
 import {DiamondFacetsDeployer} from "../../utils/deployments/DiamondFacetsDeployer.sol";
 import {EigenFacetsDeployer} from "../../utils/deployments/EigenFacetsDeployer.sol";
-import {AssetPriceOracleAndSwapperFacetDeployer} from "../../utils/deployments/AssetPriceOracleAndSwapperFacetDeployer.sol";
+import {
+    AssetPriceOracleAndSwapperFacetDeployer
+} from "../../utils/deployments/AssetPriceOracleAndSwapperFacetDeployer.sol";
 
 contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
     address public eigenOperatorInstance;

@@ -15,7 +15,9 @@ import {IDiamondCut} from "../src/diamond/interfaces/IDiamondCut.sol";
 import {EigenAddresses} from "../src/providers/eigenlayer/Types.sol";
 import {DiamondFacetsDeployer} from "../utils/deployments/DiamondFacetsDeployer.sol";
 import {EigenFacetsDeployer} from "../utils/deployments/EigenFacetsDeployer.sol";
-import {AssetPriceOracleAndSwapperFacetDeployer} from "../utils/deployments/AssetPriceOracleAndSwapperFacetDeployer.sol";
+import {
+    AssetPriceOracleAndSwapperFacetDeployer
+} from "../utils/deployments/AssetPriceOracleAndSwapperFacetDeployer.sol";
 
 /// @title DeployEigenProviderTestnet
 /// @notice Script to deploy EigenCoverageDiamond with all facets
@@ -25,8 +27,7 @@ contract DeployEigenProviderTestnet is Script, EigenHelper, UniswapHelper {
         vm.startBroadcast();
 
         address owner = msg.sender;
-        string memory metadataURI =
-            vm.envOr("METADATA_URI", string("https://coverage.example.com/metadata.json"));
+        string memory metadataURI = vm.envOr("METADATA_URI", string("https://coverage.example.com/metadata.json"));
 
         console.log("Deploying EigenCoverageDiamond...");
         console.log("Owner:", owner);
@@ -89,10 +90,11 @@ contract DeployEigenProviderTestnet is Script, EigenHelper, UniswapHelper {
         cuts[4] = assetPriceOracleAndSwapperCut; // AssetPriceOracleAndSwapperFacet
     }
 
-    function _prepareDiamondArgs(
-        address owner,
-        string memory metadataURI
-    ) internal view returns (EigenCoverageDiamond.DiamondArgs memory) {
+    function _prepareDiamondArgs(address owner, string memory metadataURI)
+        internal
+        view
+        returns (EigenCoverageDiamond.DiamondArgs memory)
+    {
         EigenAddressbook memory eigenAddressBook = _getAddressBook();
         UniswapAddressbook memory uniswapAddressBook = _getUniswapAddressBook();
 
@@ -111,10 +113,10 @@ contract DeployEigenProviderTestnet is Script, EigenHelper, UniswapHelper {
         });
     }
 
-    function _logDeploymentSummary(
-        address eigenCoverageDiamondAddress,
-        IDiamondCut.FacetCut[] memory cuts
-    ) internal pure {
+    function _logDeploymentSummary(address eigenCoverageDiamondAddress, IDiamondCut.FacetCut[] memory cuts)
+        internal
+        pure
+    {
         console.log("\n=== Deployment Summary ===");
         console.log("EigenCoverageDiamond deployed at:", eigenCoverageDiamondAddress);
         console.log("DiamondCutFacet:", cuts[0].facetAddress);
