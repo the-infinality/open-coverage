@@ -10,5 +10,15 @@
             "cbBTC": "0xBe9895146f7AF43049ca1c1AE358B0541Ea49704",
             "rETH": "0xae78736Cd615f374D3085123A210448E74Fc6393"
         }
+    }, 
+    "11155111": {
+        "name": "sepolia",
+        "fromBlockNumber": 10030642,
+        "assets": {
+            "USDC": "0x94a9D9AF8eA39e276c1E74b5B5ec7E5B0f34f177",
+            "USDT": "0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0",
+            "WETH": "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9",
+            "DAI": "0x3e622317f8C93f7328350cF0B56d9eD4C620C5d6"
+        }
     }
 }

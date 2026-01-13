@@ -27,6 +27,12 @@ remappings = [
 
 [rpc_endpoints]
 mainnet = "${MAINNET_ARCHIVE_RPC}"
+sepolia = "${SEPOLIA_ARCHIVE_RPC}"
+anvil = "127.0.0.1:8545"
+
+[etherscan]
+mainnet = { key = "${ETHERSCAN_API_KEY}" }
+sepolia = { key = "${ETHERSCAN_API_KEY}" }
 
 [fuzz]
 # Reduced fuzz runs for faster test execution (default is 256)
