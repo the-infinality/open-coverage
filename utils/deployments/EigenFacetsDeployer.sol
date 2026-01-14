@@ -84,7 +84,7 @@ library EigenFacetsDeployer {
         selectors[8] = ICoverageProvider.position.selector;
         selectors[9] = ICoverageProvider.positionMaxAmount.selector;
         selectors[10] = ICoverageProvider.claim.selector;
-        selectors[11] = ICoverageProvider.claimDeficit.selector;
+        selectors[11] = ICoverageProvider.claimBacking.selector;
     }
 }
 
