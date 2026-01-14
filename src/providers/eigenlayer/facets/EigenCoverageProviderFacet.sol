@@ -246,6 +246,11 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         return _coverageDeficitAmount(_position.operator, _position.strategy, _position.data.coverageAgent);
     }
 
+    /// @inheritdoc ICoverageProvider
+    function claimTotalSlashAmount(uint256 claimId) external view returns (uint256 slashAmount) {
+        return claimSlashAmounts[claimId];
+    }
+
     /// ============ Internal functions ============ //
 
     /// @notice Validates the claim parameters meet the position requirements
@@ -349,7 +354,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         if (!success) revert SlashFailed(claimId);
 
         _claim.status = CoverageClaimStatus.Slashed;
-        ICoverageAgent(_position.coverageAgent).onSlashCompleted(claimId);
+        ICoverageAgent(_position.coverageAgent).onSlashCompleted(claimId, amount);
         emit ClaimSlashed(claimId, amount);
 
         // Calculate the difference in strategy asset balance

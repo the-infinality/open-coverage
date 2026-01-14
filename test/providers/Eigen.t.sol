@@ -14,8 +14,8 @@ import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermission
 import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
 import {EigenProviderMethods} from "utils/EigenProviderMethods.sol";
 import {IEigenOperatorProxy} from "src/providers/eigenlayer/interfaces/IEigenOperatorProxy.sol";
-import {CoverageProviderData} from "src/interfaces/ICoverageAgent.sol";
 import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
+import {ICoverageAgent} from "src/interfaces/ICoverageAgent.sol";
 import {IStrategyManager} from "eigenlayer-contracts/interfaces/IStrategyManager.sol";
 import {ISignatureUtilsMixinTypes} from "eigenlayer-contracts/interfaces/ISignatureUtilsMixin.sol";
 import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
@@ -124,12 +124,6 @@ contract EigenTest is EigenTestDeployer {
                 priceOracle: address(0)
             })
         );
-    }
-
-    function test_checkCoverageProviderRegistered() public view {
-        CoverageProviderData memory coverageProviderData =
-            coverageAgent.coverageProviderData(address(eigenCoverageDiamond));
-        assertEq(coverageProviderData.active, true);
     }
 
     function test_RevertWhen_register_not_owner() public {
@@ -778,20 +772,35 @@ contract EigenTest is EigenTestDeployer {
         // Check balances before slashing
         uint256 contractCoverageBalanceBefore = IERC20(coverageAsset).balanceOf(address(eigenCoverageDiamond));
         uint256 coverageAgentBalanceBefore = IERC20(coverageAsset).balanceOf(address(coverageAgent));
+        uint256 coverageAgentCoordinatorBalanceBefore =
+            IERC20(coverageAsset).balanceOf(address(ICoverageAgent(coverageAgent).coordinator()));
         uint256 contractPositionBalanceBefore = IERC20(positionAsset).balanceOf(address(eigenCoverageDiamond));
 
         uint256 slashAmount = 10e6;
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, slashAmount);
+
+        // Expect ClaimSlashed event
+        vm.expectEmit(true, false, false, false);
+        emit ICoverageProvider.ClaimSlashed(claimId, slashAmount);
+
         _executeSlash(claimIds, amounts);
 
         assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
         assertEq(eigenCoverageDiamond.claimSlashAmounts(claimId), slashAmount);
 
+        // Verify coverage agent has the same balance as before the slashing
+        assertEq(
+            IERC20(coverageAsset).balanceOf(address(coverageAgent)),
+            coverageAgentBalanceBefore,
+            "Coverage agent should have exact same amount before and after slashing"
+        );
+
         // Verify coverage agent receives exactly the slashed amount
         assertEq(
-            IERC20(coverageAsset).balanceOf(address(coverageAgent)) - coverageAgentBalanceBefore,
+            IERC20(coverageAsset).balanceOf(address(ICoverageAgent(coverageAgent).coordinator()))
+                - coverageAgentCoordinatorBalanceBefore,
             slashAmount,
-            "Coverage agent should receive exact slashed amount"
+            "Coverage agent coordinator should receive exact slashed amount"
         );
 
         // Verify contract coverage asset balance returns to baseline (tokens transferred out)
@@ -817,6 +826,11 @@ contract EigenTest is EigenTestDeployer {
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
 
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 500e6);
+
+        // Expect ClaimSlashed event
+        vm.expectEmit(true, false, false, false);
+        emit ICoverageProvider.ClaimSlashed(claimId, 500e6);
+
         CoverageClaimStatus[] memory statuses = _executeSlash(claimIds, amounts);
 
         assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.Slashed));
@@ -842,6 +856,12 @@ contract EigenTest is EigenTestDeployer {
         amounts[0] = 1000e6;
         amounts[1] = 500e6;
 
+        // Expect ClaimSlashed events for both claims
+        vm.expectEmit(true, false, false, false);
+        emit ICoverageProvider.ClaimSlashed(claimId1, 1000e6);
+        vm.expectEmit(true, false, false, false);
+        emit ICoverageProvider.ClaimSlashed(claimId2, 500e6);
+
         CoverageClaimStatus[] memory statuses = _executeSlash(claimIds, amounts);
 
         assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.Slashed));
@@ -856,6 +876,11 @@ contract EigenTest is EigenTestDeployer {
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
 
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1000e6);
+
+        // Expect ClaimSlashed event
+        vm.expectEmit(true, false, false, false);
+        emit ICoverageProvider.ClaimSlashed(claimId, 1000e6);
+
         CoverageClaimStatus[] memory statuses = _executeSlash(claimIds, amounts);
 
         assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.Slashed));
@@ -865,13 +890,20 @@ contract EigenTest is EigenTestDeployer {
     /// @notice Test that slashing transfers tokens to coverage agent
     function test_slashClaims_tokenTransfer() public {
         uint256 positionId = _setupSlashingPosition(1000e18);
-        uint256 initialBalance = IERC20(coverageAgent.asset()).balanceOf(address(coverageAgent));
+        uint256 initialBalance =
+            IERC20(coverageAgent.asset()).balanceOf(address(ICoverageAgent(coverageAgent).coordinator()));
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
 
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1000e6);
+
+        // Expect ClaimSlashed event
+        vm.expectEmit(true, false, false, false);
+        emit ICoverageProvider.ClaimSlashed(claimId, 1000e6);
+
         _executeSlash(claimIds, amounts);
 
-        uint256 finalBalance = IERC20(coverageAgent.asset()).balanceOf(address(coverageAgent));
+        uint256 finalBalance =
+            IERC20(coverageAgent.asset()).balanceOf(address(ICoverageAgent(coverageAgent).coordinator()));
         // The coverage agent should receive the slashed amount (1000e6 USDC)
         // Account for potential swap slippage - allow 1% tolerance
         uint256 expectedMinBalance = initialBalance + (1000e6 * 99) / 100;
@@ -907,6 +939,10 @@ contract EigenTest is EigenTestDeployer {
         uint256[] memory amounts = new uint256[](1);
         claimIds[0] = claimId;
         amounts[0] = 1000e6;
+
+        // Expect ClaimSlashed event
+        vm.expectEmit(true, false, false, false);
+        emit ICoverageProvider.ClaimSlashed(claimId, 1000e6);
 
         CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts);
         vm.stopPrank();
@@ -1001,6 +1037,8 @@ contract EigenTest is EigenTestDeployer {
         uint256 contractCoverageBalanceBefore = IERC20(coverageAsset).balanceOf(address(eigenCoverageDiamond));
         uint256 coverageAgentBalanceBefore = IERC20(coverageAsset).balanceOf(address(coverageAgent));
         uint256 contractPositionBalanceBefore = IERC20(positionAsset).balanceOf(address(eigenCoverageDiamond));
+        uint256 coverageAgentCoordinatorBalanceBefore =
+            IERC20(coverageAsset).balanceOf(address(ICoverageAgent(coverageAgent).coordinator()));
 
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, slashAmount);
         CoverageClaimStatus[] memory statuses = _executeSlash(claimIds, amounts, 15 days);
@@ -1009,11 +1047,19 @@ contract EigenTest is EigenTestDeployer {
         assertEq(eigenCoverageDiamond.claimSlashAmounts(claimId), slashAmount);
         assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
 
+        // Verify coverage agent has the same balance as before the slashing
+        assertEq(
+            IERC20(coverageAsset).balanceOf(address(coverageAgent)),
+            coverageAgentBalanceBefore,
+            "Coverage agent should have exact same amount before and after slashing"
+        );
+
         // Verify coverage agent receives exactly the slashed amount
         assertEq(
-            IERC20(coverageAsset).balanceOf(address(coverageAgent)) - coverageAgentBalanceBefore,
+            IERC20(coverageAsset).balanceOf(address(ICoverageAgent(coverageAgent).coordinator()))
+                - coverageAgentCoordinatorBalanceBefore,
             slashAmount,
-            "Coverage agent should receive exact slashed amount"
+            "Coverage agent coordinator should receive exact slashed amount"
         );
 
         // Verify contract coverage asset balance returns to baseline (tokens transferred out)

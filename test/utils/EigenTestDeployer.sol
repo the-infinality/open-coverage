@@ -11,7 +11,7 @@ import {DiamondCutFacet} from "src/diamond/facets/DiamondCutFacet.sol";
 import {DiamondLoupeFacet} from "src/diamond/facets/DiamondLoupeFacet.sol";
 import {IDiamondCut} from "src/diamond/interfaces/IDiamondCut.sol";
 import {EigenHelper, EigenAddressbook} from "../../utils/EigenHelper.sol";
-import {CoverageAgent} from "src/CoverageAgent.sol";
+import {ExampleCoverageAgent} from "src/ExampleCoverageAgent.sol";
 import {UpgradeableBeacon} from "@openzeppelin-v5/contracts/proxy/beacon/UpgradeableBeacon.sol";
 import {UniswapHelper, UniswapAddressbook} from "../../utils/UniswapHelper.sol";
 import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
@@ -28,7 +28,7 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
     uint32 public MAX_REWARDS_DURATION;
 
     // *** Deployed Contracts *** //
-    CoverageAgent coverageAgent;
+    ExampleCoverageAgent coverageAgent;
     EigenCoverageDiamond eigenCoverageDiamond;
 
     // Facets
@@ -90,7 +90,7 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
         eigenCoverageDiamond = new EigenCoverageDiamond(cuts, args);
 
         // Deploy coverage agent and allow this address to be the operator
-        coverageAgent = new CoverageAgent(address(this), USDC);
+        coverageAgent = new ExampleCoverageAgent(address(this), USDC);
 
         // Deploy a instance for the upgradeable beacon proxies
         UpgradeableBeacon beacon = new UpgradeableBeacon(address(new EigenOperatorProxy()), address(this));

@@ -1,10 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-struct CoverageProviderData {
-    bool active;
-}
-
 struct ClaimCoverageRequest {
     /// @notice Address of the coverage provider to claim coverage from.
     address coverageProvider;
@@ -19,7 +15,10 @@ struct ClaimCoverageRequest {
 }
 
 struct Claim {
-    uint256 positionId;
+    /// @notice The coverage provider that issued the claim.
+    address coverageProvider;
+
+    /// @notice The id of the claim.
     uint256 claimId;
 }
 
@@ -33,6 +32,9 @@ struct Coverage {
 interface ICoverageAgent {
     event CoverageProviderRegistered(address indexed coverageProvider);
     event PositionRegistered(address indexed coverageProvider, uint256 indexed positionId);
+    event CoverageClaimed(uint256 indexed coverageId);
+
+    error InvalidCoverage(uint256 coverageId);
 
     /// ============ Coverage Providers ============
 
@@ -49,15 +51,8 @@ interface ICoverageAgent {
     /// @notice Triggered when a coverage claim has been slashed.
     /// @dev Can only be called by the coverage provider that issued the claim.
     /// @param claimId The claim id slashed.
-    function onSlashCompleted(uint256 claimId) external;
-
-    /// ============ Coverage ============
-
-    /// @notice Purchase coverage from coverage providers.
-    /// @dev Can only be called by the coverage agent coordinator. Should track the amount of coverage purchased for future slashing purposes.
-    /// @param requests The requests to purchase coverage.
-    /// @return coverageId The id of the coverage purchased.
-    function purchaseCoverage(ClaimCoverageRequest[] calldata requests) external returns (uint256 coverageId);
+    /// @param slashAmount The amount that was slashed.
+    function onSlashCompleted(uint256 claimId, uint256 slashAmount) external;
 
     /// ============ Discovery ============
 
@@ -65,10 +60,10 @@ interface ICoverageAgent {
     /// @return coverageProviderAddresses The coverage providers.
     function registeredCoverageProviders() external view returns (address[] memory coverageProviderAddresses);
 
-    /// @notice Get the coverage provider data
-    /// @param coverageProvider The coverage provider to get the data for.
-    /// @return data The coverage provider data.
-    function coverageProviderData(address coverageProvider) external view returns (CoverageProviderData memory data);
+    /// @notice Check if a coverage provider is registered with the coverage agent.
+    /// @param coverageProvider The coverage provider to check.
+    /// @return isRegistered Whether the coverage provider is registered.
+    function isCoverageProviderRegistered(address coverageProvider) external view returns (bool isRegistered);
 
     /// @notice Get the coverage for a given coverage id.
     /// @param coverageId The coverage id to get the coverage for.
@@ -80,8 +75,8 @@ interface ICoverageAgent {
     /// @return asset The asset address.
     function asset() external view returns (address);
 
-    /// @notice Get the entity that the coverage agent is covering
-    /// @dev The entity must be represented by an address and could be a contract or an account.
-    /// @return entity The entity address.
-    function entity() external view returns (address);
+    /// @notice Get the coordinator that manages the coverage agent
+    /// @dev The coordinator must be represented by an address and could be a contract or an account.
+    /// @return coordinator The coordinator address.
+    function coordinator() external view returns (address);
 }
