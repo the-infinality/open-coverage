@@ -19,10 +19,10 @@ import {
     AssetPriceOracleAndSwapperFacetDeployer
 } from "../utils/deployments/AssetPriceOracleAndSwapperFacetDeployer.sol";
 
-/// @title DeployEigenProviderTestnet
+/// @title DeployEigenProvider
 /// @notice Script to deploy EigenCoverageDiamond with all facets
 /// @dev Uses helper libraries to deploy facets in a modular way
-contract DeployEigenProviderTestnet is Script, EigenHelper, UniswapHelper {
+contract DeployEigenProvider is Script, EigenHelper, UniswapHelper {
     function run() public returns (address eigenCoverageDiamondAddress) {
         vm.startBroadcast();
 

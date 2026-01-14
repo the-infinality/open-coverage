@@ -12,8 +12,8 @@ import {IAllocationManager} from "eigenlayer-contracts/interfaces/IAllocationMan
 import {IAllocationManagerTypes} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermissionController.sol";
 import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
-import {EigenProviderMethods} from "utils/EigenProviderMethods.sol";
 import {IEigenOperatorProxy} from "src/providers/eigenlayer/interfaces/IEigenOperatorProxy.sol";
+import {EigenOperatorProxy} from "src/providers/eigenlayer/EigenOperatorProxy.sol";
 import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
 import {ICoverageAgent} from "src/interfaces/ICoverageAgent.sol";
 import {IStrategyManager} from "eigenlayer-contracts/interfaces/IStrategyManager.sol";
@@ -83,9 +83,7 @@ contract EigenTest is EigenTestDeployer {
         eigenPriceOracle = IAssetPriceOracleAndSwapper(address(eigenCoverageDiamond));
 
         operator = IEigenOperatorProxy(
-            EigenProviderMethods.createOperatorProxy(
-                eigenOperatorInstance, eigenServiceManager.eigenAddresses(), address(this), ""
-            )
+            address(new EigenOperatorProxy(eigenServiceManager.eigenAddresses(), address(this), ""))
         );
 
         IPermissionController(eigenServiceManager.eigenAddresses().permissionController).acceptAdmin(address(operator));

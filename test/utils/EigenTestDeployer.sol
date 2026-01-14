@@ -12,10 +12,8 @@ import {DiamondLoupeFacet} from "src/diamond/facets/DiamondLoupeFacet.sol";
 import {IDiamondCut} from "src/diamond/interfaces/IDiamondCut.sol";
 import {EigenHelper, EigenAddressbook} from "../../utils/EigenHelper.sol";
 import {ExampleCoverageAgent} from "src/ExampleCoverageAgent.sol";
-import {UpgradeableBeacon} from "@openzeppelin-v5/contracts/proxy/beacon/UpgradeableBeacon.sol";
 import {UniswapHelper, UniswapAddressbook} from "../../utils/UniswapHelper.sol";
 import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
-import {EigenOperatorProxy} from "src/providers/eigenlayer/EigenOperatorProxy.sol";
 import {DiamondFacetsDeployer} from "../../utils/deployments/DiamondFacetsDeployer.sol";
 import {EigenFacetsDeployer} from "../../utils/deployments/EigenFacetsDeployer.sol";
 import {
@@ -92,9 +90,8 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
         // Deploy coverage agent and allow this address to be the operator
         coverageAgent = new ExampleCoverageAgent(address(this), USDC);
 
-        // Deploy a instance for the upgradeable beacon proxies
-        UpgradeableBeacon beacon = new UpgradeableBeacon(address(new EigenOperatorProxy()), address(this));
-        eigenOperatorInstance = address(beacon);
+        // Set eigenOperatorInstance to address(0) since we deploy directly now (no beacon pattern)
+        eigenOperatorInstance = address(0);
     }
 
     function toRewardsInterval(uint256 timestamp) public view returns (uint32) {
