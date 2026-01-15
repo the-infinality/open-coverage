@@ -21,6 +21,7 @@ import { getAbiForContractType } from "@/utils/abi-utils"
 import { CopyableAddress } from "@/components/ui/copyable-address"
 import { RefreshCw } from "lucide-react"
 import { ContractSelector } from "@/components/ContractSelector"
+import { getPublicClientForChain } from "@/lib/wagmi"
 
 interface ContractLog {
   address: `0x${string}`
@@ -32,8 +33,6 @@ interface ContractLog {
 }
 
 export function LogsPage() {
-  const chainId = useChainId()
-  const publicClient = usePublicClient()
   const { data: currentBlock } = useBlockNumber()
   const { contracts } = useContracts()
 
@@ -42,6 +41,9 @@ export function LogsPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [fromBlock, setFromBlock] = useState<string>("")
   const [toBlock, setToBlock] = useState<string>("")
+
+  const chainId = selectedContract?.chainId
+  const publicClient = getPublicClientForChain(chainId || 1)
 
   const abi = selectedContract
     ? (getAbiForContractType(selectedContract.type) as Abi)
