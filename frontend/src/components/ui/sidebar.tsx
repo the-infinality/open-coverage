@@ -3,13 +3,6 @@ import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
-const SIDEBAR_COOKIE_NAME = "sidebar:state"
-const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
-const SIDEBAR_WIDTH = "16rem"
-const SIDEBAR_WIDTH_MOBILE = "18rem"
-const SIDEBAR_WIDTH_ICON = "3rem"
-const SIDEBAR_KEYBOARD_SHORTCUT = "b"
-
 type SidebarContext = {
   state: "expanded" | "collapsed"
   open: boolean
@@ -93,7 +86,7 @@ const SidebarProvider = React.forwardRef<
     <SidebarContext.Provider value={contextValue}>
       <div
         ref={ref}
-        className={cn("group/sidebar-wrapper flex min-h-svh w-full has-[[data-sidebar=sidebar]]:bg-sidebar", className)}
+        className={cn("group/sidebar-wrapper flex min-h-svh w-full has-data-[sidebar=sidebar]:bg-sidebar", className)}
         {...props}
       />
     </SidebarContext.Provider>
@@ -451,7 +444,7 @@ const SidebarMenuButton = React.forwardRef<
       isActive?: boolean
       tooltip?: string | React.ComponentProps<typeof Slot>
     }
->(({ asChild = false, isActive = false, variant = "default", size = "default", tooltip, className, ...props }, ref) => {
+>(({ asChild = false, isActive = false, variant = "default", size = "default", className, ...props }, ref) => {
   const Comp = asChild ? Slot : "button"
   return (
     <Comp
@@ -623,6 +616,7 @@ export {
   SidebarRail,
   SidebarSeparator,
   SidebarTrigger,
+  // eslint-disable-next-line react-refresh/only-export-components
   useSidebar,
 }
 

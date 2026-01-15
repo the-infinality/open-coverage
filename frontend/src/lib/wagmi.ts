@@ -1,6 +1,8 @@
 import { http, createConfig } from "wagmi"
 import { mainnet, sepolia, localhost } from "wagmi/chains"
 import { injected, walletConnect } from "wagmi/connectors"
+import ethereumLogo from "@/assets/ethereum.jpg"
+import sepoliaLogo from "@/assets/sepolia.jpeg"
 
 // Custom local chain configuration
 const localChain = {
@@ -12,13 +14,13 @@ const localChain = {
 // Supported chains
 export const supportedChains = [localChain, mainnet, sepolia] as const
 
-// Chain icons - SVG data URLs for each supported chain
+// Chain icons - Logo images for each supported chain
 export const chainIcons: Record<number, string> = {
-  // Ethereum Mainnet - Diamond shape
-  [mainnet.id]: `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><linearGradient id="eth" x1="50%" y1="0%" x2="50%" y2="100%"><stop offset="0%" stop-color="#8c8c8c"/><stop offset="100%" stop-color="#393939"/></linearGradient></defs><g fill="none"><circle cx="16" cy="16" r="16" fill="#627EEA"/><path fill="#fff" d="M16.498 4v8.87l7.497 3.35z" opacity=".6"/><path fill="#fff" d="M16.498 4L9 16.22l7.498-3.35z"/><path fill="#fff" d="M16.498 21.968v6.027L24 17.616z" opacity=".6"/><path fill="#fff" d="M16.498 27.995v-6.028L9 17.616z"/><path fill="#fff" d="M16.498 20.573l7.497-4.353-7.497-3.348z" opacity=".2"/><path fill="#fff" d="M9 16.22l7.498 4.353v-7.701z" opacity=".6"/></g></svg>`)}`,
-  // Sepolia Testnet - Ethereum style with test indicator
-  [sepolia.id]: `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><g fill="none"><circle cx="16" cy="16" r="16" fill="#9B8AFF"/><path fill="#fff" d="M16.498 4v8.87l7.497 3.35z" opacity=".6"/><path fill="#fff" d="M16.498 4L9 16.22l7.498-3.35z"/><path fill="#fff" d="M16.498 21.968v6.027L24 17.616z" opacity=".6"/><path fill="#fff" d="M16.498 27.995v-6.028L9 17.616z"/><path fill="#fff" d="M16.498 20.573l7.497-4.353-7.497-3.348z" opacity=".2"/><path fill="#fff" d="M9 16.22l7.498 4.353v-7.701z" opacity=".6"/></g></svg>`)}`,
-  // Localhost/Anvil - Gear/cog icon
+  // Ethereum Mainnet
+  [mainnet.id]: ethereumLogo,
+  // Sepolia Testnet
+  [sepolia.id]: sepoliaLogo,
+  // Localhost/Anvil - Gear/cog icon (keep SVG since no image available)
   [localChain.id]: `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="16" fill="#404040"/><path fill="#10B981" d="M16 8a1 1 0 0 1 1 1v1.07a5.001 5.001 0 0 1 3.35 1.58l.76-.76a1 1 0 1 1 1.42 1.42l-.76.76A5.001 5.001 0 0 1 23.35 16H24.5a1 1 0 1 1 0 2h-1.15a5.001 5.001 0 0 1-1.58 3.35l.76.76a1 1 0 1 1-1.42 1.42l-.76-.76A5.001 5.001 0 0 1 17 24.35V25.5a1 1 0 1 1-2 0v-1.15a5.001 5.001 0 0 1-3.35-1.58l-.76.76a1 1 0 1 1-1.42-1.42l.76-.76A5.001 5.001 0 0 1 8.65 18H7.5a1 1 0 1 1 0-2h1.15a5.001 5.001 0 0 1 1.58-3.35l-.76-.76a1 1 0 1 1 1.42-1.42l.76.76A5.001 5.001 0 0 1 15 9.07V8a1 1 0 0 1 1-1zm0 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>`)}`,
 }
 

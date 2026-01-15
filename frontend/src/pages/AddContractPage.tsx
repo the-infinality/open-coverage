@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { useForm } from "react-hook-form"
+import { useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod/v4"
 import { useNavigate } from "react-router-dom"
@@ -42,6 +42,9 @@ import { useContracts, getContractTypes } from "@/hooks/use-contracts"
 import { getSupportedChainsInfo, getChainById } from "@/lib/wagmi"
 import { coverageAgentAbi, coverageProviderAbi } from "@/generated/abis"
 import type { ContractType, ProviderType } from "@/types/contracts"
+import eigenlayerLogo from "@/assets/eigenlayer.jpg"
+import catalysisLogo from "@/assets/catalysis.jpg"
+import symbioticLogo from "@/assets/symbiotic.png"
 
 // Get supported chain IDs for validation
 const supportedChainIds = getSupportedChainsInfo().map((c) => c.id)
@@ -121,20 +124,20 @@ const providerTypes: {
   {
     value: "EigenLayer",
     label: "EigenLayer",
-    icon: `data:image/svg+xml,${encodeURIComponent(`<svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="6" fill="#1A0B3E"/><path d="M8 22V10h4v8h8v4H8z" fill="#B4A1FF"/><path d="M24 10v12h-4v-8h-8V10h12z" fill="#fff"/></svg>`)}`,
+    icon: eigenlayerLogo,
     disabled: false,
   },
   {
     value: "Catalysis",
     label: "Catalysis",
-    icon: `data:image/svg+xml,${encodeURIComponent(`<svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="6" fill="#0D1117"/><circle cx="16" cy="16" r="8" stroke="#58A6FF" stroke-width="2"/><circle cx="16" cy="16" r="3" fill="#58A6FF"/></svg>`)}`,
+    icon: catalysisLogo,
     disabled: true,
     comingSoon: true,
   },
   {
     value: "Symbiotic",
     label: "Symbiotic",
-    icon: `data:image/svg+xml,${encodeURIComponent(`<svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="6" fill="#1a1a2e"/><path d="M10 16c0-3.3 2.7-6 6-6s6 2.7 6 6-2.7 6-6 6" stroke="#f72585" stroke-width="2" stroke-linecap="round"/><path d="M22 16c0 3.3-2.7 6-6 6s-6-2.7-6-6 2.7-6 6-6" stroke="#7209b7" stroke-width="2" stroke-linecap="round"/></svg>`)}`,
+    icon: symbioticLogo,
     disabled: true,
     comingSoon: true,
   },
@@ -172,9 +175,9 @@ export function AddContractPage() {
     },
   })
 
-  const watchedType = form.watch("type")
-  const watchedChainId = form.watch("chainId")
-  const watchedAddress = form.watch("address")
+  const watchedType = useWatch({ control: form.control, name: "type" })
+  const watchedChainId = useWatch({ control: form.control, name: "chainId" })
+  const watchedAddress = useWatch({ control: form.control, name: "address" })
 
   // Validate contract address when it changes
   useEffect(() => {
@@ -439,35 +442,43 @@ export function AddContractPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Chain</FormLabel>
-                    <Select
-                      onValueChange={(value) => field.onChange(parseInt(value, 10))}
-                      value={field.value?.toString()}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a chain" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {supportedChains.map((chain) => (
-                          <SelectItem key={chain.id} value={chain.id.toString()}>
-                            <div className="flex items-center gap-2">
+                    <FormControl>
+                      <div className="flex flex-wrap gap-3">
+                        {supportedChains.map((chain) => {
+                          const isSelected = field.value === chain.id
+
+                          return (
+                            <button
+                              key={chain.id}
+                              type="button"
+                              onClick={() => field.onChange(chain.id)}
+                              className={`
+                                relative flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 transition-all
+                                ${isSelected
+                                  ? "border-primary bg-primary/10 shadow-sm"
+                                  : "border-border hover:border-primary/50 hover:bg-accent cursor-pointer"
+                                }
+                              `}
+                            >
                               <img
                                 src={chain.icon}
                                 alt={chain.name}
-                                className="h-5 w-5 rounded-full"
+                                className="h-6 w-6 rounded-full"
                               />
-                              <span>{chain.name}</span>
+                              <span className="font-medium">{chain.name}</span>
                               {chain.isTestnet && (
-                                <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${chain.colors.bg} ${chain.colors.text}`}>
+                                <span className={`text-xs px-1.5 py-0.5 rounded-full ${chain.colors.bg} ${chain.colors.text}`}>
                                   Testnet
                                 </span>
                               )}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                              {isSelected && (
+                                <CheckCircle2 className="h-4 w-4 text-primary ml-1" />
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </FormControl>
                     <FormDescription>
                       The blockchain network where this contract is deployed
                     </FormDescription>
