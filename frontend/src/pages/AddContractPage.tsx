@@ -41,7 +41,7 @@ import {
 import { useContracts } from "@/hooks/use-contracts"
 import { getContractTypes } from "@/lib/contract-utils"
 import { getSupportedChainsInfo, getPublicClientForChain } from "@/lib/wagmi"
-import { generateContractName } from "@/utils/contract-name-utils"
+import { generateContractName } from "@/lib/utils"
 import type { ContractType, ProviderType } from "@/types/contracts"
 import eigenlayerLogo from "@/assets/eigenlayer.jpg"
 import catalysisLogo from "@/assets/catalysis.jpg"

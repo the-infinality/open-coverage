@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useContracts } from "@/hooks/use-contracts"
-import { getAbiForContractType } from "@/utils/abi-utils"
+import { getAbiForContractType } from "@/lib/abi"
 import { CopyableAddress } from "@/components/ui/copyable-address"
 import { RefreshCw } from "lucide-react"
 import { ContractSelector } from "@/components/ContractSelector"

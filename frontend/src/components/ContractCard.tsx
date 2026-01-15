@@ -24,7 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useContracts } from "@/hooks/use-contracts";
 import { getContractTypeLabel } from "@/lib/contract-utils";
-import { generateContractName } from "@/utils/contract-name-utils";
+import { generateContractName } from "@/lib/utils";
 import { CopyableAddress } from "@/components/ui/copyable-address";
 import { ChainBadge } from "@/components/ui/chain-badge";
 import { Badge } from "@/components/ui/badge";
