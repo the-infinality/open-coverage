@@ -17,7 +17,7 @@ interface ContractsContextValue {
   getContractById: (id: string) => CoverageContract | undefined
   getContractsByType: (type: ContractType) => CoverageContract[]
   exportContracts: (contractIds?: string[]) => void
-  importContracts: (json: string) => { success: boolean; imported: number; errors: string[] }
+  importContracts: (json: string, overwrite?: boolean) => { success: boolean; imported: number; updated: number; errors: string[] }
 }
 
 const ContractsContext = React.createContext<ContractsContextValue | undefined>(
@@ -107,8 +107,8 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
     URL.revokeObjectURL(url)
   }, [])
 
-  const importContracts = React.useCallback((json: string) => {
-    const result = importContractsFromJson(json)
+  const importContracts = React.useCallback((json: string, overwrite: boolean = false) => {
+    const result = importContractsFromJson(json, overwrite)
     if (result.success) {
       // Refresh contracts from storage
       setContracts(getStoredContracts())

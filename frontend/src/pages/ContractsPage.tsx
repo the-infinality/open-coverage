@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Label } from "@/components/ui/label"
 import { useContracts } from "@/hooks/use-contracts"
 import { ContractCard } from "@/components/ContractCard"
 import { getContractTypeLabel } from "@/lib/contract-utils"
@@ -28,6 +29,9 @@ export function ContractsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isImporting, setIsImporting] = useState(false)
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
+  const [importFileContent, setImportFileContent] = useState<string | null>(null)
+  const [overwriteExisting, setOverwriteExisting] = useState(false)
   const [selectedContractIds, setSelectedContractIds] = useState<Set<string>>(
     new Set()
   )
@@ -125,16 +129,43 @@ export function ContractsPage() {
     const file = event.target.files?.[0]
     if (!file) return
 
-    setIsImporting(true)
     try {
       const text = await file.text()
-      const result = importContracts(text)
+      setImportFileContent(text)
+      setIsImportDialogOpen(true)
+    } catch (error) {
+      toast.error("Failed to read file", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      })
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
+    }
+  }
+
+  const handleImportConfirm = async () => {
+    if (!importFileContent) return
+
+    setIsImporting(true)
+    setIsImportDialogOpen(false)
+    try {
+      const result = importContracts(importFileContent, overwriteExisting)
 
       if (result.success) {
+        const messages: string[] = []
         if (result.imported > 0) {
-          toast.success(
-            `Successfully imported ${result.imported} contract${result.imported > 1 ? "s" : ""}`
+          messages.push(
+            `Imported ${result.imported} new contract${result.imported > 1 ? "s" : ""}`
           )
+        }
+        if (result.updated > 0) {
+          messages.push(
+            `Updated ${result.updated} existing contract${result.updated > 1 ? "s" : ""}`
+          )
+        }
+        if (messages.length > 0) {
+          toast.success(messages.join(", "))
         }
         if (result.errors.length > 0) {
           toast.warning(
@@ -150,15 +181,27 @@ export function ContractsPage() {
         })
       }
     } catch (error) {
-      toast.error("Failed to read file", {
+      toast.error("Failed to import contracts", {
         description: error instanceof Error ? error.message : "Unknown error",
       })
     } finally {
       setIsImporting(false)
+      setImportFileContent(null)
+      setOverwriteExisting(false)
       // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = ""
       }
+    }
+  }
+
+  const handleImportDialogClose = () => {
+    setIsImportDialogOpen(false)
+    setImportFileContent(null)
+    setOverwriteExisting(false)
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
     }
   }
 
@@ -178,7 +221,7 @@ export function ContractsPage() {
               Export Contracts
             </Button>
           )}
-          <Button variant="outline" onClick={handleImportClick} disabled={isImporting}>
+          <Button variant="outline" onClick={() => setIsImportDialogOpen(true)} disabled={isImporting}>
             <Upload className="mr-2 size-4" />
             Load Contracts from File
           </Button>
@@ -191,6 +234,65 @@ export function ContractsPage() {
           />
         </div>
       </div>
+
+      <Dialog open={isImportDialogOpen} onOpenChange={handleImportDialogClose}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Import Contracts</DialogTitle>
+            <DialogDescription>
+              {importFileContent
+                ? "Choose how to handle contracts that already exist."
+                : "Select a JSON file containing contracts to import."}
+            </DialogDescription>
+          </DialogHeader>
+          {!importFileContent ? (
+            <div className="space-y-4 py-4">
+              <div className="flex flex-col items-center justify-center py-8 border-2 border-dashed rounded-lg">
+                <Upload className="mb-4 size-12 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground mb-4">
+                  Select a JSON file to import contracts
+                </p>
+                <Button onClick={handleImportClick} variant="outline">
+                  Select File
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4 py-4">
+              <div className="flex items-start gap-3 rounded-lg border p-3">
+                <Checkbox
+                  checked={overwriteExisting}
+                  onChange={() => setOverwriteExisting(!overwriteExisting)}
+                  id="overwrite-existing"
+                />
+                <div className="flex-1 space-y-1">
+                  <Label
+                    htmlFor="overwrite-existing"
+                    className="cursor-pointer font-medium"
+                  >
+                    Overwrite existing contracts
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    If enabled, contracts with matching addresses and chain IDs will be
+                    updated with data from the imported file. Otherwise, existing contracts
+                    will be skipped.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={handleImportDialogClose}>
+              Cancel
+            </Button>
+            {importFileContent && (
+              <Button onClick={handleImportConfirm} disabled={isImporting}>
+                {isImporting ? "Importing..." : "Import"}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {contracts.length > 0 && (
         <ChainFilter

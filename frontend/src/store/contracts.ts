@@ -58,9 +58,13 @@ export function exportContractsToJson(contractIds?: string[]): string {
   return JSON.stringify(contractsToExport, null, 2)
 }
 
-export function importContractsFromJson(json: string): {
+export function importContractsFromJson(
+  json: string,
+  overwrite: boolean = false
+): {
   success: boolean
   imported: number
+  updated: number
   errors: string[]
 } {
   try {
@@ -70,6 +74,7 @@ export function importContractsFromJson(json: string): {
       return {
         success: false,
         imported: 0,
+        updated: 0,
         errors: ["Invalid format: JSON must be an array of contracts"],
       }
     }
@@ -77,7 +82,9 @@ export function importContractsFromJson(json: string): {
     const errors: string[] = []
     const existingContracts = getStoredContracts()
     const existingIds = new Set(existingContracts.map((c) => c.id))
+    const existingMap = new Map(existingContracts.map((c) => [c.id, c]))
     let imported = 0
+    let updated = 0
 
     for (const contract of parsed) {
       // Validate required fields
@@ -91,13 +98,33 @@ export function importContractsFromJson(json: string): {
       // Generate ID if not present
       const id = contract.id || generateContractId(contract.chainId, contract.address)
 
-      // Skip if already exists
+      // Handle existing contracts
       if (existingIds.has(id)) {
-        errors.push(`Skipped contract ${id}: already exists`)
+        if (overwrite) {
+          // Update existing contract
+          const existingIndex = existingContracts.findIndex((c) => c.id === id)
+          if (existingIndex >= 0) {
+            const existingContract = existingMap.get(id)!
+            const updatedContract: CoverageContract = {
+              id,
+              name: contract.name || existingContract.name,
+              address: contract.address.toLowerCase() as Address,
+              type: contract.type,
+              chainId: contract.chainId,
+              abi: contract.abi ?? existingContract.abi,
+              createdAt: existingContract.createdAt, // Preserve original creation date
+              providerType: contract.providerType ?? existingContract.providerType,
+            }
+            existingContracts[existingIndex] = updatedContract
+            updated++
+          }
+        } else {
+          errors.push(`Skipped contract ${id}: already exists`)
+        }
         continue
       }
 
-      // Create contract with defaults
+      // Create new contract with defaults
       const newContract: CoverageContract = {
         id,
         name: contract.name || `Imported Contract ${imported + 1}`,
@@ -120,12 +147,14 @@ export function importContractsFromJson(json: string): {
     return {
       success: true,
       imported,
+      updated,
       errors,
     }
   } catch (error) {
     return {
       success: false,
       imported: 0,
+      updated: 0,
       errors: [`Failed to parse JSON: ${error instanceof Error ? error.message : "Unknown error"}`],
     }
   }

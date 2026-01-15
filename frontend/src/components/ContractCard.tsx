@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Trash2, ExternalLink, FileCode, Plus } from "lucide-react";
+import { Trash2, ExternalLink, FileCode, Plus, Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -41,11 +41,12 @@ interface ContractCardProps {
 export const ContractCard: React.FC<ContractCardProps> = ({
   contract,
 }) => {
-  const { removeContract, addContract, contracts } = useContracts();
+  const { removeContract, addContract, updateContract, contracts } = useContracts();
   const unsaved = !contract.name;
   // Automatically open dialog if unsaved and name is missing
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   
   // Generate default contract name if not provided
   const [contractName, setContractName] = useState(() => {
@@ -53,6 +54,9 @@ export const ContractCard: React.FC<ContractCardProps> = ({
     if (contract.type) return generateContractName(contract.type, contracts);
     return "";
   });
+
+  // State for editing contract name
+  const [editName, setEditName] = useState(contract.name || "");
 
   // Reset to generated name when dialog opens
   const handleDialogOpenChange = (open: boolean) => {
@@ -89,13 +93,51 @@ export const ContractCard: React.FC<ContractCardProps> = ({
     }
   };
 
+  const handleEditName = () => {
+    if (!contract.id) return;
+    
+    if (!editName.trim()) {
+      toast.error("Please enter a contract name");
+      return;
+    }
+
+    try {
+      updateContract(contract.id, { name: editName.trim() });
+      setIsEditDialogOpen(false);
+      toast.success("Contract name updated");
+    } catch {
+      toast.error("Failed to update contract name");
+    }
+  };
+
+  const handleEditDialogOpenChange = (open: boolean) => {
+    setIsEditDialogOpen(open);
+    if (open && contract.name) {
+      setEditName(contract.name);
+    }
+  };
+
   return (
     <>
       <Card className="gap-4">
         <CardHeader className="gap-0">
           <div className="flex items-start justify-between">
-            <div className="flex flex-col gap-y-0">
-              {contract.name && <CardTitle className="text-lg">{contract.name}</CardTitle>}
+            <div className="flex flex-col gap-y-0 flex-1 min-w-0">
+              {contract.name && (
+                <div className="flex items-center gap-2 group">
+                  <CardTitle className="text-lg truncate">{contract.name}</CardTitle>
+                  {!unsaved && contract.id && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                      onClick={() => setIsEditDialogOpen(true)}
+                    >
+                      <Pencil className="size-3" />
+                    </Button>
+                  )}
+                </div>
+              )}
               <CardDescription className="flex items-center gap-x-2 flex-wrap">
                 <Badge variant="secondary">
                   {getContractTypeLabel(contract.type)}
@@ -104,7 +146,7 @@ export const ContractCard: React.FC<ContractCardProps> = ({
               </CardDescription>
             </div>
             {!unsaved && (
-              <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setIsDeleteDialogOpen(true)}>
+              <Button variant="ghost" size="icon" className="text-destructive shrink-0" onClick={() => setIsDeleteDialogOpen(true)}>
                 <Trash2 className="size-4" />
               </Button>
             )}
@@ -204,27 +246,69 @@ export const ContractCard: React.FC<ContractCardProps> = ({
           </DialogContent>
         </Dialog>
       ) : (
-        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-          <DialogTrigger asChild>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Remove Contract</DialogTitle>
-              <DialogDescription>
-                Are you sure you want to remove "{contract.name}"? This action
-                cannot be undone.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button variant="destructive" onClick={handleDelete}>
-                Remove
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <>
+          <Dialog open={isEditDialogOpen} onOpenChange={handleEditDialogOpenChange}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Rename Contract</DialogTitle>
+                <DialogDescription>
+                  Enter a new name for this contract.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-contract-name">Contract Name</Label>
+                  <Input
+                    id="edit-contract-name"
+                    placeholder="e.g., My Coverage Provider"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleEditName();
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsEditDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleEditName}
+                  disabled={!editName.trim()}
+                >
+                  Save
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+            <DialogTrigger asChild>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Remove Contract</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to remove "{contract.name}"? This action
+                  cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={handleDelete}>
+                  Remove
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </>
       )}
     </>
   );
