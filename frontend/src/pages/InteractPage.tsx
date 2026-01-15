@@ -3,11 +3,11 @@ import { Link } from "react-router-dom"
 import { toast } from "sonner"
 import {
   useAccount,
-  usePublicClient,
   useWalletClient,
 } from "wagmi"
 import { type Abi, type AbiFunction } from "viem"
 import type { SavedContract } from "@/types/contracts"
+import { getPublicClientForChain } from "@/lib/wagmi"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -42,10 +42,12 @@ function FunctionCard({
   fn,
   contractAddress,
   abi,
+  chainId,
 }: {
   fn: AbiFunction
   contractAddress: `0x${string}`
   abi: Abi
+  chainId: number
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [result, setResult] = useState<FunctionCallResult | null>(null)
@@ -53,7 +55,10 @@ function FunctionCard({
   const [args, setArgs] = useState<Record<string, string>>({})
   const [hasAutoQueried, setHasAutoQueried] = useState(false)
 
-  const publicClient = usePublicClient()
+  // Use public RPC client for read operations (not wallet RPC)
+  // getPublicClientForChain explicitly uses the public RPC transport
+  // Use the contract's chainId, not the wallet's chain
+  const publicClient = getPublicClientForChain(chainId)
   const { data: walletClient } = useWalletClient()
   const { address } = useAccount()
 
@@ -382,14 +387,14 @@ export function InteractPage() {
       />
 
       {selectedContract && (
-        <Card>
+        <Card className="h-fit">
           <CardHeader>
             <CardTitle>Contract Functions</CardTitle>
             <CardDescription>
               Read and write functions for {selectedContract.name}
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="h-fit">
             <Tabs defaultValue="read">
               <TabsList className="w-full">
                 <TabsTrigger value="read" className="flex-1">
@@ -400,7 +405,7 @@ export function InteractPage() {
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="read" className="mt-4">
-                <ScrollArea className="h-[500px]">
+                <ScrollArea className="h-fit">
                   <div className="divide-y rounded-lg border">
                     {readFunctions.map((fn, index) => (
                       <FunctionCard
@@ -408,13 +413,14 @@ export function InteractPage() {
                         fn={fn}
                         contractAddress={selectedContract.address}
                         abi={abi}
+                        chainId={selectedContract.chainId}
                       />
                     ))}
                   </div>
                 </ScrollArea>
               </TabsContent>
               <TabsContent value="write" className="mt-4">
-                <ScrollArea className="h-[500px]">
+                <ScrollArea className="h-fit">
                   <div className="divide-y rounded-lg border">
                     {writeFunctions.map((fn, index) => (
                       <FunctionCard
@@ -422,6 +428,7 @@ export function InteractPage() {
                         fn={fn}
                         contractAddress={selectedContract.address}
                         abi={abi}
+                        chainId={selectedContract.chainId}
                       />
                     ))}
                   </div>

@@ -126,9 +126,6 @@ export function ContractsPage() {
             View and manage your saved contracts
           </p>
         </div>
-        <Button asChild>
-          <Link to="/add-contract">Add Contract</Link>
-        </Button>
       </div>
 
       {contracts.length === 0 ? (
