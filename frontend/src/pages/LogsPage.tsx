@@ -3,7 +3,6 @@ import { Link, useNavigate, useParams } from "react-router-dom"
 import { useBlockNumber } from "wagmi"
 import { type Abi, type AbiEvent, decodeEventLog } from "viem"
 import { toast } from "sonner"
-import type { CoverageContract } from "@/types/contracts"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"

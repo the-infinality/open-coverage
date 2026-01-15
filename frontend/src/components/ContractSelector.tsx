@@ -1,8 +1,6 @@
-import { useState, useEffect } from "react"
-import { useParams } from "react-router-dom"
+import { useEffect } from "react"
 import { useChainId, useSwitchChain, useAccount } from "wagmi"
 import { toast } from "sonner"
-import type { CoverageContract } from "@/types/contracts"
 
 import {
   Card,
