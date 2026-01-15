@@ -86,30 +86,11 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useContracts() {
   const context = React.useContext(ContractsContext)
   if (!context) {
     throw new Error("useContracts must be used within ContractsProvider")
   }
   return context
-}
-
-// Helper function to convert contract type to display name
-export function getContractTypeLabel(type: ContractType): string {
-  switch (type) {
-    case "CoverageAgent":
-      return "Coverage Agent"
-    case "CoverageProvider":
-      return "Coverage Provider"
-    default:
-      return type
-  }
-}
-
-// Helper to get supported contract types
-export function getContractTypes(): { value: ContractType; label: string }[] {
-  return [
-    { value: "CoverageAgent", label: "Coverage Agent" },
-    { value: "CoverageProvider", label: "Coverage Provider" },
-  ]
 }

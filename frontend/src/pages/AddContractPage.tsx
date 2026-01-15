@@ -38,7 +38,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { useContracts, getContractTypes } from "@/hooks/use-contracts"
+import { useContracts } from "@/hooks/use-contracts"
+import { getContractTypes } from "@/lib/contract-utils"
 import { getSupportedChainsInfo, getPublicClientForChain } from "@/lib/wagmi"
 import { coverageAgentAbi, coverageProviderAbi } from "@/generated/abis"
 import type { ContractType, ProviderType } from "@/types/contracts"

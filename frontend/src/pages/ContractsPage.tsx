@@ -19,7 +19,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { useContracts, getContractTypeLabel } from "@/hooks/use-contracts"
+import { useContracts } from "@/hooks/use-contracts"
+import { getContractTypeLabel } from "@/lib/contract-utils"
 import { getChainName } from "@/lib/wagmi"
 import { CopyableAddress } from "@/components/ui/copyable-address"
 import type { SavedContract } from "@/types/contracts"

@@ -29,7 +29,6 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { useContracts } from "@/hooks/use-contracts"
 import { getAbiForContractType } from "@/generated/abis"
 import { cn, truncateAddress } from "@/lib/utils"
-import { CopyableAddress } from "@/components/ui/copyable-address"
 import { ChevronDown, Play, Eye, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react"
 import { ContractSelector } from "@/components/ContractSelector"
 
