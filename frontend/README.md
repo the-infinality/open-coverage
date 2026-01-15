@@ -8,7 +8,7 @@ An interactive frontend for testing the Open Coverage System. This application a
 - **Contract Interaction**: Read and write to contracts using their ABIs (similar to Etherscan)
 - **Contract Logs**: View event logs emitted by contracts
 - **Wallet Connection**: Connect your wallet using injected providers or WalletConnect
-- **Multi-Chain Support**: Works with Mainnet, Sepolia, Holesky, and local networks
+- **Multi-Chain Support**: Works with Local, Mainnet, and Sepolia networks (configurable via env vars)
 - **Dark/Light Theme**: System-based theming with manual override
 
 ## Tech Stack
@@ -106,7 +106,16 @@ npx wagmi generate
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `VITE_LOCAL_RPC` | RPC URL for local network | `http://127.0.0.1:8545` |
+| `VITE_MAINNET_ARCHIVE_RPC` | RPC URL for Ethereum Mainnet | `https://eth.llamarpc.com` |
+| `VITE_SEPOLIA_ARCHIVE_RPC` | RPC URL for Sepolia testnet | `https://rpc.sepolia.org` |
 | `VITE_WALLETCONNECT_PROJECT_ID` | WalletConnect Project ID for wallet connection | `demo` |
+
+Copy `.env.example` to `.env` and configure your RPC URLs:
+
+```bash
+cp .env.example .env
+```
 
 ## Usage
 

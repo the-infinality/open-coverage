@@ -27,10 +27,10 @@ export function Header() {
         {isConnected && (
           <Select
             value={chainId.toString()}
-            onValueChange={(value) => switchChain({ chainId: parseInt(value) as 1 | 11155111 | 17000 | 1337 })}
+            onValueChange={(value) => switchChain({ chainId: parseInt(value) as 1 | 11155111 | 31337 })}
           >
             <SelectTrigger className="w-40">
-              <SelectValue placeholder="Select Chain" />
+              <SelectValue placeholder="Select Network" />
             </SelectTrigger>
             <SelectContent>
               {supportedChains.map((chain) => (
