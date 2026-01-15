@@ -102,7 +102,7 @@ function CoverageAgentInfo({ contract }: { contract: CoverageContract }) {
           </div>
         ) : (
           <ScrollArea className="h-fit max-h-[400px]">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
               {providers.map((providerAddress) => {
                 const contractKey = `${contract.chainId}-${providerAddress.toLowerCase()}`
                 const savedContract = savedContractsMap.get(contractKey)

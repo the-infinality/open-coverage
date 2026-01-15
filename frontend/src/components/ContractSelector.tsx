@@ -27,25 +27,23 @@ import { getChainInfo } from "@/lib/wagmi"
 interface ContractSelectorProps {
   title?: string
   description?: string
-  onContractChange?: (contract: CoverageContract | null) => void
+  contractId?: string
+  onContractChange?: (contractId: string | null) => void
 }
 
 export function ContractSelector({
   title = "Select Contract",
   description = "Choose a contract",
+  contractId,
   onContractChange,
 }: ContractSelectorProps) {
-  const { contractId } = useParams<{ contractId?: string }>()
   const { contracts, getContractById } = useContracts()
   const chainId = useChainId()
   const { switchChain } = useSwitchChain()
   const { isConnected } = useAccount()
-  const [selectedContractId, setSelectedContractId] = useState<string | null>(
-    contractId || null
-  )
 
-  const selectedContract = selectedContractId
-    ? getContractById(selectedContractId)
+  const selectedContract = contractId
+    ? getContractById(contractId)
     : null
 
   // Auto-switch chain when contract is selected
@@ -56,16 +54,12 @@ export function ContractSelector({
     }
   }, [selectedContract, chainId, isConnected, switchChain])
 
-  // Notify parent component when contract changes
-  useEffect(() => {
-    onContractChange?.(selectedContract || null)
-  }, [selectedContract, onContractChange])
 
   // Show all contracts (not filtered by chain)
   const allContracts = contracts
 
   const handleValueChange = (value: string) => {
-    setSelectedContractId(value)
+    onContractChange?.(value || null)
   }
 
   return (
@@ -76,7 +70,7 @@ export function ContractSelector({
       </CardHeader>
       <CardContent className="space-y-4">
         <Select
-          value={selectedContractId || ""}
+          value={contractId || ""}
           onValueChange={handleValueChange}
         >
           <SelectTrigger>

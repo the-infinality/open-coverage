@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react"
-import { Link } from "react-router-dom"
+import { useState, useEffect, useMemo } from "react"
+import { Link, useNavigate, useParams } from "react-router-dom"
 import { useBlockNumber } from "wagmi"
 import { type Abi, type AbiEvent, decodeEventLog } from "viem"
 import { toast } from "sonner"
@@ -34,13 +34,21 @@ interface ContractLog {
 
 export function LogsPage() {
   const { data: currentBlock } = useBlockNumber()
-  const { contracts } = useContracts()
 
-  const [selectedContract, setSelectedContract] = useState<CoverageContract | null>(null)
   const [logs, setLogs] = useState<ContractLog[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [fromBlock, setFromBlock] = useState<string>("")
   const [toBlock, setToBlock] = useState<string>("")
+  const { contractId } = useParams<{ contractId?: string }>()
+  const { contracts, getContractById } = useContracts()
+  const navigate = useNavigate()
+
+  const selectedContract = useMemo(() => {
+    if (contractId) {
+      return getContractById(contractId) || null
+    }
+    return null
+  }, [contractId, getContractById])
 
   const chainId = selectedContract?.chainId
   const publicClient = getPublicClientForChain(chainId || 1)
@@ -146,7 +154,11 @@ export function LogsPage() {
       <ContractSelector
         title="Select Contract"
         description="Choose a contract to view logs"
-        onContractChange={setSelectedContract}
+        contractId={contractId}
+        onContractChange={(contractId: string | null) => {
+          if(contractId === null) navigate('/logs')
+          navigate(`/logs/${contractId}`)
+        }}
       />
 
       {selectedContract && events.length > 0 && (

@@ -1,12 +1,11 @@
-import { useState } from "react"
-import { Link } from "react-router-dom"
+import { useState, useMemo } from "react"
+import { Link, useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
 import {
   useAccount,
   useWalletClient,
 } from "wagmi"
 import { type Abi, type AbiFunction } from "viem"
-import type { CoverageContract } from "@/types/contracts"
 import { getPublicClientForChain } from "@/lib/wagmi"
 
 import { Button } from "@/components/ui/button"
@@ -338,24 +337,45 @@ function FunctionCard({
 }
 
 export function InteractPage() {
-  const { contracts } = useContracts()
-  const [selectedContract, setSelectedContract] = useState<CoverageContract | null>(null)
+  const { contractId } = useParams<{ contractId?: string }>()
+  const { contracts, getContractById } = useContracts()
+  const navigate = useNavigate()
 
-  const abi = selectedContract
-    ? (getAbiForContractType(selectedContract.type) as Abi)
-    : []
+  // Derive selected contract directly from route parameter
+  const selectedContract = useMemo(() => {
+    if (contractId) {
+      return getContractById(contractId) || null
+    }
+    return null
+  }, [contractId, getContractById])
 
-  const readFunctions = abi.filter(
-    (item): item is AbiFunction =>
-      item.type === "function" &&
-      (item.stateMutability === "view" || item.stateMutability === "pure")
+  const abi = useMemo(
+    () =>
+      selectedContract
+        ? (getAbiForContractType(selectedContract.type) as Abi)
+        : [],
+    [selectedContract]
   )
 
-  const writeFunctions = abi.filter(
-    (item): item is AbiFunction =>
-      item.type === "function" &&
-      item.stateMutability !== "view" &&
-      item.stateMutability !== "pure"
+  const readFunctions = useMemo(
+    () =>
+      abi.filter(
+        (item): item is AbiFunction =>
+          item.type === "function" &&
+          (item.stateMutability === "view" || item.stateMutability === "pure")
+      ),
+    [abi]
+  )
+
+  const writeFunctions = useMemo(
+    () =>
+      abi.filter(
+        (item): item is AbiFunction =>
+          item.type === "function" &&
+          item.stateMutability !== "view" &&
+          item.stateMutability !== "pure"
+      ),
+    [abi]
   )
 
   if (contracts.length === 0) {
@@ -384,7 +404,11 @@ export function InteractPage() {
       <ContractSelector
         title="Select Contract"
         description="Choose a contract to interact with"
-        onContractChange={setSelectedContract}
+        contractId={contractId}
+        onContractChange={(contractId: string | null) => {
+          if(contractId === null) navigate('/interact')
+          navigate(`/interact/${contractId}`)
+        }}
       />
 
       {selectedContract && (
@@ -398,7 +422,7 @@ export function InteractPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="h-fit">
-            <Tabs defaultValue="read">
+            <Tabs defaultValue="read" key={contractId}>
               <TabsList className="w-full">
                 <TabsTrigger value="read" className="flex-1">
                   Read ({readFunctions.length})
