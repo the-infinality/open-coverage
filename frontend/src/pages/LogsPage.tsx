@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
-import { useChainId, usePublicClient, useBlockNumber } from "wagmi"
+import { useBlockNumber } from "wagmi"
 import { type Abi, type AbiEvent, decodeEventLog } from "viem"
 import { toast } from "sonner"
 import type { CoverageContract } from "@/types/contracts"
