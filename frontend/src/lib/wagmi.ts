@@ -1,6 +1,7 @@
 import { http, createConfig } from "wagmi"
 import { mainnet, sepolia, localhost } from "wagmi/chains"
 import { injected, walletConnect } from "wagmi/connectors"
+import { createPublicClient, type PublicClient } from "viem"
 import ethereumLogo from "@/assets/ethereum.jpg"
 import sepoliaLogo from "@/assets/sepolia.jpeg"
 
@@ -12,7 +13,7 @@ const localChain = {
 } as const
 
 // Supported chains
-export const supportedChains = [localChain, mainnet, sepolia] as const
+export const supportedChains = [mainnet, sepolia, localChain] as const
 
 // Chain icons - Logo images for each supported chain
 export const chainIcons: Record<number, string> = {
@@ -92,6 +93,28 @@ export function getChainName(chainId: number): string {
 
 export function getChainById(chainId: number) {
   return supportedChains.find((c) => c.id === chainId)
+}
+
+// Get a public client for a specific chain ID
+export function getPublicClientForChain(chainId: number): PublicClient | null {
+  const chain = getChainById(chainId)
+  if (!chain) return null
+
+  let transport
+  if (chainId === mainnet.id) {
+    transport = http(mainnetRpc)
+  } else if (chainId === sepolia.id) {
+    transport = http(sepoliaRpc)
+  } else if (chainId === localChain.id) {
+    transport = http(localRpc)
+  } else {
+    return null
+  }
+
+  return createPublicClient({
+    chain,
+    transport,
+  })
 }
 
 declare module "wagmi" {

@@ -261,7 +261,7 @@ const SidebarHeader = React.forwardRef<
     <div
       ref={ref}
       data-sidebar="header"
-      className={cn("flex h-16 shrink-0 items-center gap-2 border-b border-sidebar-border px-6", className)}
+      className={cn("flex h-16 shrink-0 items-center gap-2 px-6", className)}
       {...props}
     />
   )
@@ -276,7 +276,7 @@ const SidebarFooter = React.forwardRef<
     <div
       ref={ref}
       data-sidebar="footer"
-      className={cn("flex shrink-0 flex-col gap-2 border-t border-sidebar-border p-2", className)}
+      className={cn("flex shrink-0 flex-col gap-2 border-sidebar-border p-2", className)}
       {...props}
     />
   )
@@ -424,7 +424,7 @@ const sidebarMenuButtonVariants = cva(
           "bg-sidebar-background shadow-[0_0_0_1px_hsl(var(--sidebar-border))] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_hsl(var(--sidebar-accent))]",
       },
       size: {
-        default: "h-8 text-sm",
+        default: "h-[55px] text-sm",
         sm: "h-7 text-xs",
         lg: "h-12 text-base group-data-[collapsible=icon]:!size-12",
       },

@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod/v4"
 import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
-import { useChainId, usePublicClient } from "wagmi"
+import { useChainId } from "wagmi"
 import { getAddress } from "viem"
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react"
 
@@ -39,7 +39,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useContracts, getContractTypes } from "@/hooks/use-contracts"
-import { getSupportedChainsInfo, getChainById } from "@/lib/wagmi"
+import { getSupportedChainsInfo, getPublicClientForChain } from "@/lib/wagmi"
 import { coverageAgentAbi, coverageProviderAbi } from "@/generated/abis"
 import type { ContractType, ProviderType } from "@/types/contracts"
 import eigenlayerLogo from "@/assets/eigenlayer.jpg"
@@ -153,7 +153,6 @@ interface ContractValidationState {
 export function AddContractPage() {
   const navigate = useNavigate()
   const connectedChainId = useChainId()
-  const publicClient = usePublicClient()
   const { addContract, contracts } = useContracts()
   const supportedChains = getSupportedChainsInfo()
 
@@ -187,8 +186,14 @@ export function AddContractPage() {
         return
       }
 
-      const chain = getChainById(watchedChainId)
-      if (!chain) {
+      if (!watchedChainId) {
+        setValidation({ isValidating: false, hasCode: null, ownerAddress: null, error: "Please select a chain" })
+        return
+      }
+
+      // Get public client for the selected chain
+      const chainPublicClient = getPublicClientForChain(watchedChainId)
+      if (!chainPublicClient) {
         setValidation({ isValidating: false, hasCode: null, ownerAddress: null, error: "Invalid chain" })
         return
       }
@@ -197,7 +202,7 @@ export function AddContractPage() {
 
       try {
         // Check if there's code at the address
-        const code = await publicClient?.getBytecode({ address: getAddress(watchedAddress) })
+        const code = await chainPublicClient.getBytecode({ address: getAddress(watchedAddress) })
         const hasCode = code !== undefined && code !== "0x"
 
         if (!hasCode) {
@@ -216,7 +221,7 @@ export function AddContractPage() {
         try {
           if (watchedType === "CoverageAgent") {
             // Use coordinator method for CoverageAgent
-            const result = await publicClient?.readContract({
+            const result = await chainPublicClient.readContract({
               address: getAddress(watchedAddress),
               abi: coverageAgentAbi,
               functionName: "coordinator",
@@ -224,7 +229,7 @@ export function AddContractPage() {
             ownerAddress = result as string
           } else if (watchedType === "CoverageProvider") {
             // Use owner method for CoverageProvider
-            const result = await publicClient?.readContract({
+            const result = await chainPublicClient.readContract({
               address: getAddress(watchedAddress),
               abi: coverageProviderAbi,
               functionName: "owner",
@@ -253,7 +258,7 @@ export function AddContractPage() {
 
     const timeoutId = setTimeout(validateContract, 500)
     return () => clearTimeout(timeoutId)
-  }, [watchedAddress, watchedChainId, watchedType, publicClient, form])
+  }, [watchedAddress, watchedChainId, watchedType])
 
   // Reset provider type when contract type changes
   useEffect(() => {

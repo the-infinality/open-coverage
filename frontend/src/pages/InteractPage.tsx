@@ -1,13 +1,13 @@
 import { useState } from "react"
-import { useParams, Link } from "react-router-dom"
+import { Link } from "react-router-dom"
 import { toast } from "sonner"
 import {
   useAccount,
-  useChainId,
   usePublicClient,
   useWalletClient,
 } from "wagmi"
 import { type Abi, type AbiFunction } from "viem"
+import type { SavedContract } from "@/types/contracts"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,13 +19,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Collapsible,
@@ -38,6 +31,7 @@ import { getAbiForContractType } from "@/generated/abis"
 import { cn, truncateAddress } from "@/lib/utils"
 import { CopyableAddress } from "@/components/ui/copyable-address"
 import { ChevronDown, Play, Eye, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react"
+import { ContractSelector } from "@/components/ContractSelector"
 
 interface FunctionCallResult {
   success: boolean
@@ -339,16 +333,8 @@ function FunctionCard({
 }
 
 export function InteractPage() {
-  const { contractId } = useParams<{ contractId?: string }>()
-  const { contracts, getContractById } = useContracts()
-  const chainId = useChainId()
-  const [selectedContractId, setSelectedContractId] = useState<string | null>(
-    contractId || null
-  )
-
-  const selectedContract = selectedContractId
-    ? getContractById(selectedContractId)
-    : null
+  const { contracts } = useContracts()
+  const [selectedContract, setSelectedContract] = useState<SavedContract | null>(null)
 
   const abi = selectedContract
     ? (getAbiForContractType(selectedContract.type) as Abi)
@@ -367,15 +353,12 @@ export function InteractPage() {
       item.stateMutability !== "pure"
   )
 
-  // Filter contracts by current chain
-  const chainContracts = contracts.filter((c) => c.chainId === chainId)
-
-  if (chainContracts.length === 0) {
+  if (contracts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
-        <h2 className="text-lg font-medium">No contracts on this chain</h2>
+        <h2 className="text-lg font-medium">No contracts yet</h2>
         <p className="mb-4 text-center text-sm text-muted-foreground">
-          Add a contract for this chain to start interacting.
+          Add a contract to start interacting.
         </p>
         <Button asChild>
           <Link to="/add-contract">Add Contract</Link>
@@ -393,39 +376,18 @@ export function InteractPage() {
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Select Contract</CardTitle>
-          <CardDescription>
-            Choose a contract to interact with
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Select
-            value={selectedContractId || ""}
-            onValueChange={(value) => setSelectedContractId(value)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select a contract" />
-            </SelectTrigger>
-            <SelectContent>
-              {chainContracts.map((contract) => (
-                <SelectItem key={contract.id} value={contract.id}>
-                  {contract.name} ({truncateAddress(contract.address)})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
+      <ContractSelector
+        title="Select Contract"
+        description="Choose a contract to interact with"
+        onContractChange={setSelectedContract}
+      />
 
       {selectedContract && (
         <Card>
           <CardHeader>
-            <CardTitle>{selectedContract.name}</CardTitle>
-            <CardDescription className="flex items-center gap-2">
-              <CopyableAddress address={selectedContract.address} truncateChars={8} variant="inline" size="sm" /> -{" "}
-              {selectedContract.type}
+            <CardTitle>Contract Functions</CardTitle>
+            <CardDescription>
+              Read and write functions for {selectedContract.name}
             </CardDescription>
           </CardHeader>
           <CardContent>

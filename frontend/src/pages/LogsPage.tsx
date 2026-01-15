@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react"
-import { useParams, Link } from "react-router-dom"
+import { Link } from "react-router-dom"
 import { useChainId, usePublicClient, useBlockNumber } from "wagmi"
 import { type Abi, type AbiEvent, decodeEventLog } from "viem"
 import { toast } from "sonner"
+import type { SavedContract } from "@/types/contracts"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,19 +15,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useContracts } from "@/hooks/use-contracts"
 import { getAbiForContractType } from "@/generated/abis"
 import { CopyableAddress } from "@/components/ui/copyable-address"
-import { truncateAddress } from "@/lib/utils"
 import { RefreshCw } from "lucide-react"
+import { ContractSelector } from "@/components/ContractSelector"
 
 interface ContractLog {
   address: `0x${string}`
@@ -38,23 +32,16 @@ interface ContractLog {
 }
 
 export function LogsPage() {
-  const { contractId } = useParams<{ contractId?: string }>()
-  const { contracts, getContractById } = useContracts()
   const chainId = useChainId()
   const publicClient = usePublicClient()
   const { data: currentBlock } = useBlockNumber()
+  const { contracts } = useContracts()
 
-  const [selectedContractId, setSelectedContractId] = useState<string | null>(
-    contractId || null
-  )
+  const [selectedContract, setSelectedContract] = useState<SavedContract | null>(null)
   const [logs, setLogs] = useState<ContractLog[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [fromBlock, setFromBlock] = useState<string>("")
   const [toBlock, setToBlock] = useState<string>("")
-
-  const selectedContract = selectedContractId
-    ? getContractById(selectedContractId)
-    : null
 
   const abi = selectedContract
     ? (getAbiForContractType(selectedContract.type) as Abi)
@@ -63,9 +50,6 @@ export function LogsPage() {
   const events = abi.filter(
     (item): item is AbiEvent => item.type === "event"
   )
-
-  // Filter contracts by current chain
-  const chainContracts = contracts.filter((c) => c.chainId === chainId)
 
   const fetchLogs = async () => {
     if (!selectedContract || !publicClient) return
@@ -136,12 +120,12 @@ export function LogsPage() {
     }
   }, [selectedContract, currentBlock, chainId])
 
-  if (chainContracts.length === 0) {
+  if (contracts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
-        <h2 className="text-lg font-medium">No contracts on this chain</h2>
+        <h2 className="text-lg font-medium">No contracts yet</h2>
         <p className="mb-4 text-center text-sm text-muted-foreground">
-          Add a contract for this chain to view logs.
+          Add a contract to view logs.
         </p>
         <Button asChild>
           <Link to="/add-contract">Add Contract</Link>
@@ -157,61 +141,11 @@ export function LogsPage() {
         <p className="text-muted-foreground">View event logs for your contracts</p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Select Contract</CardTitle>
-          <CardDescription>Choose a contract to view logs</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Select
-            value={selectedContractId || ""}
-            onValueChange={(value) => setSelectedContractId(value)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select a contract" />
-            </SelectTrigger>
-            <SelectContent>
-              {chainContracts.map((contract) => (
-                <SelectItem key={contract.id} value={contract.id}>
-                  {contract.name} ({truncateAddress(contract.address)})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {selectedContract && (
-            <>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <Label>From Block</Label>
-                  <Input
-                    type="number"
-                    value={fromBlock}
-                    onChange={(e) => setFromBlock(e.target.value)}
-                    placeholder="From block number"
-                  />
-                </div>
-                <div>
-                  <Label>To Block</Label>
-                  <Input
-                    type="number"
-                    value={toBlock}
-                    onChange={(e) => setToBlock(e.target.value)}
-                    placeholder="To block number"
-                  />
-                </div>
-              </div>
-
-              <Button onClick={fetchLogs} disabled={isLoading}>
-                <RefreshCw
-                  className={`mr-2 size-4 ${isLoading ? "animate-spin" : ""}`}
-                />
-                Fetch Logs
-              </Button>
-            </>
-          )}
-        </CardContent>
-      </Card>
+      <ContractSelector
+        title="Select Contract"
+        description="Choose a contract to view logs"
+        onContractChange={setSelectedContract}
+      />
 
       {selectedContract && events.length > 0 && (
         <Card>
@@ -221,7 +155,7 @@ export function LogsPage() {
               Events that can be emitted by this contract
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <div className="flex flex-wrap gap-2">
               {events.map((event, index) => (
                 <span
@@ -232,6 +166,32 @@ export function LogsPage() {
                 </span>
               ))}
             </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <Label>From Block</Label>
+                <Input
+                  type="number"
+                  value={fromBlock}
+                  onChange={(e) => setFromBlock(e.target.value)}
+                  placeholder="From block number"
+                />
+              </div>
+              <div>
+                <Label>To Block</Label>
+                <Input
+                  type="number"
+                  value={toBlock}
+                  onChange={(e) => setToBlock(e.target.value)}
+                  placeholder="To block number"
+                />
+              </div>
+            </div>
+            <Button onClick={fetchLogs} disabled={isLoading}>
+              <RefreshCw
+                className={`mr-2 size-4 ${isLoading ? "animate-spin" : ""}`}
+              />
+              Fetch Logs
+            </Button>
           </CardContent>
         </Card>
       )}
