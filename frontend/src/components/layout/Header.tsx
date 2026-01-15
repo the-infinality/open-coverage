@@ -7,7 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { truncateAddress } from "@/lib/utils"
+import { CopyableAddress } from "@/components/ui/copyable-address"
 import { supportedChains } from "@/lib/wagmi"
 
 export function Header() {
@@ -44,9 +44,12 @@ export function Header() {
 
         {isConnected ? (
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">
-              {truncateAddress(address!)}
-            </span>
+            <CopyableAddress
+              address={address!}
+              variant="inline"
+              size="sm"
+              className="text-muted-foreground"
+            />
             <Button variant="outline" size="sm" onClick={() => disconnect()}>
               Disconnect
             </Button>

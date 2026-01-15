@@ -3,7 +3,8 @@ import type { Abi, Address } from "viem"
 export type ContractType = 
   | "CoverageAgent"
   | "CoverageProvider"
-  | "EigenServiceManager"
+
+export type ProviderType = "EigenLayer" | "Catalysis" | "Symbiotic"
 
 export interface SavedContract {
   id: string
@@ -14,6 +15,7 @@ export interface SavedContract {
   abi?: Abi
   createdAt: number
   ownerAddress?: Address
+  providerType?: ProviderType
 }
 
 export interface ContractMethod {

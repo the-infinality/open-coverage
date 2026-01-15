@@ -106,6 +106,13 @@ export const coverageAgentAbi = [
 export const coverageProviderAbi = [
   {
     type: "function",
+    name: "owner",
+    inputs: [],
+    outputs: [{ name: "", type: "address", internalType: "address" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
     name: "claim",
     inputs: [{ name: "claimId", type: "uint256", internalType: "uint256" }],
     outputs: [
@@ -454,15 +461,17 @@ export const eigenServiceManagerAbi = [
   },
 ] as const
 
-// Get ABI for contract type
-export function getAbiForContractType(type: string) {
+// Get ABI for contract type and provider type
+export function getAbiForContractType(type: string, providerType?: string) {
   switch (type) {
     case "CoverageAgent":
       return coverageAgentAbi
     case "CoverageProvider":
+      // Use EigenServiceManager ABI for EigenLayer providers
+      if (providerType === "EigenLayer") {
+        return eigenServiceManagerAbi
+      }
       return coverageProviderAbi
-    case "EigenServiceManager":
-      return eigenServiceManagerAbi
     default:
       return []
   }

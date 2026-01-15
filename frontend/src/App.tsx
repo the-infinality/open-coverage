@@ -1,8 +1,9 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom"
 
-import { ThemeProvider } from "@/hooks/use-theme"
+import { ThemeProvider } from "@/hooks/theme-provider"
 import { ContractsProvider } from "@/hooks/use-contracts"
 import { Web3Provider } from "@/lib/web3-provider"
+import { SidebarProvider } from "@/components/ui/sidebar"
 import { Layout } from "@/components/layout/Layout"
 import { AddContractPage } from "@/pages/AddContractPage"
 import { ContractsPage } from "@/pages/ContractsPage"
@@ -14,18 +15,20 @@ function App() {
     <ThemeProvider defaultTheme="system" storageKey="open-coverage-theme">
       <Web3Provider>
         <ContractsProvider>
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Layout />}>
-                <Route index element={<AddContractPage />} />
-                <Route path="contracts" element={<ContractsPage />} />
-                <Route path="interact" element={<InteractPage />} />
-                <Route path="interact/:contractId" element={<InteractPage />} />
-                <Route path="logs" element={<LogsPage />} />
-                <Route path="logs/:contractId" element={<LogsPage />} />
-              </Route>
-            </Routes>
-          </BrowserRouter>
+          <SidebarProvider>
+            <BrowserRouter>
+              <Routes>
+                <Route path="/" element={<Layout />}>
+                  <Route index element={<ContractsPage />} />
+                  <Route path="add-contract" element={<AddContractPage />} />
+                  <Route path="interact" element={<InteractPage />} />
+                  <Route path="interact/:contractId" element={<InteractPage />} />
+                  <Route path="logs" element={<LogsPage />} />
+                  <Route path="logs/:contractId" element={<LogsPage />} />
+                </Route>
+              </Routes>
+            </BrowserRouter>
+          </SidebarProvider>
         </ContractsProvider>
       </Web3Provider>
     </ThemeProvider>

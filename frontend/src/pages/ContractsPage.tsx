@@ -20,8 +20,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { useContracts, getContractTypeLabel } from "@/hooks/use-contracts"
-import { truncateAddress } from "@/lib/utils"
 import { getChainName } from "@/lib/wagmi"
+import { CopyableAddress } from "@/components/ui/copyable-address"
 import type { SavedContract } from "@/types/contracts"
 
 function ContractCard({ contract }: { contract: SavedContract }) {
@@ -72,16 +72,22 @@ function ContractCard({ contract }: { contract: SavedContract }) {
       <CardContent className="space-y-3">
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Address</span>
-          <code className="rounded bg-muted px-2 py-1 text-xs">
-            {truncateAddress(contract.address, 6)}
-          </code>
+          <CopyableAddress
+            address={contract.address}
+            truncateChars={6}
+            variant="code"
+            size="sm"
+          />
         </div>
         {contract.ownerAddress && (
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Owner</span>
-            <code className="rounded bg-muted px-2 py-1 text-xs">
-              {truncateAddress(contract.ownerAddress, 6)}
-            </code>
+            <CopyableAddress
+              address={contract.ownerAddress}
+              truncateChars={6}
+              variant="code"
+              size="sm"
+            />
           </div>
         )}
         <div className="flex items-center justify-between text-sm">
@@ -120,7 +126,7 @@ export function ContractsPage() {
           </p>
         </div>
         <Button asChild>
-          <Link to="/">Add Contract</Link>
+          <Link to="/add-contract">Add Contract</Link>
         </Button>
       </div>
 
@@ -134,7 +140,7 @@ export function ContractsPage() {
               Coverage system.
             </p>
             <Button asChild>
-              <Link to="/">Add Contract</Link>
+              <Link to="/add-contract">Add Contract</Link>
             </Button>
           </CardContent>
         </Card>

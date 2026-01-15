@@ -24,6 +24,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useContracts } from "@/hooks/use-contracts"
 import { getAbiForContractType } from "@/generated/abis"
+import { CopyableAddress } from "@/components/ui/copyable-address"
 import { truncateAddress } from "@/lib/utils"
 import { RefreshCw } from "lucide-react"
 
@@ -71,7 +72,9 @@ export function LogsPage() {
 
     setIsLoading(true)
     try {
-      const from = fromBlock ? BigInt(fromBlock) : (currentBlock || 0n) - 1000n
+      // For local chains (chainId 31337), use 10 blocks, otherwise use 1000 blocks
+      const blockRange = chainId === 31337 ? 10n : 1000n
+      const from = fromBlock ? BigInt(fromBlock) : (currentBlock || 0n) - blockRange
       const to = toBlock ? BigInt(toBlock) : currentBlock || "latest"
 
       const rawLogs = await publicClient.getLogs({
@@ -126,10 +129,12 @@ export function LogsPage() {
 
   useEffect(() => {
     if (selectedContract && currentBlock) {
-      setFromBlock((currentBlock - 1000n).toString())
+      // For local chains (chainId 31337), use 10 blocks, otherwise use 1000 blocks
+      const blockRange = chainId === 31337 ? 10n : 1000n
+      setFromBlock((currentBlock - blockRange).toString())
       setToBlock(currentBlock.toString())
     }
-  }, [selectedContract, currentBlock])
+  }, [selectedContract, currentBlock, chainId])
 
   if (chainContracts.length === 0) {
     return (
@@ -139,7 +144,7 @@ export function LogsPage() {
           Add a contract for this chain to view logs.
         </p>
         <Button asChild>
-          <Link to="/">Add Contract</Link>
+          <Link to="/add-contract">Add Contract</Link>
         </Button>
       </div>
     )
@@ -256,7 +261,7 @@ export function LogsPage() {
                       </span>
                     </div>
                     <div className="mb-2 text-xs text-muted-foreground">
-                      Tx: {truncateAddress(log.transactionHash, 10)}
+                      Tx: <CopyableAddress address={log.transactionHash} truncateChars={10} variant="inline" size="sm" className="text-muted-foreground" />
                     </div>
                     {Object.keys(log.args).length > 0 && (
                       <div className="mt-2 rounded bg-muted p-3">

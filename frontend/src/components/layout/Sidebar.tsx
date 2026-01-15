@@ -1,13 +1,12 @@
-import { NavLink } from "react-router-dom"
-import { cn } from "@/lib/utils"
+import { NavLink, useLocation } from "react-router-dom"
 import {
   FileText,
-  Settings,
-  Wallet,
   Plus,
   Sun,
   Moon,
   Monitor,
+  Zap,
+  List,
 } from "lucide-react"
 import { useTheme } from "@/hooks/use-theme"
 import {
@@ -17,23 +16,34 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Separator } from "@/components/ui/separator"
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarSeparator,
+} from "@/components/ui/sidebar"
 
 const navItems = [
   {
-    title: "Add Contract",
+    title: "Contracts",
     href: "/",
-    icon: Plus,
+    icon: List,
   },
   {
-    title: "Manage Contracts",
-    href: "/contracts",
-    icon: Settings,
+    title: "Add Contract",
+    href: "/add-contract",
+    icon: Plus,
   },
   {
     title: "Interact",
     href: "/interact",
-    icon: FileText,
+    icon: Zap,
   },
   {
     title: "Logs",
@@ -74,45 +84,49 @@ function ThemeToggle() {
   )
 }
 
-export function Sidebar() {
+export function AppSidebar() {
+  const location = useLocation()
+
   return (
-    <aside className="flex h-screen w-64 flex-col border-r bg-sidebar-background">
-      <div className="flex h-16 items-center gap-2 border-b px-6">
-        <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Wallet className="size-4" />
-        </div>
+    <Sidebar>
+      <SidebarHeader>
         <span className="font-semibold text-sidebar-foreground">
           Open Coverage
         </span>
-      </div>
-
-      <nav className="flex-1 space-y-1 p-4">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.href}
-            to={item.href}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              )
-            }
-          >
-            <item.icon className="size-4" />
-            {item.title}
-          </NavLink>
-        ))}
-      </nav>
-
-      <div className="border-t p-4 space-y-4">
+      </SidebarHeader>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {navItems.map((item) => {
+                const isActive = location.pathname === item.href || 
+                  (item.href !== "/" && location.pathname.startsWith(item.href))
+                return (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton asChild isActive={isActive}>
+                      <NavLink to={item.href}>
+                        <item.icon className="size-4" />
+                        <span>{item.title}</span>
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+      <SidebarFooter>
         <ThemeToggle />
-        <Separator />
-        <div className="text-xs text-muted-foreground text-center">
-          Open Coverage Frontend v0.1.0
+        <div className="text-sm text-muted-foreground text-center px-2 mt-4">
+          <p>
+            Open Coverage Frontend v0.1.0
+          </p>
+          <p className="text-xs mt-2">
+            Built with ❤️ by Infinality. The creators of SPICE Protocol.
+          </p>
         </div>
-      </div>
-    </aside>
+      </SidebarFooter>
+    </Sidebar>
   )
 }

@@ -36,7 +36,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { useContracts } from "@/hooks/use-contracts"
 import { getAbiForContractType } from "@/generated/abis"
 import { cn, truncateAddress } from "@/lib/utils"
-import { ChevronDown, Play, Eye, AlertCircle, CheckCircle2 } from "lucide-react"
+import { CopyableAddress } from "@/components/ui/copyable-address"
+import { ChevronDown, Play, Eye, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react"
 
 interface FunctionCallResult {
   success: boolean
@@ -57,6 +58,7 @@ function FunctionCard({
   const [result, setResult] = useState<FunctionCallResult | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [args, setArgs] = useState<Record<string, string>>({})
+  const [hasAutoQueried, setHasAutoQueried] = useState(false)
 
   const publicClient = usePublicClient()
   const { data: walletClient } = useWalletClient()
@@ -64,6 +66,9 @@ function FunctionCard({
 
   const isReadFunction =
     fn.stateMutability === "view" || fn.stateMutability === "pure"
+  
+  // Check if this is a no-argument read function (can auto-query)
+  const canAutoQuery = isReadFunction && fn.inputs.length === 0
 
   const handleCall = async () => {
     setIsLoading(true)
@@ -122,9 +127,21 @@ function FunctionCard({
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error"
       setResult({ success: false, error: errorMessage })
-      toast.error(`Error: ${errorMessage.slice(0, 100)}`)
+      // Only show toast for manual calls, not auto-queries
+      if (hasAutoQueried || !canAutoQuery) {
+        toast.error(`Error: ${errorMessage.slice(0, 100)}`)
+      }
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  // Handle opening the collapsible - auto-query for no-arg read functions
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open)
+    if (open && canAutoQuery && !hasAutoQueried) {
+      setHasAutoQueried(true)
+      handleCall()
     }
   }
 
@@ -179,7 +196,7 @@ function FunctionCard({
   }
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+    <Collapsible open={isOpen} onOpenChange={handleOpenChange}>
       <CollapsibleTrigger asChild>
         <Button
           variant="ghost"
@@ -197,6 +214,16 @@ function FunctionCard({
               {isReadFunction ? "Read" : "Write"}
             </span>
             <span className="font-mono text-sm">{fn.name}</span>
+            {/* Show loading indicator in the header for auto-queries */}
+            {isLoading && canAutoQuery && (
+              <RefreshCw className="size-3 animate-spin text-muted-foreground" />
+            )}
+            {/* Show quick result preview for successful auto-queries */}
+            {result?.success && canAutoQuery && !isOpen && (
+              <span className="ml-2 max-w-[200px] truncate text-xs text-muted-foreground font-normal">
+                = {formatResult(result.result).slice(0, 50)}
+              </span>
+            )}
           </div>
           <ChevronDown
             className={cn(
@@ -232,26 +259,16 @@ function FunctionCard({
             </div>
           )}
 
-          <div className="flex gap-2">
-            <Button
-              onClick={handleCall}
-              disabled={isLoading}
-              className="flex-1"
-              variant={isReadFunction ? "secondary" : "default"}
-            >
-              {isReadFunction ? (
-                <>
-                  <Eye className="mr-2 size-4" />
-                  Query
-                </>
-              ) : (
-                <>
-                  <Play className="mr-2 size-4" />
-                  Execute
-                </>
-              )}
-            </Button>
-            {!isReadFunction && (
+          {!isReadFunction && (
+            <div className="flex gap-2">
+              <Button
+                onClick={handleCall}
+                disabled={isLoading}
+                className="flex-1"
+              >
+                <Play className="mr-2 size-4" />
+                Execute
+              </Button>
               <Button
                 onClick={handleSimulate}
                 disabled={isLoading}
@@ -259,8 +276,21 @@ function FunctionCard({
               >
                 Simulate
               </Button>
-            )}
-          </div>
+            </div>
+          )}
+          
+          {/* For read functions with arguments, show a Query button */}
+          {isReadFunction && fn.inputs.length > 0 && (
+            <Button
+              onClick={handleCall}
+              disabled={isLoading}
+              className="w-full"
+              variant="secondary"
+            >
+              <Eye className="mr-2 size-4" />
+              Query
+            </Button>
+          )}
 
           {result && (
             <div
@@ -271,15 +301,29 @@ function FunctionCard({
                   : "border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950"
               )}
             >
-              <div className="mb-2 flex items-center gap-2">
-                {result.success ? (
-                  <CheckCircle2 className="size-4 text-green-600" />
-                ) : (
-                  <AlertCircle className="size-4 text-red-600" />
+              <div className="mb-2 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {result.success ? (
+                    <CheckCircle2 className="size-4 text-green-600" />
+                  ) : (
+                    <AlertCircle className="size-4 text-red-600" />
+                  )}
+                  <span className="text-sm font-medium">
+                    {result.success ? "Success" : "Error"}
+                  </span>
+                </div>
+                {isReadFunction && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleCall}
+                    disabled={isLoading}
+                    className="h-7 px-2 text-xs"
+                  >
+                    <RefreshCw className={cn("size-3 mr-1", isLoading && "animate-spin")} />
+                    Requery
+                  </Button>
                 )}
-                <span className="text-sm font-medium">
-                  {result.success ? "Success" : "Error"}
-                </span>
               </div>
               <pre className="overflow-x-auto text-xs">
                 {result.success
@@ -334,7 +378,7 @@ export function InteractPage() {
           Add a contract for this chain to start interacting.
         </p>
         <Button asChild>
-          <Link to="/">Add Contract</Link>
+          <Link to="/add-contract">Add Contract</Link>
         </Button>
       </div>
     )
@@ -379,8 +423,8 @@ export function InteractPage() {
         <Card>
           <CardHeader>
             <CardTitle>{selectedContract.name}</CardTitle>
-            <CardDescription>
-              {truncateAddress(selectedContract.address, 8)} -{" "}
+            <CardDescription className="flex items-center gap-2">
+              <CopyableAddress address={selectedContract.address} truncateChars={8} variant="inline" size="sm" /> -{" "}
               {selectedContract.type}
             </CardDescription>
           </CardHeader>

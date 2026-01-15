@@ -1,10 +1,12 @@
+import { useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod/v4"
 import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
-import { useChainId } from "wagmi"
-import { isAddress } from "viem"
+import { useChainId, usePublicClient } from "wagmi"
+import { getAddress } from "viem"
+import { Loader2, CheckCircle2, AlertCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -31,51 +33,248 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { useContracts, getContractTypes } from "@/hooks/use-contracts"
-import type { ContractType } from "@/types/contracts"
+import { getSupportedChainsInfo, getChainById } from "@/lib/wagmi"
+import { coverageAgentAbi, coverageProviderAbi } from "@/generated/abis"
+import type { ContractType, ProviderType } from "@/types/contracts"
+
+// Get supported chain IDs for validation
+const supportedChainIds = getSupportedChainsInfo().map((c) => c.id)
+
+// Validate address format without checksum - just check length and hex format
+const isValidAddressFormat = (address: string): boolean => {
+  return /^0x[a-fA-F0-9]{40}$/.test(address)
+}
 
 const formSchema = z.object({
   name: z.string().min(1, "Name is required").max(50, "Name too long"),
-  address: z.string().refine((val) => isAddress(val), {
-    message: "Invalid Ethereum address",
+  address: z.string().refine((val) => isValidAddressFormat(val), {
+    message: "Invalid Ethereum address format",
   }),
-  type: z.enum(["CoverageAgent", "CoverageProvider", "EigenServiceManager"]),
-  ownerAddress: z
-    .string()
-    .optional()
-    .refine((val) => !val || isAddress(val), {
-      message: "Invalid Ethereum address",
-    }),
+  chainId: z.number().refine((val) => supportedChainIds.includes(val), {
+    message: "Please select a valid chain",
+  }),
+  type: z.enum(["CoverageAgent", "CoverageProvider"]),
+  providerType: z.enum(["EigenLayer", "Catalysis", "Symbiotic"]).optional(),
 })
 
 type FormData = {
   name: string
   address: string
-  type: "CoverageAgent" | "CoverageProvider" | "EigenServiceManager"
-  ownerAddress?: string
+  chainId: number
+  type: "CoverageAgent" | "CoverageProvider"
+  providerType?: ProviderType
+}
+
+// Dune-themed names for random contract name generation
+const duneNames = [
+  "muaddib", "atreides", "harkonnen", "fremen", "sardaukar", "mentat", "kwisatz", "shaihulud",
+  "paul", "leto", "jessica", "duncan", "gurney", "stilgar", "chani", "irulan",
+  "baron", "feyd", "rabban", "vladimir", "glossu", "piter", "thufir", "yueh",
+  "arrakis", "caladan", "giedi", "kaitain", "salusa", "ix", "tleilax", "bene"
+]
+
+// Generate a unique random name based on contract type, avoiding collisions with existing contracts
+function generateRandomName(
+  type: "CoverageAgent" | "CoverageProvider",
+  existingContracts: Array<{ name: string }>
+): string {
+  const prefix = type
+  const existingNames = new Set(existingContracts.map((c) => c.name.toLowerCase()))
+  
+  // Try up to 100 times to find a unique name
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const duneName = duneNames[Math.floor(Math.random() * duneNames.length)]
+    const baseName = `${prefix}-${duneName}`
+    
+    // If base name is unique, return it
+    if (!existingNames.has(baseName.toLowerCase())) {
+      return baseName
+    }
+    
+    // If base name exists, try with a number suffix
+    for (let num = 1; num <= 999; num++) {
+      const numberedName = `${baseName}-${num}`
+      if (!existingNames.has(numberedName.toLowerCase())) {
+        return numberedName
+      }
+    }
+  }
+  
+  // Fallback: use timestamp if all else fails
+  return `${prefix}-${Date.now()}`
+}
+
+// Provider type options with metadata
+const providerTypes: {
+  value: ProviderType
+  label: string
+  icon: string
+  disabled: boolean
+  comingSoon?: boolean
+}[] = [
+  {
+    value: "EigenLayer",
+    label: "EigenLayer",
+    icon: `data:image/svg+xml,${encodeURIComponent(`<svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="6" fill="#1A0B3E"/><path d="M8 22V10h4v8h8v4H8z" fill="#B4A1FF"/><path d="M24 10v12h-4v-8h-8V10h12z" fill="#fff"/></svg>`)}`,
+    disabled: false,
+  },
+  {
+    value: "Catalysis",
+    label: "Catalysis",
+    icon: `data:image/svg+xml,${encodeURIComponent(`<svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="6" fill="#0D1117"/><circle cx="16" cy="16" r="8" stroke="#58A6FF" stroke-width="2"/><circle cx="16" cy="16" r="3" fill="#58A6FF"/></svg>`)}`,
+    disabled: true,
+    comingSoon: true,
+  },
+  {
+    value: "Symbiotic",
+    label: "Symbiotic",
+    icon: `data:image/svg+xml,${encodeURIComponent(`<svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="6" fill="#1a1a2e"/><path d="M10 16c0-3.3 2.7-6 6-6s6 2.7 6 6-2.7 6-6 6" stroke="#f72585" stroke-width="2" stroke-linecap="round"/><path d="M22 16c0 3.3-2.7 6-6 6s-6-2.7-6-6 2.7-6 6-6" stroke="#7209b7" stroke-width="2" stroke-linecap="round"/></svg>`)}`,
+    disabled: true,
+    comingSoon: true,
+  },
+]
+
+interface ContractValidationState {
+  isValidating: boolean
+  hasCode: boolean | null
+  ownerAddress: string | null
+  error: string | null
 }
 
 export function AddContractPage() {
   const navigate = useNavigate()
-  const chainId = useChainId()
+  const connectedChainId = useChainId()
+  const publicClient = usePublicClient()
   const { addContract, contracts } = useContracts()
+  const supportedChains = getSupportedChainsInfo()
+
+  const [validation, setValidation] = useState<ContractValidationState>({
+    isValidating: false,
+    hasCode: null,
+    ownerAddress: null,
+    error: null,
+  })
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema) as unknown as undefined,
     defaultValues: {
-      name: "",
+      name: generateRandomName("CoverageAgent", contracts),
       address: "",
+      chainId: connectedChainId,
       type: "CoverageAgent",
-      ownerAddress: "",
+      providerType: undefined,
     },
   })
+
+  const watchedType = form.watch("type")
+  const watchedChainId = form.watch("chainId")
+  const watchedAddress = form.watch("address")
+
+  // Validate contract address when it changes
+  useEffect(() => {
+    const validateContract = async () => {
+      if (!watchedAddress || !isValidAddressFormat(watchedAddress)) {
+        setValidation({ isValidating: false, hasCode: null, ownerAddress: null, error: null })
+        return
+      }
+
+      const chain = getChainById(watchedChainId)
+      if (!chain) {
+        setValidation({ isValidating: false, hasCode: null, ownerAddress: null, error: "Invalid chain" })
+        return
+      }
+
+      setValidation({ isValidating: true, hasCode: null, ownerAddress: null, error: null })
+
+      try {
+        // Check if there's code at the address
+        const code = await publicClient?.getBytecode({ address: getAddress(watchedAddress) })
+        const hasCode = code !== undefined && code !== "0x"
+
+        if (!hasCode) {
+          setValidation({
+            isValidating: false,
+            hasCode: false,
+            ownerAddress: null,
+            error: "No contract found at this address",
+          })
+          return
+        }
+
+        // Try to get the owner/coordinator based on contract type
+        let ownerAddress: string | null = null
+        
+        try {
+          if (watchedType === "CoverageAgent") {
+            // Use coordinator method for CoverageAgent
+            const result = await publicClient?.readContract({
+              address: getAddress(watchedAddress),
+              abi: coverageAgentAbi,
+              functionName: "coordinator",
+            })
+            ownerAddress = result as string
+          } else if (watchedType === "CoverageProvider") {
+            // Use owner method for CoverageProvider
+            const result = await publicClient?.readContract({
+              address: getAddress(watchedAddress),
+              abi: coverageProviderAbi,
+              functionName: "owner",
+            })
+            ownerAddress = result as string
+          }
+        } catch {
+          // Owner detection failed, but contract exists
+        }
+
+        setValidation({
+          isValidating: false,
+          hasCode: true,
+          ownerAddress,
+          error: null,
+        })
+      } catch {
+        setValidation({
+          isValidating: false,
+          hasCode: null,
+          ownerAddress: null,
+          error: "Failed to validate contract",
+        })
+      }
+    }
+
+    const timeoutId = setTimeout(validateContract, 500)
+    return () => clearTimeout(timeoutId)
+  }, [watchedAddress, watchedChainId, watchedType, publicClient, form])
+
+  // Reset provider type when contract type changes
+  useEffect(() => {
+    if (watchedType !== "CoverageProvider") {
+      form.setValue("providerType", undefined)
+    }
+  }, [watchedType, form])
+
+  // Auto-generate name when contract type changes
+  useEffect(() => {
+    const currentName = form.getValues("name")
+    // Generate name if empty or matches the auto-generated pattern
+    const autoGeneratedPattern = /^(Agent|Provider)-\w+(-\d+)?$/
+    if (!currentName || autoGeneratedPattern.test(currentName)) {
+      form.setValue("name", generateRandomName(watchedType, contracts))
+    }
+  }, [watchedType, form, contracts])
 
   function onSubmit(values: FormData) {
     // Check if contract already exists
     const exists = contracts.some(
       (c) =>
         c.address.toLowerCase() === values.address.toLowerCase() &&
-        c.chainId === chainId
+        c.chainId === values.chainId
     )
 
     if (exists) {
@@ -83,17 +282,34 @@ export function AddContractPage() {
       return
     }
 
+    // Check if name already exists
+    const nameExists = contracts.some(
+      (c) => c.name.toLowerCase() === values.name.toLowerCase()
+    )
+
+    if (nameExists) {
+      toast.error("A contract with this name already exists. Please choose a different name.")
+      return
+    }
+
+    // Require provider type for CoverageProvider
+    if (values.type === "CoverageProvider" && !values.providerType) {
+      toast.error("Please select a provider type")
+      return
+    }
+
     addContract({
       name: values.name,
       address: values.address as `0x${string}`,
       type: values.type as ContractType,
-      chainId,
-      ownerAddress: values.ownerAddress ? values.ownerAddress as `0x${string}` : undefined,
+      chainId: values.chainId,
+      ownerAddress: validation.ownerAddress ? validation.ownerAddress as `0x${string}` : undefined,
+      providerType: values.providerType,
     })
 
     toast.success("Contract added successfully")
     form.reset()
-    navigate("/contracts")
+    navigate("/")
   }
 
   return (
@@ -109,40 +325,7 @@ export function AddContractPage() {
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="My Coverage Agent" {...field} />
-                    </FormControl>
-                    <FormDescription>
-                      A friendly name to identify this contract
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="address"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Contract Address</FormLabel>
-                    <FormControl>
-                      <Input placeholder="0x..." {...field} />
-                    </FormControl>
-                    <FormDescription>
-                      The Ethereum address of the contract
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
+              {/* Contract Type - First */}
               <FormField
                 control={form.control}
                 name="type"
@@ -151,7 +334,7 @@ export function AddContractPage() {
                     <FormLabel>Contract Type</FormLabel>
                     <Select
                       onValueChange={field.onChange}
-                      defaultValue={field.value}
+                      value={field.value}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -175,26 +358,198 @@ export function AddContractPage() {
                 )}
               />
 
+              {/* Provider Type Badges - Only shown for CoverageProvider */}
+              {watchedType === "CoverageProvider" && (
+                <FormField
+                  control={form.control}
+                  name="providerType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Provider Type</FormLabel>
+                      <FormControl>
+                        <div className="flex flex-wrap gap-3">
+                          {providerTypes.map((provider) => {
+                            const isSelected = field.value === provider.value
+                            const isDisabled = provider.disabled
+
+                            const badge = (
+                              <button
+                                key={provider.value}
+                                type="button"
+                                disabled={isDisabled}
+                                onClick={() => {
+                                  if (!isDisabled) {
+                                    field.onChange(provider.value)
+                                  }
+                                }}
+                                className={`
+                                  relative flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 transition-all
+                                  ${isSelected
+                                    ? "border-primary bg-primary/10 shadow-sm"
+                                    : isDisabled
+                                      ? "border-muted bg-muted/30 opacity-50 cursor-not-allowed"
+                                      : "border-border hover:border-primary/50 hover:bg-accent cursor-pointer"
+                                  }
+                                `}
+                              >
+                                <img
+                                  src={provider.icon}
+                                  alt={provider.label}
+                                  className={`h-6 w-6 rounded ${isDisabled ? "grayscale" : ""}`}
+                                />
+                                <span className={`font-medium ${isDisabled ? "text-muted-foreground" : ""}`}>
+                                  {provider.label}
+                                </span>
+                                {isSelected && (
+                                  <CheckCircle2 className="h-4 w-4 text-primary ml-1" />
+                                )}
+                              </button>
+                            )
+
+                            if (provider.comingSoon) {
+                              return (
+                                <Tooltip key={provider.value}>
+                                  <TooltipTrigger asChild>
+                                    {badge}
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Coming Soon</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              )
+                            }
+
+                            return badge
+                          })}
+                        </div>
+                      </FormControl>
+                      <FormDescription>
+                        Select the restaking protocol this provider integrates with
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {/* Chain - Second */}
               <FormField
                 control={form.control}
-                name="ownerAddress"
+                name="chainId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Owner Address (Optional)</FormLabel>
-                    <FormControl>
-                      <Input placeholder="0x..." {...field} />
-                    </FormControl>
+                    <FormLabel>Chain</FormLabel>
+                    <Select
+                      onValueChange={(value) => field.onChange(parseInt(value, 10))}
+                      value={field.value?.toString()}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a chain" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {supportedChains.map((chain) => (
+                          <SelectItem key={chain.id} value={chain.id.toString()}>
+                            <div className="flex items-center gap-2">
+                              <img
+                                src={chain.icon}
+                                alt={chain.name}
+                                className="h-5 w-5 rounded-full"
+                              />
+                              <span>{chain.name}</span>
+                              {chain.isTestnet && (
+                                <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${chain.colors.bg} ${chain.colors.text}`}>
+                                  Testnet
+                                </span>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormDescription>
-                      The address that owns/controls this contract (for
-                      simulation purposes)
+                      The blockchain network where this contract is deployed
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
 
-              <Button type="submit" className="w-full">
-                Add Contract
+              {/* Contract Address - Third */}
+              <FormField
+                control={form.control}
+                name="address"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contract Address</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <Input placeholder="0x..." {...field} className="pr-10" />
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          {validation.isValidating && (
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          )}
+                          {!validation.isValidating && validation.hasCode === true && (
+                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          )}
+                          {!validation.isValidating && validation.hasCode === false && (
+                            <AlertCircle className="h-4 w-4 text-destructive" />
+                          )}
+                        </div>
+                      </div>
+                    </FormControl>
+                    <FormDescription>
+                      {validation.error ? (
+                        <span className="text-destructive">{validation.error}</span>
+                      ) : validation.hasCode && validation.ownerAddress ? (
+                        <span className="text-green-600 dark:text-green-400">
+                          Contract found • Owner detected
+                        </span>
+                      ) : validation.hasCode ? (
+                        <span className="text-green-600 dark:text-green-400">
+                          Contract found
+                        </span>
+                      ) : (
+                        "The Ethereum address of the contract"
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Name */}
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Agent-muaddib" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      A friendly name to identify this contract (auto-generated, feel free to change)
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <Button 
+                type="submit" 
+                className="w-full"
+                disabled={!validation.hasCode || validation.isValidating}
+              >
+                {validation.isValidating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Verifying Contract...
+                  </>
+                ) : (
+                  "Add Contract"
+                )}
               </Button>
             </form>
           </Form>
