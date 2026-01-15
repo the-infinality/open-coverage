@@ -49,3 +49,84 @@ export function getContractsByType(type: ContractType): CoverageContract[] {
 export function generateContractId(chainId: number, address: Address): string {
   return `${chainId}-${address.toLowerCase()}`
 }
+
+export function exportContractsToJson(contractIds?: string[]): string {
+  const allContracts = getStoredContracts()
+  const contractsToExport = contractIds
+    ? allContracts.filter((c) => contractIds.includes(c.id))
+    : allContracts
+  return JSON.stringify(contractsToExport, null, 2)
+}
+
+export function importContractsFromJson(json: string): {
+  success: boolean
+  imported: number
+  errors: string[]
+} {
+  try {
+    const parsed = JSON.parse(json)
+    
+    if (!Array.isArray(parsed)) {
+      return {
+        success: false,
+        imported: 0,
+        errors: ["Invalid format: JSON must be an array of contracts"],
+      }
+    }
+
+    const errors: string[] = []
+    const existingContracts = getStoredContracts()
+    const existingIds = new Set(existingContracts.map((c) => c.id))
+    let imported = 0
+
+    for (const contract of parsed) {
+      // Validate required fields
+      if (!contract.address || !contract.chainId || !contract.type) {
+        errors.push(
+          `Skipped contract: missing required fields (address, chainId, or type)`
+        )
+        continue
+      }
+
+      // Generate ID if not present
+      const id = contract.id || generateContractId(contract.chainId, contract.address)
+
+      // Skip if already exists
+      if (existingIds.has(id)) {
+        errors.push(`Skipped contract ${id}: already exists`)
+        continue
+      }
+
+      // Create contract with defaults
+      const newContract: CoverageContract = {
+        id,
+        name: contract.name || `Imported Contract ${imported + 1}`,
+        address: contract.address.toLowerCase() as Address,
+        type: contract.type,
+        chainId: contract.chainId,
+        abi: contract.abi,
+        createdAt: contract.createdAt || Date.now(),
+        providerType: contract.providerType,
+      }
+
+      existingContracts.push(newContract)
+      existingIds.add(id)
+      imported++
+    }
+
+    // Save all contracts
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(existingContracts))
+
+    return {
+      success: true,
+      imported,
+      errors,
+    }
+  } catch (error) {
+    return {
+      success: false,
+      imported: 0,
+      errors: [`Failed to parse JSON: ${error instanceof Error ? error.message : "Unknown error"}`],
+    }
+  }
+}

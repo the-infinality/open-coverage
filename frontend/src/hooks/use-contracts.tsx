@@ -5,6 +5,8 @@ import {
   saveContract as storeSaveContract,
   removeContract as storeRemoveContract,
   generateContractId,
+  exportContractsToJson,
+  importContractsFromJson,
 } from "@/store/contracts"
 
 interface ContractsContextValue {
@@ -14,6 +16,8 @@ interface ContractsContextValue {
   removeContract: (id: string) => void
   getContractById: (id: string) => CoverageContract | undefined
   getContractsByType: (type: ContractType) => CoverageContract[]
+  exportContracts: (contractIds?: string[]) => void
+  importContracts: (json: string) => { success: boolean; imported: number; errors: string[] }
 }
 
 const ContractsContext = React.createContext<ContractsContextValue | undefined>(
@@ -27,14 +31,28 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
 
   const addContract = React.useCallback(
     (contract: Omit<CoverageContract, "id" | "createdAt">) => {
-      const newContract: CoverageContract = {
-        ...contract,
-        id: generateContractId(contract.chainId, contract.address),
-        createdAt: Date.now(),
-      }
-      storeSaveContract(newContract)
-      setContracts((prev) => [...prev, newContract])
-      return newContract
+      const contractId = generateContractId(contract.chainId, contract.address)
+      
+      let newContract: CoverageContract
+      setContracts((prev) => {
+        const existingContract = prev.find((c) => c.id === contractId)
+        newContract = {
+          ...contract,
+          id: contractId,
+          createdAt: existingContract?.createdAt || Date.now(),
+        }
+        
+        storeSaveContract(newContract)
+        
+        const existing = prev.findIndex((c) => c.id === contractId)
+        if (existing >= 0) {
+          const updated = [...prev]
+          updated[existing] = newContract
+          return updated
+        }
+        return [...prev, newContract]
+      })
+      return newContract!
     },
     []
   )
@@ -70,6 +88,34 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
     [contracts]
   )
 
+  const exportContracts = React.useCallback((contractIds?: string[]) => {
+    const json = exportContractsToJson(contractIds)
+    const blob = new Blob([json], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    // Format: contracts-YYYY-MM-DD_HH-MM-SS.json
+    const timestamp = new Date()
+      .toISOString()
+      .replace(/T/, "_")
+      .replace(/[:.]/g, "-")
+      .slice(0, -5)
+    link.download = `contracts-${timestamp}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }, [])
+
+  const importContracts = React.useCallback((json: string) => {
+    const result = importContractsFromJson(json)
+    if (result.success) {
+      // Refresh contracts from storage
+      setContracts(getStoredContracts())
+    }
+    return result
+  }, [])
+
   const value: ContractsContextValue = {
     contracts,
     addContract,
@@ -77,6 +123,8 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
     removeContract,
     getContractById,
     getContractsByType,
+    exportContracts,
+    importContracts,
   }
 
   return (
