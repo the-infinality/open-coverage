@@ -241,9 +241,14 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     }
 
     /// @inheritdoc ICoverageProvider
-    function claimDeficit(uint256 claimId) external view returns (uint256 deficit) {
+    function claimBacking(uint256 claimId) external view returns (int256 backing) {
         EigenCoveragePosition memory _position = positions[claims[claimId].positionId];
-        return _coverageDeficitAmount(_position.operator, _position.strategy, _position.data.coverageAgent);
+        return _coverageBackingAmount(_position.operator, _position.strategy, _position.data.coverageAgent);
+    }
+
+    /// @inheritdoc ICoverageProvider
+    function claimTotalSlashAmount(uint256 claimId) external view returns (uint256 slashAmount) {
+        return claimSlashAmounts[claimId];
     }
 
     /// ============ Internal functions ============ //
@@ -273,25 +278,30 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     /// @notice Checks if the operator has sufficient coverage available for the coverage agent
     /// @dev Reverts only if the operator does not have enough allocated to safely cover the agent.
     function _checkCoverage(address operator, address strategy, address coverageAgent) private view {
-        uint256 deficit = _coverageDeficitAmount(operator, strategy, coverageAgent);
-        // Check to see if agent has a deficit of coverage
-        if (deficit > 0) {
-            revert InsufficientCoverageAvailable(deficit);
+        int256 backing = _coverageBackingAmount(operator, strategy, coverageAgent);
+        // Check to see if agent has a deficit of coverage (negative backing)
+        if (backing < 0) {
+            revert InsufficientCoverageAvailable(uint256(-backing));
         }
     }
 
-    function _coverageDeficitAmount(address operator, address strategy, address coverageAgent)
+    /// @notice Calculate the coverage backing for an operator, strategy, and coverage agent.
+    /// @dev Returns positive value if fully backed, negative value if there's a deficit.
+    /// @param operator The operator address.
+    /// @param strategy The strategy address.
+    /// @param coverageAgent The coverage agent address.
+    /// @return backing The coverage backing (positive = fully backed, negative = deficit).
+    function _coverageBackingAmount(address operator, address strategy, address coverageAgent)
         private
         view
-        returns (uint256 deficit)
+        returns (int256 backing)
     {
         uint256 totalAllocatedCoverage =
             IEigenServiceManager(address(this)).coverageAllocated(operator, strategy, coverageAgent);
         uint256 totalCoverageByOperator = _totalCoverageByOperatorStrategy(operator, strategy, coverageAgent);
 
-        if (totalAllocatedCoverage < totalCoverageByOperator) {
-            deficit = totalCoverageByOperator - totalAllocatedCoverage;
-        }
+        // Calculate backing: positive = fully backed, negative = deficit
+        backing = int256(totalAllocatedCoverage) - int256(totalCoverageByOperator);
     }
 
     /// @notice Returns the total coverage by an operator for a strategy in the operators asset
@@ -349,7 +359,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         if (!success) revert SlashFailed(claimId);
 
         _claim.status = CoverageClaimStatus.Slashed;
-        ICoverageAgent(_position.coverageAgent).onSlashCompleted(claimId);
+        ICoverageAgent(_position.coverageAgent).onSlashCompleted(claimId, amount);
         emit ClaimSlashed(claimId, amount);
 
         // Calculate the difference in strategy asset balance

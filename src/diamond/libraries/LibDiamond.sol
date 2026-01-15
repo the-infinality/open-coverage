@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IDiamondCut} from "../interfaces/IDiamondCut.sol";
+import {IDiamond} from "../interfaces/IDiamond.sol";
 
 /// @title LibDiamond
 /// @author EIP-2535 Diamonds
@@ -43,7 +44,10 @@ library LibDiamond {
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     /// @notice Emitted when facets are modified
-    event DiamondCut(IDiamondCut.FacetCut[] _diamondCut, address _init, bytes _calldata);
+    /// @dev This event is part of the EIP-2535 standard and enables transparency.
+    ///      It records all functions that are added, replaced, or removed on a diamond.
+    ///      This allows tracking the complete history of diamond upgrades.
+    event DiamondCut(IDiamond.FacetCut[] _diamondCut, address _init, bytes _calldata);
 
     /// @notice Error when caller is not the owner
     error NotContractOwner(address _user, address _contractOwner);
@@ -114,17 +118,22 @@ library LibDiamond {
     }
 
     /// @notice Execute a diamond cut
-    /// @param _diamondCut The facet cuts to execute
-    /// @param _init The address to delegatecall with _calldata
-    /// @param _calldata The calldata for the delegatecall
+    /// @dev As specified in EIP-2535, this function:
+    ///      1. Adds, replaces, or removes functions atomically
+    ///      2. Emits a DiamondCut event for transparency
+    ///      3. Optionally executes an initialization function via delegatecall
+    ///      This function allows arbitrary execution via delegatecall, so access must be restricted.
+    /// @param _diamondCut The facet cuts to execute atomically
+    /// @param _init The address to delegatecall with _calldata (can be address(0))
+    /// @param _calldata The calldata for the delegatecall (can be empty if _init is address(0))
     function diamondCut(IDiamondCut.FacetCut[] memory _diamondCut, address _init, bytes memory _calldata) internal {
         for (uint256 facetIndex; facetIndex < _diamondCut.length; facetIndex++) {
-            IDiamondCut.FacetCutAction action = _diamondCut[facetIndex].action;
-            if (action == IDiamondCut.FacetCutAction.Add) {
+            IDiamond.FacetCutAction action = _diamondCut[facetIndex].action;
+            if (action == IDiamond.FacetCutAction.Add) {
                 addFunctions(_diamondCut[facetIndex].facetAddress, _diamondCut[facetIndex].functionSelectors);
-            } else if (action == IDiamondCut.FacetCutAction.Replace) {
+            } else if (action == IDiamond.FacetCutAction.Replace) {
                 replaceFunctions(_diamondCut[facetIndex].facetAddress, _diamondCut[facetIndex].functionSelectors);
-            } else if (action == IDiamondCut.FacetCutAction.Remove) {
+            } else if (action == IDiamond.FacetCutAction.Remove) {
                 removeFunctions(_diamondCut[facetIndex].facetAddress, _diamondCut[facetIndex].functionSelectors);
             }
         }

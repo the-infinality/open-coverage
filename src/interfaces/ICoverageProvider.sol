@@ -68,7 +68,6 @@ interface ICoverageProvider {
     event PositionClosed(uint256 indexed positionId);
     event CoverageIssued(uint256 indexed positionId, uint256 indexed claimId, uint256 amount, uint256 duration);
     event ClaimIssued(uint256 indexed positionId, uint256 indexed claimId, uint256 amount, uint256 duration);
-    event Slashed(uint256 indexed claimId, uint256 amount);
     event Liquidated(uint256 indexed claimId);
     event ClaimCompleted(uint256 indexed claimId);
     event ClaimSlashed(uint256 indexed claimId, uint256 amount);
@@ -164,9 +163,14 @@ interface ICoverageProvider {
     /// @return claim The coverage claim.
     function claim(uint256 claimId) external view returns (CoverageClaim memory claim);
 
-    /// @notice Check if a claim is covered.
-    /// @dev If the deficit is anything above 0 the claim should be considered for liquidation.
-    /// @param claimId The claim id to check if it is covered.
-    /// @return deficit The deficit of coverage for the claim.
-    function claimDeficit(uint256 claimId) external view returns (uint256 deficit);
+    /// @notice Get the total available backing for a claim.
+    /// @dev A negative value indicates a backing deficit, while a positive value means the claim is fully backed.
+    /// @param claimId The claim id to check backing for.
+    /// @return backing The total available backing for the claim (negative = deficit, positive = fully backed).
+    function claimBacking(uint256 claimId) external view returns (int256 backing);
+
+    /// @notice Get the total amount slashed for a given claim.
+    /// @param claimId The claim id to get the total slash amount for.
+    /// @return slashAmount The total amount slashed for the claim.
+    function claimTotalSlashAmount(uint256 claimId) external view returns (uint256 slashAmount);
 }

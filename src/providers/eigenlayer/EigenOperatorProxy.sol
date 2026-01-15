@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {Initializable} from "@openzeppelin-v5/contracts/proxy/utils/Initializable.sol";
-
 import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
 import {IAllocationManager, IAllocationManagerTypes} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {IDelegationManager} from "eigenlayer-contracts/interfaces/IDelegationManager.sol";
@@ -20,18 +18,18 @@ import {NotOperatorAuthorized, StrategyNotWhitelisted} from "./Errors.sol";
 /// @author p-dealwis, Infinality
 /// @notice This contract manages the eigen operator as proxy to disable some functionality for operators
 /// @dev Not to be confused with the operator entity that is the beneficiary of the delegation pool.
-contract EigenOperatorProxy is IEigenOperatorProxy, Initializable {
+contract EigenOperatorProxy is IEigenOperatorProxy {
     EigenAddresses private _eigenAddresses;
 
     address private _handler;
 
     mapping(bytes32 => bool) private _allowlistedDigests;
 
-    /// @inheritdoc IEigenOperatorProxy
-    function initialize(EigenAddresses memory eigenAddresses_, address handler_, string calldata operatorMetadata_)
-        external
-        initializer
-    {
+    /// @notice Initialize the EigenOperator
+    /// @param eigenAddresses_ EigenAddresses struct containing all EigenLayer contract addresses
+    /// @param handler_ Eigen operator proxies handler
+    /// @param operatorMetadata_ Operator metadata URI
+    constructor(EigenAddresses memory eigenAddresses_, address handler_, string memory operatorMetadata_) {
         _eigenAddresses = eigenAddresses_;
         _handler = handler_;
 

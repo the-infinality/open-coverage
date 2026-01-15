@@ -16,51 +16,44 @@ The EigenLayer coverage manager uses the **EIP-2535 Diamond Standard** — a mod
 
 ## Architecture Diagram
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                             External Callers                                │
-│                    (CoverageAgent, Operators, Owner)                        │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                                                                             │
-│                         EigenCoverageDiamond                                │
-│                      (EIP-2535 Diamond Proxy)                               │
-│                                                                             │
-│  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │                          fallback()                                   │  │
-│  │    ┌─────────────────────────────────────────────────────────────┐    │  │
-│  │    │  1. Extract msg.sig (function selector)                     │    │  │
-│  │    │  2. Lookup facet address from selector registry             │    │  │
-│  │    │  3. delegatecall to facet                                   │    │  │
-│  │    │  4. Return result or revert                                 │    │  │
-│  │    └─────────────────────────────────────────────────────────────┘    │  │
-│  └───────────────────────────────────────────────────────────────────────┘  │
-│                                                                             │
-│  Storage:                                                                   │
-│  ┌─────────────────────────────┐  ┌─────────────────────────────────────┐   │
-│  │   Diamond Storage           │  │   App Storage                       │   │
-│  │   (LibDiamond @ fixed slot) │  │   (EigenCoverageStorage)            │   │
-│  │   • selectorToFacet mapping │  │   • _eigenAddresses                 │   │
-│  │   • facetAddresses[]        │  │   • positions[]                     │   │
-│  │   • supportedInterfaces     │  │   • claims[]                        │   │
-│  │   • contractOwner           │  │   • operators mapping               │   │
-│  └─────────────────────────────┘  └─────────────────────────────────────┘   │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-                  │                │                │                     │
-                  ▼                ▼                ▼                     ▼
-┌─────────────────────┐ ┌─────────────────────┐ ┌─────────────────────┐ ┌─────────────────────┐
-│  DiamondCutFacet    │ │  DiamondLoupeFacet  │ │  EigenServiceMgr    │ │  EigenCoverageProv  │
-│                     │ │                     │ │      Facet          │ │      Facet          │
-│  • diamondCut()     │ │  • facets()         │ │                     │ │                     │
-│                     │ │  • facetAddresses() │ │  • eigenAddresses() │ │  • onIsRegistered() │
-│                     │ │  • facetAddress()   │ │  • registerOperator │ │  • createPosition() │
-│                     │ │  • supportsInterface│ │  • setStrategy...   │ │  • closePosition()  │
-│                     │ │                     │ │  • captureRewards() │ │  • claimCoverage()  │
-│                     │ │                     │ │  • coverageAlloc... │ │  • position()       │
-└─────────────────────┘ └─────────────────────┘ └─────────────────────┘ └─────────────────────┘
+```mermaid
+graph TB
+    CA[CoverageAgent]
+    OP[Operators]
+    OW[Owner]
+    
+    CA & OP & OW -->|"Function Calls"| FB
+
+    subgraph Diamond["EigenCoverageDiamond<br/>(EIP-2535 Diamond Proxy)"]
+        FB[fallback function]
+        
+        subgraph Storage["Storage"]
+            ECS["EigenCoverageStorage<br/>(Inherited Storage)"]
+            APOS["AssetPriceOracleAndSwapperStorage<br/>(Slot-based Storage)"]
+        end
+    end
+
+    subgraph Facets["Eigen Facets"]
+        ESMF["EigenServiceManagerFacet"]
+        ECPF["EigenCoverageProviderFacet"]
+    end
+
+    APOF["AssetPriceOracleAndSwapperFacet"]
+
+    FB -.->|"delegatecall"| ESMF
+    FB -.->|"delegatecall"| ECPF
+    FB -.->|"delegatecall"| APOF
+    
+    ESMF -.->|"Read/Write"| ECS
+    ECPF -.->|"Read/Write"| ECS
+    APOF -.->|"Read/Write"| APOS
+
+    %% style Diamond fill:#e1f5ff
+    %% style ECS fill:#ffe0b2
+    %% style APOS fill:#fff4e1
+    %% style CA fill:#f3e5f5
+    %% style OP fill:#f3e5f5
+    %% style OW fill:#f3e5f5
 ```
 
 ---
@@ -95,10 +88,11 @@ fallback() external payable {
 
 ### 2. Adding/Replacing/Removing Facets via `diamondCut()`
 
-The `IDiamondCut` interface allows the owner to modify the diamond's facets:
+The `IDiamondCut` interface extends `IDiamond` and allows the owner to modify the diamond's facets:
 
 ```solidity
-interface IDiamondCut {
+// Base interface with types and events
+interface IDiamond {
     enum FacetCutAction { Add, Replace, Remove }
     
     struct FacetCut {
@@ -107,6 +101,11 @@ interface IDiamondCut {
         bytes4[] functionSelectors;
     }
     
+    event DiamondCut(FacetCut[] _diamondCut, address _init, bytes _calldata);
+}
+
+// Extended interface with diamondCut function
+interface IDiamondCut is IDiamond {
     function diamondCut(
         FacetCut[] calldata _diamondCut,
         address _init,
@@ -139,14 +138,16 @@ struct DiamondStorage {
 src/
 ├── diamond/                                   # Reusable EIP-2535 infrastructure
 │   ├── interfaces/
-│   │   ├── IDiamondCut.sol                    # Add/replace/remove facets
+│   │   ├── IDiamond.sol                       # Base interface (FacetCutAction, FacetCut, DiamondCut event)
+│   │   ├── IDiamondCut.sol                    # Extends IDiamond, adds diamondCut() function
 │   │   ├── IDiamondLoupe.sol                  # Introspection interface
 │   │   └── IERC165.sol                        # Interface detection
 │   ├── libraries/
 │   │   └── LibDiamond.sol                     # Diamond storage & cut logic
-│   └── facets/
-│       ├── DiamondCutFacet.sol                # Implements IDiamondCut
-│       └── DiamondLoupeFacet.sol              # Implements IDiamondLoupe + IERC165
+│   ├── facets/
+│   │   ├── DiamondCutFacet.sol                # Implements IDiamondCut
+│   │   └── DiamondLoupeFacet.sol              # Implements IDiamondLoupe + IERC165
+│   └── Diamond.sol                            # Base diamond contract with fallback()
 │
 ├── providers/
 │   └── eigenlayer/
@@ -161,35 +162,74 @@ src/
 │       │   └── EigenCoverageProviderFacet.sol # ICoverageProvider implementation
 │       └── README.md                          # This file
 │
-└── interfaces/
-    └── ICoverageProvider.sol                  # Coverage provider interface
+├── facets/
+│   └── AssetPriceOracleAndSwapperFacet.sol   # Asset price oracle and swapper facet
+│
+├── interfaces/
+│   └── ICoverageProvider.sol                  # Coverage provider interface
+│
+└── utils/
+    └── deployments/                           # Deployment helper libraries
+        ├── DiamondFacetsDeployer.sol          # Deploy diamond core facets
+        ├── EigenFacetsDeployer.sol            # Deploy Eigen-specific facets
+        └── AssetPriceOracleAndSwapperFacetDeployer.sol  # Deploy asset price oracle facet
 ```
 
 ---
 
 ## Deployment
 
-The diamond is deployed with all facets registered in the constructor:
+The diamond is deployed with all facets registered in the constructor. We use deployment helper libraries for modular, reusable deployment logic:
 
 ```solidity
-// 1. Deploy all facets
-DiamondCutFacet diamondCutFacet = new DiamondCutFacet();
-DiamondLoupeFacet diamondLoupeFacet = new DiamondLoupeFacet();
-EigenServiceManagerFacet serviceManagerFacet = new EigenServiceManagerFacet();
-EigenCoverageProviderFacet coverageProviderFacet = new EigenCoverageProviderFacet();
+import {DiamondFacetsDeployer} from "../utils/deployments/DiamondFacetsDeployer.sol";
+import {EigenFacetsDeployer} from "../utils/deployments/EigenFacetsDeployer.sol";
+import {AssetPriceOracleAndSwapperFacetDeployer} from "../utils/deployments/AssetPriceOracleAndSwapperFacetDeployer.sol";
 
-// 2. Prepare diamond cuts
-IDiamondCut.FacetCut[] memory cuts = new IDiamondCut.FacetCut[](4);
-cuts[0] = IDiamondCut.FacetCut({
-    facetAddress: address(diamondCutFacet),
-    action: IDiamondCut.FacetCutAction.Add,
-    functionSelectors: getDiamondCutSelectors()
-});
-// ... repeat for other facets
+// 1. Deploy facets using helper libraries
+(DiamondCutFacet diamondCutFacet, DiamondLoupeFacet diamondLoupeFacet) =
+    DiamondFacetsDeployer.deployDiamondFacets();
+(EigenServiceManagerFacet serviceManagerFacet, EigenCoverageProviderFacet coverageProviderFacet) =
+    EigenFacetsDeployer.deployEigenFacets();
+AssetPriceOracleAndSwapperFacet assetPriceOracleFacet =
+    AssetPriceOracleAndSwapperFacetDeployer.deployAssetPriceOracleAndSwapperFacet();
 
-// 3. Deploy diamond with cuts and initialization args
+// 2. Get facet cuts from helper libraries
+IDiamondCut.FacetCut[] memory diamondCuts =
+    DiamondFacetsDeployer.getDiamondFacetCuts(diamondCutFacet, diamondLoupeFacet);
+IDiamondCut.FacetCut[] memory eigenCuts =
+    EigenFacetsDeployer.getEigenFacetCuts(serviceManagerFacet, coverageProviderFacet);
+IDiamondCut.FacetCut memory assetPriceOracleCut =
+    AssetPriceOracleAndSwapperFacetDeployer.getAssetPriceOracleAndSwapperFacetCut(
+        assetPriceOracleFacet
+    );
+
+// 3. Combine all facet cuts (5 facets total)
+IDiamondCut.FacetCut[] memory cuts = new IDiamondCut.FacetCut[](5);
+cuts[0] = diamondCuts[0]; // DiamondCutFacet
+cuts[1] = diamondCuts[1]; // DiamondLoupeFacet
+cuts[2] = eigenCuts[0]; // EigenServiceManagerFacet
+cuts[3] = eigenCuts[1]; // EigenCoverageProviderFacet
+cuts[4] = assetPriceOracleCut; // AssetPriceOracleAndSwapperFacet
+
+// 4. Deploy diamond with cuts and initialization args
 EigenCoverageDiamond diamond = new EigenCoverageDiamond(cuts, args);
 ```
+
+### Deployment Helper Libraries
+
+The deployment helper libraries (`utils/deployments/`) provide:
+
+- **`DiamondFacetsDeployer`**: Deploys and configures diamond core facets (DiamondCutFacet, DiamondLoupeFacet)
+- **`EigenFacetsDeployer`**: Deploys and configures Eigen-specific facets (EigenServiceManagerFacet, EigenCoverageProviderFacet)
+- **`AssetPriceOracleAndSwapperFacetDeployer`**: Deploys and configures the asset price oracle facet
+
+Each library provides:
+- `deploy*()` functions to deploy facet instances
+- `get*FacetCuts()` functions to generate properly configured facet cuts
+- `get*Selectors()` functions to get function selectors for each facet
+
+This modular approach ensures consistency between test deployments and production deployments.
 
 ---
 
@@ -198,20 +238,29 @@ EigenCoverageDiamond diamond = new EigenCoverageDiamond(cuts, args);
 After deployment, the owner can upgrade facets via `diamondCut()`:
 
 ```solidity
+import {IDiamond} from "src/diamond/interfaces/IDiamond.sol";
+import {IDiamondCut} from "src/diamond/interfaces/IDiamondCut.sol";
+import {EigenFacetsDeployer} from "utils/deployments/EigenFacetsDeployer.sol";
+
 // Deploy new facet version
 EigenServiceManagerFacetV2 newFacet = new EigenServiceManagerFacetV2();
 
+// Get selectors using helper library
+bytes4[] memory selectors = EigenFacetsDeployer.getEigenServiceManagerSelectors();
+
 // Replace existing functions
 IDiamondCut.FacetCut[] memory cuts = new IDiamondCut.FacetCut[](1);
-cuts[0] = IDiamondCut.FacetCut({
+cuts[0] = IDiamond.FacetCut({
     facetAddress: address(newFacet),
-    action: IDiamondCut.FacetCutAction.Replace,
-    functionSelectors: getEigenServiceManagerSelectors()
+    action: IDiamond.FacetCutAction.Replace,
+    functionSelectors: selectors
 });
 
 // Execute upgrade
 IDiamondCut(diamond).diamondCut(cuts, address(0), "");
 ```
+
+**Note**: When working with `IDiamondCut` types, use `IDiamond.FacetCut` and `IDiamond.FacetCutAction` for struct literals and enum values, since these types are defined in the base `IDiamond` interface.
 
 ---
 
@@ -247,15 +296,34 @@ bool supported = IERC165(diamond).supportsInterface(interfaceId);
 | **Gas Efficiency** | Only deploy changed facets |
 | **Standard Introspection** | Query facets via IDiamondLoupe |
 | **Shared Storage** | All facets operate on consistent storage |
+| **Reusable Deployment** | Helper libraries enable consistent deployments across environments |
+
+## Interface Structure
+
+The diamond interfaces follow the EIP-2535 specification:
+
+- **`IDiamond`**: Base interface containing `FacetCutAction` enum, `FacetCut` struct, and `DiamondCut` event
+- **`IDiamondCut`**: Extends `IDiamond`, adds the `diamondCut()` function for modifying facets
+- **`IDiamondLoupe`**: Provides introspection functions (`facets()`, `facetAddresses()`, `facetAddress()`, `facetFunctionSelectors()`)
+- **`IERC165`**: Standard interface detection via `supportsInterface()`
+
+When using these interfaces:
+- Function parameters can use `IDiamondCut.FacetCut[]` (since `IDiamondCut` extends `IDiamond`)
+- Struct literals and enum values should use `IDiamond.FacetCut` and `IDiamond.FacetCutAction` directly
 
 ---
 
 ## Storage Considerations
 
-1. **Diamond Storage**: Uses a fixed slot (`keccak256("diamond.standard.diamond.storage")`) for facet registry
-2. **App Storage**: `EigenCoverageStorage` is inherited by the diamond and all facets
-3. **No Collisions**: The fixed slot approach prevents storage slot collisions
-4. **Upgradeable**: App storage includes a `__gap` for future extensions
+1. **Diamond Storage**: Uses a fixed slot (`keccak256("diamond.standard.diamond.storage")`) for facet registry, managed by `LibDiamond`
+2. **EigenCoverageStorage**: Uses inherited storage pattern (regular storage slots) for Eigen-specific data like positions, claims, and operators
+3. **AssetPriceOracleAndSwapperStorage**: Uses slot-based storage pattern (`keccak256("asset.price.oracle.and.swapper.storage")`) via `LibAssetPriceOracleAndSwapperStorage`, similar to Diamond Storage
+4. **No Collisions**: The fixed slot approach prevents storage slot collisions between:
+   - Diamond Storage (facet registry)
+   - AssetPriceOracleAndSwapperStorage (asset pairs, slippage)
+   - EigenCoverageStorage (inherited storage slots)
+5. **Upgradeable**: EigenCoverageStorage includes a `__gap` for future extensions
+6. **Shared Context**: All facets operate on the same storage context via `delegatecall`, enabling seamless data sharing across all three storage types
 
 ---
 

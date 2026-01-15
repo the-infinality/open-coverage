@@ -10,5 +10,17 @@
         "strategies": {
             "rETH": "0x1BeE69b7dFFfA4E2d53C2a2Df135C388AD25dCD2"
         }
+    }, 
+    "11155111": {
+        "allocationManager": "0x42583067658071247ec8CE0A516A58f682002d07",
+        "delegationManager": "0xD4A7E1Bd8015057293f0D0A557088c286942e84b",
+        "strategyManager": "0x2E3D6c0744b10eb0A4e6F679F71554a39Ec47a5D",
+        "rewardsCoordinator": "0x5ae8152fb88c26ff9ca5C014c94fca3c68029349",
+        "permissionsController": "0x44632dfBdCb6D3E21EF613B0ca8A6A0c618F5a37",
+        "strategyFactory": "0x066cF95c1bf0927124DFB8B02B401bc23A79730D",
+        "testStrategy": "0x424246eF71b01ee33aA33aC590fd9a0855F5eFbc",
+        "strategies": {
+            "WETH": "0x424246eF71b01ee33aA33aC590fd9a0855F5eFbc"
+        }
     }
 }

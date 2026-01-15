@@ -13,13 +13,14 @@ import {AssetPriceOracleAndSwapperStorage} from "../../storage/AssetPriceOracleA
 import {IEigenServiceManager} from "./interfaces/IEigenServiceManager.sol";
 import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
+import {IDiamondCut} from "src/diamond/interfaces/IDiamondCut.sol";
 
 /// @title EigenCoverageDiamond
 /// @author p-dealwis, Infinality
 /// @notice EIP-2535 Diamond proxy for Eigen coverage management
 /// @dev Uses the diamond pattern with fallback-based selector routing.
 ///      All function calls are routed to the appropriate facet via delegatecall.
-contract EigenCoverageDiamond is Diamond, EigenCoverageStorage, AssetPriceOracleAndSwapperStorage {
+contract EigenCoverageDiamond is Diamond, EigenCoverageStorage, AssetPriceOracleAndSwapperStorage, IDiamondCut {
     /// @notice Struct for initialization arguments
     struct DiamondArgs {
         address owner;
@@ -47,6 +48,7 @@ contract EigenCoverageDiamond is Diamond, EigenCoverageStorage, AssetPriceOracle
         ds.supportedInterfaces[type(IEigenServiceManager).interfaceId] = true;
         ds.supportedInterfaces[type(IAssetPriceOracleAndSwapper).interfaceId] = true;
         ds.supportedInterfaces[type(ICoverageProvider).interfaceId] = true;
+        ds.supportedInterfaces[type(IDiamondCut).interfaceId] = true;
 
         // Initialize app-specific storage
         _eigenAddresses = _args.eigenAddresses;
@@ -65,6 +67,12 @@ contract EigenCoverageDiamond is Diamond, EigenCoverageStorage, AssetPriceOracle
     /// @param _metadataUri is the metadata URI for the AVS
     function _initializeAVSMetadataURI(string memory _metadataUri) private {
         IAllocationManager(_eigenAddresses.allocationManager).updateAVSMetadataURI(address(this), _metadataUri);
+    }
+
+    /// @inheritdoc IDiamondCut
+    function diamondCut(FacetCut[] calldata _diamondCut, address _init, bytes calldata _calldata) external override {
+        LibDiamond.enforceIsContractOwner();
+        LibDiamond.diamondCut(_diamondCut, _init, _calldata);
     }
 }
 

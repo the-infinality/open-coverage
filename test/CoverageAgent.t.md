@@ -41,9 +41,8 @@ This test suite provides comprehensive coverage for the `CoverageAgent` contract
 - ✅ `test_RevertWhen_onRegisterPosition_providerNotActive` - Ensures inactive providers cannot register positions
 - ✅ `test_onRegisterPosition_throughProvider` - Tests full flow through provider
 
-### 4. Coverage Provider Data Tests
-- ✅ `test_coverageProviderData_inactive` - Tests querying inactive provider data
-- ✅ `test_coverageProviderData_active` - Tests querying active provider data
+### 4. Coverage Provider Registration Check Tests
+- ✅ `test_isCoverageProviderRegistered` - Tests checking if a provider is registered
 
 ### 5. AssetPriceOracleAndSwapper Tests
 - ✅ `test_assetPriceOracleRegistered` - Verifies price oracle registration

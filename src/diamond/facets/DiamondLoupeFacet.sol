@@ -8,7 +8,11 @@ import {LibDiamond} from "../libraries/LibDiamond.sol";
 /// @title DiamondLoupeFacet
 /// @author EIP-2535 Diamonds
 /// @notice Facet for diamond introspection
-/// @dev Implements IDiamondLoupe and IERC165 interfaces
+/// @dev Implements IDiamondLoupe and IERC165 interfaces as specified in EIP-2535.
+///      The loupe functions enable transparency by allowing inspection of a diamond's
+///      current facets and their function selectors. This is essential because a diamond's
+///      verified source code doesn't show what functions it has.
+///      See https://eips.ethereum.org/EIPS/eip-2535
 contract DiamondLoupeFacet is IDiamondLoupe, IERC165 {
     /// @inheritdoc IDiamondLoupe
     function facets() external view override returns (Facet[] memory facets_) {
