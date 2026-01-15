@@ -17,10 +17,10 @@
         "strategyManager": "0x2E3D6c0744b10eb0A4e6F679F71554a39Ec47a5D",
         "rewardsCoordinator": "0x5ae8152fb88c26ff9ca5C014c94fca3c68029349",
         "permissionsController": "0x44632dfBdCb6D3E21EF613B0ca8A6A0c618F5a37",
-        "strategyFactory": "0x5e4C39Ad7A3E881585e383dB9827EB4811f6F647",
-        "testStrategy": "0x1BeE69b7dFFfA4E2d53C2a2Df135C388AD25dCD2",
+        "strategyFactory": "0x066cF95c1bf0927124DFB8B02B401bc23A79730D",
+        "testStrategy": "0x424246eF71b01ee33aA33aC590fd9a0855F5eFbc",
         "strategies": {
-            "rETH": "0x1BeE69b7dFFfA4E2d53C2a2Df135C388AD25dCD2"
+            "WETH": "0x424246eF71b01ee33aA33aC590fd9a0855F5eFbc"
         }
     }
 }

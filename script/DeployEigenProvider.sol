@@ -27,7 +27,7 @@ contract DeployEigenProvider is Script, EigenHelper, UniswapHelper {
         vm.startBroadcast();
 
         address owner = msg.sender;
-        string memory metadataURI = vm.envOr("METADATA_URI", string("https://coverage.example.com/metadata.json"));
+        string memory metadataURI = vm.envOr("AVS_METADATA_URI", string("https://coverage.example.com/metadata.json"));
 
         console.log("Deploying EigenCoverageDiamond...");
         console.log("Owner:", owner);

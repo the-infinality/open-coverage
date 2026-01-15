@@ -16,7 +16,7 @@ contract DeployEigenOperatorProxy is Script, EigenHelper {
 
         address handler = msg.sender;
         string memory operatorMetadata =
-            vm.envOr("OPERATOR_METADATA", string("https://coverage.example.com/operator.json"));
+            vm.envOr("OPERATOR_METADATA_URI", string("https://coverage.example.com/operator.json"));
 
         EigenAddressbook memory eigenAddressBook = _getAddressBook();
 
