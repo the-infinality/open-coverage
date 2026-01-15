@@ -42,7 +42,7 @@ export function ChainBadge({
     <div
       className={cn(
         "flex items-center rounded-lg border-2 transition-all",
-        "border-border bg-background",
+        "border-border bg-background w-fit mt-2 mb-2",
         sizeClasses[size].container,
         sizeClasses[size].text,
         className

@@ -3,7 +3,7 @@ import { Link } from "react-router-dom"
 import { useChainId, usePublicClient, useBlockNumber } from "wagmi"
 import { type Abi, type AbiEvent, decodeEventLog } from "viem"
 import { toast } from "sonner"
-import type { SavedContract } from "@/types/contracts"
+import type { CoverageContract } from "@/types/contracts"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useContracts } from "@/hooks/use-contracts"
-import { getAbiForContractType } from "@/generated/abis"
+import { getAbiForContractType } from "@/utils/abi-utils"
 import { CopyableAddress } from "@/components/ui/copyable-address"
 import { RefreshCw } from "lucide-react"
 import { ContractSelector } from "@/components/ContractSelector"
@@ -37,7 +37,7 @@ export function LogsPage() {
   const { data: currentBlock } = useBlockNumber()
   const { contracts } = useContracts()
 
-  const [selectedContract, setSelectedContract] = useState<SavedContract | null>(null)
+  const [selectedContract, setSelectedContract] = useState<CoverageContract | null>(null)
   const [logs, setLogs] = useState<ContractLog[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [fromBlock, setFromBlock] = useState<string>("")

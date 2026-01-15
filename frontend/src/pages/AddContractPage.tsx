@@ -41,7 +41,7 @@ import {
 import { useContracts } from "@/hooks/use-contracts"
 import { getContractTypes } from "@/lib/contract-utils"
 import { getSupportedChainsInfo, getPublicClientForChain } from "@/lib/wagmi"
-import { coverageAgentAbi, coverageProviderAbi } from "@/generated/abis"
+import { generateContractName } from "@/utils/contract-name-utils"
 import type { ContractType, ProviderType } from "@/types/contracts"
 import eigenlayerLogo from "@/assets/eigenlayer.jpg"
 import catalysisLogo from "@/assets/catalysis.jpg"
@@ -75,44 +75,6 @@ type FormData = {
   providerType?: ProviderType
 }
 
-// Dune-themed names for random contract name generation
-const duneNames = [
-  "muaddib", "atreides", "harkonnen", "fremen", "sardaukar", "mentat", "kwisatz", "shaihulud",
-  "paul", "leto", "jessica", "duncan", "gurney", "stilgar", "chani", "irulan",
-  "baron", "feyd", "rabban", "vladimir", "glossu", "piter", "thufir", "yueh",
-  "arrakis", "caladan", "giedi", "kaitain", "salusa", "ix", "tleilax", "bene"
-]
-
-// Generate a unique random name based on contract type, avoiding collisions with existing contracts
-function generateRandomName(
-  type: "CoverageAgent" | "CoverageProvider",
-  existingContracts: Array<{ name: string }>
-): string {
-  const prefix = type
-  const existingNames = new Set(existingContracts.map((c) => c.name.toLowerCase()))
-  
-  // Try up to 100 times to find a unique name
-  for (let attempt = 0; attempt < 100; attempt++) {
-    const duneName = duneNames[Math.floor(Math.random() * duneNames.length)]
-    const baseName = `${prefix}-${duneName}`
-    
-    // If base name is unique, return it
-    if (!existingNames.has(baseName.toLowerCase())) {
-      return baseName
-    }
-    
-    // If base name exists, try with a number suffix
-    for (let num = 1; num <= 999; num++) {
-      const numberedName = `${baseName}-${num}`
-      if (!existingNames.has(numberedName.toLowerCase())) {
-        return numberedName
-      }
-    }
-  }
-  
-  // Fallback: use timestamp if all else fails
-  return `${prefix}-${Date.now()}`
-}
 
 // Provider type options with metadata
 const providerTypes: {
@@ -147,7 +109,6 @@ const providerTypes: {
 interface ContractValidationState {
   isValidating: boolean
   hasCode: boolean | null
-  ownerAddress: string | null
   error: string | null
 }
 
@@ -160,14 +121,13 @@ export function AddContractPage() {
   const [validation, setValidation] = useState<ContractValidationState>({
     isValidating: false,
     hasCode: null,
-    ownerAddress: null,
     error: null,
   })
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema) as unknown as undefined,
     defaultValues: {
-      name: generateRandomName("CoverageAgent", contracts),
+      name: "",
       address: "",
       chainId: connectedChainId,
       type: "CoverageAgent",
@@ -179,27 +139,29 @@ export function AddContractPage() {
   const watchedChainId = useWatch({ control: form.control, name: "chainId" })
   const watchedAddress = useWatch({ control: form.control, name: "address" })
 
+
+
   // Validate contract address when it changes
   useEffect(() => {
     const validateContract = async () => {
       if (!watchedAddress || !isValidAddressFormat(watchedAddress)) {
-        setValidation({ isValidating: false, hasCode: null, ownerAddress: null, error: null })
+        setValidation({ isValidating: false, hasCode: null, error: null })
         return
       }
 
       if (!watchedChainId) {
-        setValidation({ isValidating: false, hasCode: null, ownerAddress: null, error: "Please select a chain" })
+        setValidation({ isValidating: false, hasCode: null, error: "Please select a chain" })
         return
       }
 
       // Get public client for the selected chain
       const chainPublicClient = getPublicClientForChain(watchedChainId)
       if (!chainPublicClient) {
-        setValidation({ isValidating: false, hasCode: null, ownerAddress: null, error: "Invalid chain" })
+        setValidation({ isValidating: false, hasCode: null, error: "Invalid chain" })
         return
       }
 
-      setValidation({ isValidating: true, hasCode: null, ownerAddress: null, error: null })
+      setValidation({ isValidating: true, hasCode: null, error: null })
 
       try {
         // Check if there's code at the address
@@ -210,48 +172,20 @@ export function AddContractPage() {
           setValidation({
             isValidating: false,
             hasCode: false,
-            ownerAddress: null,
             error: "No contract found at this address",
           })
           return
         }
 
-        // Try to get the owner/coordinator based on contract type
-        let ownerAddress: string | null = null
-        
-        try {
-          if (watchedType === "CoverageAgent") {
-            // Use coordinator method for CoverageAgent
-            const result = await chainPublicClient.readContract({
-              address: getAddress(watchedAddress),
-              abi: coverageAgentAbi,
-              functionName: "coordinator",
-            })
-            ownerAddress = result as string
-          } else if (watchedType === "CoverageProvider") {
-            // Use owner method for CoverageProvider
-            const result = await chainPublicClient.readContract({
-              address: getAddress(watchedAddress),
-              abi: coverageProviderAbi,
-              functionName: "owner",
-            })
-            ownerAddress = result as string
-          }
-        } catch {
-          // Owner detection failed, but contract exists
-        }
-
         setValidation({
           isValidating: false,
           hasCode: true,
-          ownerAddress,
           error: null,
         })
       } catch {
         setValidation({
           isValidating: false,
           hasCode: null,
-          ownerAddress: null,
           error: "Failed to validate contract",
         })
       }
@@ -270,12 +204,7 @@ export function AddContractPage() {
 
   // Auto-generate name when contract type changes
   useEffect(() => {
-    const currentName = form.getValues("name")
-    // Generate name if empty or matches the auto-generated pattern
-    const autoGeneratedPattern = /^(Agent|Provider)-\w+(-\d+)?$/
-    if (!currentName || autoGeneratedPattern.test(currentName)) {
-      form.setValue("name", generateRandomName(watchedType, contracts))
-    }
+    form.setValue("name", generateContractName(watchedType, contracts))
   }, [watchedType, form, contracts])
 
   function onSubmit(values: FormData) {
@@ -312,7 +241,6 @@ export function AddContractPage() {
       address: values.address as `0x${string}`,
       type: values.type as ContractType,
       chainId: values.chainId,
-      ownerAddress: validation.ownerAddress ? validation.ownerAddress as `0x${string}` : undefined,
       providerType: values.providerType,
     })
 
@@ -519,10 +447,6 @@ export function AddContractPage() {
                     <FormDescription>
                       {validation.error ? (
                         <span className="text-destructive">{validation.error}</span>
-                      ) : validation.hasCode && validation.ownerAddress ? (
-                        <span className="text-green-600 dark:text-green-400">
-                          Contract found • Owner detected
-                        </span>
                       ) : validation.hasCode ? (
                         <span className="text-green-600 dark:text-green-400">
                           Contract found
@@ -544,7 +468,7 @@ export function AddContractPage() {
                   <FormItem>
                     <FormLabel>Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="Agent-muaddib" {...field} />
+                      <Input {...field} />
                     </FormControl>
                     <FormDescription>
                       A friendly name to identify this contract (auto-generated, feel free to change)

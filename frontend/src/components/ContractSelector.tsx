@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { useParams } from "react-router-dom"
 import { useChainId, useSwitchChain, useAccount } from "wagmi"
 import { toast } from "sonner"
-import type { SavedContract } from "@/types/contracts"
+import type { CoverageContract } from "@/types/contracts"
 
 import {
   Card,
@@ -27,7 +27,7 @@ import { getChainInfo } from "@/lib/wagmi"
 interface ContractSelectorProps {
   title?: string
   description?: string
-  onContractChange?: (contract: SavedContract | null) => void
+  onContractChange?: (contract: CoverageContract | null) => void
 }
 
 export function ContractSelector({
@@ -99,11 +99,11 @@ export function ContractSelector({
           <div className="rounded-lg border p-4 bg-muted/50">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-medium">{selectedContract.name}</span>
-              <span className="text-muted-foreground">-</span>
+              <span className="">-</span>
               <CopyableAddress address={selectedContract.address} truncateChars={8} variant="inline" size="sm" />
-              <span className="text-muted-foreground">-</span>
-              <span className="text-sm text-muted-foreground">{selectedContract.type}</span>
-              <span className="text-muted-foreground">-</span>
+              <span className="">-</span>
+              <span className="text-sm ">{selectedContract.type}</span>
+              <span className="">-</span>
               <ChainBadge chainId={selectedContract.chainId} size="sm" />
             </div>
           </div>

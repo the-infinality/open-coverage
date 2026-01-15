@@ -6,7 +6,7 @@ import {
   useWalletClient,
 } from "wagmi"
 import { type Abi, type AbiFunction } from "viem"
-import type { SavedContract } from "@/types/contracts"
+import type { CoverageContract } from "@/types/contracts"
 import { getPublicClientForChain } from "@/lib/wagmi"
 
 import { Button } from "@/components/ui/button"
@@ -27,10 +27,11 @@ import {
 } from "@/components/ui/collapsible"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useContracts } from "@/hooks/use-contracts"
-import { getAbiForContractType } from "@/generated/abis"
+import { getAbiForContractType } from "@/utils/abi-utils"
 import { cn, truncateAddress } from "@/lib/utils"
 import { ChevronDown, Play, Eye, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react"
 import { ContractSelector } from "@/components/ContractSelector"
+import { ContractSpecificInfo } from "@/components/ContractSpecificInfo"
 
 interface FunctionCallResult {
   success: boolean
@@ -338,7 +339,7 @@ function FunctionCard({
 
 export function InteractPage() {
   const { contracts } = useContracts()
-  const [selectedContract, setSelectedContract] = useState<SavedContract | null>(null)
+  const [selectedContract, setSelectedContract] = useState<CoverageContract | null>(null)
 
   const abi = selectedContract
     ? (getAbiForContractType(selectedContract.type) as Abi)
@@ -387,7 +388,9 @@ export function InteractPage() {
       />
 
       {selectedContract && (
-        <Card className="h-fit">
+        <>
+          <ContractSpecificInfo contract={selectedContract} />
+          <Card className="h-fit">
           <CardHeader>
             <CardTitle>Contract Functions</CardTitle>
             <CardDescription>
@@ -437,6 +440,7 @@ export function InteractPage() {
             </Tabs>
           </CardContent>
         </Card>
+        </>
       )}
     </div>
   )

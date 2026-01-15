@@ -1,5 +1,5 @@
 import * as React from "react"
-import type { SavedContract, ContractType } from "@/types/contracts"
+import type { CoverageContract, ContractType } from "@/types/contracts"
 import {
   getStoredContracts,
   saveContract as storeSaveContract,
@@ -8,12 +8,12 @@ import {
 } from "@/store/contracts"
 
 interface ContractsContextValue {
-  contracts: SavedContract[]
-  addContract: (contract: Omit<SavedContract, "id" | "createdAt">) => SavedContract
-  updateContract: (id: string, updates: Partial<SavedContract>) => void
+  contracts: CoverageContract[]
+  addContract: (contract: Omit<CoverageContract, "id" | "createdAt">) => CoverageContract
+  updateContract: (id: string, updates: Partial<CoverageContract>) => void
   removeContract: (id: string) => void
-  getContractById: (id: string) => SavedContract | undefined
-  getContractsByType: (type: ContractType) => SavedContract[]
+  getContractById: (id: string) => CoverageContract | undefined
+  getContractsByType: (type: ContractType) => CoverageContract[]
 }
 
 const ContractsContext = React.createContext<ContractsContextValue | undefined>(
@@ -21,15 +21,15 @@ const ContractsContext = React.createContext<ContractsContextValue | undefined>(
 )
 
 export function ContractsProvider({ children }: { children: React.ReactNode }) {
-  const [contracts, setContracts] = React.useState<SavedContract[]>(() =>
+  const [contracts, setContracts] = React.useState<CoverageContract[]>(() =>
     getStoredContracts()
   )
 
   const addContract = React.useCallback(
-    (contract: Omit<SavedContract, "id" | "createdAt">) => {
-      const newContract: SavedContract = {
+    (contract: Omit<CoverageContract, "id" | "createdAt">) => {
+      const newContract: CoverageContract = {
         ...contract,
-        id: generateContractId(),
+        id: generateContractId(contract.chainId, contract.address),
         createdAt: Date.now(),
       }
       storeSaveContract(newContract)
@@ -40,7 +40,7 @@ export function ContractsProvider({ children }: { children: React.ReactNode }) {
   )
 
   const updateContract = React.useCallback(
-    (id: string, updates: Partial<SavedContract>) => {
+    (id: string, updates: Partial<CoverageContract>) => {
       setContracts((prev) => {
         const updated = prev.map((c) =>
           c.id === id ? { ...c, ...updates } : c

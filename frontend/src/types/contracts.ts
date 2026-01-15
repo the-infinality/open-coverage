@@ -6,7 +6,7 @@ export type ContractType =
 
 export type ProviderType = "EigenLayer" | "Catalysis" | "Symbiotic"
 
-export interface SavedContract {
+export interface CoverageContract {
   id: string
   name: string
   address: Address
@@ -14,7 +14,6 @@ export interface SavedContract {
   chainId: number
   abi?: Abi
   createdAt: number
-  ownerAddress?: Address
   providerType?: ProviderType
 }
 
