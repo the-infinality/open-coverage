@@ -1,67 +1,59 @@
 import { useMemo } from "react"
 import { Filter, X } from "lucide-react"
-import { getChainInfo } from "@/lib/wagmi"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ChainBadge } from "@/components/ui/chain-badge"
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import type { ContractType } from "@/types/contracts"
+import { getContractTypeLabel } from "@/lib/contract-utils"
 
-interface ChainFilterProps {
-  selectedChainIds: Set<number>
-  onSelectionChange: (chainIds: Set<number>) => void
-  availableChainIds: number[]
+interface ContractTypeFilterProps {
+  selectedTypes: Set<ContractType>
+  onSelectionChange: (types: Set<ContractType>) => void
+  availableTypes: ContractType[]
 }
 
-export function ChainFilter({
-  selectedChainIds,
+export function ContractTypeFilter({
+  selectedTypes,
   onSelectionChange,
-  availableChainIds,
-}: ChainFilterProps) {
-  // Get chain info for available chains
-  const availableChains = useMemo(() => {
-    return availableChainIds
-      .map((id) => getChainInfo(id))
-      .filter((chain): chain is NonNullable<typeof chain> => chain !== undefined)
-      .sort((a, b) => {
-        // Sort mainnet first, then testnets, then others
-        if (a.id === 1) return -1
-        if (b.id === 1) return 1
-        if (a.isTestnet && !b.isTestnet) return -1
-        if (!a.isTestnet && b.isTestnet) return 1
-        return a.name.localeCompare(b.name)
-      })
-  }, [availableChainIds])
+  availableTypes,
+}: ContractTypeFilterProps) {
+  // Sort types alphabetically by label
+  const sortedTypes = useMemo(() => {
+    return [...availableTypes].sort((a, b) =>
+      getContractTypeLabel(a).localeCompare(getContractTypeLabel(b))
+    )
+  }, [availableTypes])
 
-  const toggleChain = (chainId: number) => {
-    const next = new Set(selectedChainIds)
-    if (next.has(chainId)) {
-      next.delete(chainId)
+  const toggleType = (type: ContractType) => {
+    const next = new Set(selectedTypes)
+    if (next.has(type)) {
+      next.delete(type)
     } else {
-      next.add(chainId)
+      next.add(type)
     }
     onSelectionChange(next)
   }
 
   const handleSelectAll = () => {
-    if (selectedChainIds.size === availableChainIds.length) {
+    if (selectedTypes.size === availableTypes.length) {
       onSelectionChange(new Set())
     } else {
-      onSelectionChange(new Set(availableChainIds))
+      onSelectionChange(new Set(availableTypes))
     }
   }
 
   const handleClear = () => {
-    onSelectionChange(new Set(availableChainIds))
+    onSelectionChange(new Set(availableTypes))
   }
 
-  const selectedCount = selectedChainIds.size
-  const allSelected = selectedChainIds.size === availableChainIds.length
-  const hasFilter = selectedCount > 0 && selectedCount < availableChainIds.length
+  const selectedCount = selectedTypes.size
+  const allSelected = selectedTypes.size === availableTypes.length
+  const hasFilter = selectedCount > 0 && selectedCount < availableTypes.length
 
   return (
     <Collapsible className="w-fit">
@@ -69,7 +61,7 @@ export function ChainFilter({
         <CollapsibleTrigger asChild>
           <Button variant="outline" size="sm" className="gap-2">
             <Filter className="size-4" />
-            <span>Filter by Chain</span>
+            <span>Filter by Type</span>
             {hasFilter && (
               <Badge variant="secondary" className="ml-1">
                 {selectedCount}
@@ -97,7 +89,7 @@ export function ChainFilter({
       <CollapsibleContent className="mt-3">
         <div className="rounded-lg border bg-card p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <h4 className="font-medium text-sm">Select Chains</h4>
+            <h4 className="font-medium text-sm">Select Contract Types</h4>
             <Button
               variant="ghost"
               size="sm"
@@ -108,24 +100,24 @@ export function ChainFilter({
             </Button>
           </div>
           <div className="flex flex-wrap gap-2">
-            {availableChains.length === 0 ? (
+            {sortedTypes.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No chains available
+                No contract types available
               </p>
             ) : (
-              availableChains.map((chain) => {
-                const isSelected = selectedChainIds.has(chain.id)
+              sortedTypes.map((type) => {
+                const isSelected = selectedTypes.has(type)
                 return (
                   <div
-                    key={chain.id}
+                    key={type}
                     className="flex items-center gap-2 rounded-lg border p-2 hover:bg-accent/50 transition-colors cursor-pointer"
-                    onClick={() => toggleChain(chain.id)}
+                    onClick={() => toggleType(type)}
                   >
                     <Checkbox
                       checked={isSelected}
-                      onChange={() => toggleChain(chain.id)}
+                      onChange={() => toggleType(type)}
                     />
-                    <ChainBadge chainId={chain.id} size="sm" />
+                    <Badge variant="outline">{getContractTypeLabel(type)}</Badge>
                   </div>
                 )
               })
@@ -133,8 +125,8 @@ export function ChainFilter({
           </div>
           {selectedCount > 0 && (
             <div className="pt-2 border-t text-xs text-muted-foreground">
-              {selectedCount} of {availableChainIds.length} chain
-              {availableChainIds.length !== 1 ? "s" : ""} selected
+              {selectedCount} of {availableTypes.length} type
+              {availableTypes.length !== 1 ? "s" : ""} selected
             </div>
           )}
         </div>

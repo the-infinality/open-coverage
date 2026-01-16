@@ -23,6 +23,8 @@ import { CopyableAddress } from "@/components/ui/copyable-address"
 import { ChainBadge } from "@/components/ui/chain-badge"
 import { Badge } from "@/components/ui/badge"
 import { ChainFilter } from "@/components/ChainFilter"
+import { ContractTypeFilter } from "@/components/ContractTypeFilter"
+import type { ContractType } from "@/types/contracts"
 
 export function ContractsPage() {
   const { contracts, exportContracts, importContracts } = useContracts()
@@ -38,10 +40,18 @@ export function ContractsPage() {
   const [selectedChainIds, setSelectedChainIds] = useState<Set<number>>(
     new Set()
   )
+  const [selectedContractTypes, setSelectedContractTypes] = useState<Set<ContractType>>(
+    new Set()
+  )
 
   // Get unique chain IDs from contracts
   const availableChainIds = useMemo(() => {
     return Array.from(new Set(contracts.map((c) => c.chainId)))
+  }, [contracts])
+
+  // Get unique contract types from contracts
+  const availableContractTypes = useMemo(() => {
+    return Array.from(new Set(contracts.map((c) => c.type))) as ContractType[]
   }, [contracts])
 
   // Initialize all chains as selected when component mounts or contracts change
@@ -68,11 +78,38 @@ export function ContractsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availableChainIds])
 
-  // Filter contracts by selected chains
+  // Initialize all contract types as selected when component mounts or contracts change
+  useEffect(() => {
+    if (availableContractTypes.length === 0) return
+
+    // If no types are selected, select all available
+    if (selectedContractTypes.size === 0) {
+      setSelectedContractTypes(new Set(availableContractTypes))
+      return
+    }
+
+    // Update selection to only include available types
+    const validTypes = availableContractTypes.filter((type) =>
+      selectedContractTypes.has(type)
+    )
+    if (validTypes.length === 0) {
+      // If no valid types, select all available
+      setSelectedContractTypes(new Set(availableContractTypes))
+    } else if (validTypes.length !== selectedContractTypes.size) {
+      // If some types are no longer available, update selection
+      setSelectedContractTypes(new Set(validTypes))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableContractTypes])
+
+  // Filter contracts by selected chains and contract types
   const filteredContracts = useMemo(() => {
-    if (selectedChainIds.size === 0) return contracts
-    return contracts.filter((c) => selectedChainIds.has(c.chainId))
-  }, [contracts, selectedChainIds])
+    return contracts.filter((c) => {
+      const chainMatch = selectedChainIds.size === 0 || selectedChainIds.has(c.chainId)
+      const typeMatch = selectedContractTypes.size === 0 || selectedContractTypes.has(c.type)
+      return chainMatch && typeMatch
+    })
+  }, [contracts, selectedChainIds, selectedContractTypes])
 
   // Initialize all contracts as selected when dialog opens
   useEffect(() => {
@@ -207,14 +244,14 @@ export function ContractsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex items-center justify-between gap-2.5 flex-wrap">
+        <div className="min-w-[300px]">
           <h2 className="text-2xl font-bold">Manage Contracts</h2>
           <p className="text-muted-foreground">
             View and manage your saved contracts
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {contracts.length > 0 && (
             <Button variant="outline" onClick={handleExportClick}>
               <Download className="mr-2 size-4" />
@@ -295,11 +332,18 @@ export function ContractsPage() {
       </Dialog>
 
       {contracts.length > 0 && (
-        <ChainFilter
-          selectedChainIds={selectedChainIds}
-          onSelectionChange={setSelectedChainIds}
-          availableChainIds={availableChainIds}
-        />
+        <div className="flex flex-wrap gap-3">
+          <ChainFilter
+            selectedChainIds={selectedChainIds}
+            onSelectionChange={setSelectedChainIds}
+            availableChainIds={availableChainIds}
+          />
+          <ContractTypeFilter
+            selectedTypes={selectedContractTypes}
+            onSelectionChange={setSelectedContractTypes}
+            availableTypes={availableContractTypes}
+          />
+        </div>
       )}
 
       <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
@@ -312,11 +356,18 @@ export function ContractsPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-3">
-              <ChainFilter
-                selectedChainIds={selectedChainIds}
-                onSelectionChange={setSelectedChainIds}
-                availableChainIds={availableChainIds}
-              />
+              <div className="flex flex-wrap gap-3">
+                <ChainFilter
+                  selectedChainIds={selectedChainIds}
+                  onSelectionChange={setSelectedChainIds}
+                  availableChainIds={availableChainIds}
+                />
+                <ContractTypeFilter
+                  selectedTypes={selectedContractTypes}
+                  onSelectionChange={setSelectedContractTypes}
+                  availableTypes={availableContractTypes}
+                />
+              </div>
               <div className="flex items-center justify-between">
                 <Button
                   variant="outline"
@@ -407,7 +458,7 @@ export function ContractsPage() {
             <FileCode className="mb-4 size-12 text-muted-foreground" />
             <h3 className="text-lg font-medium">No contracts match filter</h3>
             <p className="mb-4 text-center text-sm text-muted-foreground">
-              Try adjusting your chain filter to see more contracts.
+              Try adjusting your filters to see more contracts.
             </p>
           </CardContent>
         </Card>
