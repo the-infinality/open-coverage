@@ -63,7 +63,7 @@ const formSchema = z.object({
   chainId: z.number().refine((val) => supportedChainIds.includes(val), {
     message: "Please select a valid chain",
   }),
-  type: z.enum(["CoverageAgent", "CoverageProvider"]),
+  type: z.enum(["CoverageAgent", "CoverageProvider", "EigenOperatorProxy"]),
   providerType: z.enum(["EigenLayer", "Catalysis", "Symbiotic"]).optional(),
 })
 
@@ -71,7 +71,7 @@ type FormData = {
   name: string
   address: string
   chainId: number
-  type: "CoverageAgent" | "CoverageProvider"
+  type: "CoverageAgent" | "CoverageProvider" | "EigenOperatorProxy"
   providerType?: ProviderType
 }
 

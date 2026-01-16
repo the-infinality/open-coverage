@@ -1,6 +1,6 @@
 import type { Abi } from "viem"
 import type { ContractType, ProviderType } from "@/types/contracts"
-import { iCoverageAgentAbi, iCoverageProviderAbi, iEigenServiceManagerAbi } from "@/generated/abis"
+import { iCoverageAgentAbi, iCoverageProviderAbi, iEigenServiceManagerAbi, iEigenOperatorProxyAbi } from "@/generated/abis"
 
 export interface NamedAbi {
   name: string
@@ -25,6 +25,8 @@ export function getAbisForContractType(contractType: ContractType, providerType?
         ]
       }
       return [{ name: "ICoverageProvider", abi: iCoverageProviderAbi as Abi }]
+    case "EigenOperatorProxy":
+      return [{ name: "IEigenOperatorProxy", abi: iEigenOperatorProxyAbi as Abi }]
     default:
       throw new Error(`Unknown contract type: ${contractType}`)
   }

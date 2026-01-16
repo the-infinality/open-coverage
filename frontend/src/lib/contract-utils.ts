@@ -7,6 +7,8 @@ export function getContractTypeLabel(type: ContractType): string {
       return "Coverage Agent"
     case "CoverageProvider":
       return "Coverage Provider"
+    case "EigenOperatorProxy":
+      return "Eigen Operator Proxy"
     default:
       return type
   }
@@ -17,6 +19,7 @@ export function getContractTypes(): { value: ContractType; label: string }[] {
   return [
     { value: "CoverageAgent", label: "Coverage Agent" },
     { value: "CoverageProvider", label: "Coverage Provider" },
+    { value: "EigenOperatorProxy", label: "Eigen Operator Proxy" },
   ]
 }
 

@@ -3,6 +3,7 @@ import type { Address } from "viem"
 export type ContractType = 
   | "CoverageAgent"
   | "CoverageProvider"
+  | "EigenOperatorProxy"
 
 export type ProviderType = "EigenLayer" | "Catalysis" | "Symbiotic"
 

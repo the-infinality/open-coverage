@@ -543,6 +543,56 @@ export const iCoverageProviderAbi = [
 ] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// IEigenOperatorProxy
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+export const iEigenOperatorProxyAbi = [
+  {
+    type: 'function',
+    inputs: [
+      { name: 'serviceManager_', internalType: 'address', type: 'address' },
+      { name: 'coverageAgent_', internalType: 'address', type: 'address' },
+      { name: '_strategyAddresses', internalType: 'address[]', type: 'address[]' },
+      { name: '_magnitudes', internalType: 'uint64[]', type: 'uint64[]' },
+    ],
+    name: 'allocate',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'handler',
+    outputs: [{ name: 'handler', internalType: 'address', type: 'address' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: 'serviceManager_', internalType: 'address', type: 'address' },
+      { name: 'coverageAgent_', internalType: 'address', type: 'address' },
+      { name: 'rewardsSplit_', internalType: 'uint16', type: 'uint16' },
+    ],
+    name: 'registerCoverageAgent',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: '_metadataUri', internalType: 'string', type: 'string' }],
+    name: 'updateOperatorMetadataURI',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  { type: 'error', inputs: [], name: 'AlreadyAllocated' },
+  { type: 'error', inputs: [], name: 'AlreadyRegistered' },
+  { type: 'error', inputs: [], name: 'NotOperator' },
+  { type: 'error', inputs: [], name: 'NotRestaker' },
+  { type: 'error', inputs: [], name: 'NotServiceManager' },
+  { type: 'error', inputs: [], name: 'ZeroAddress' },
+] as const
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // IEigenServiceManager
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
