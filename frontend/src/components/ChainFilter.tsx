@@ -69,7 +69,7 @@ export function ChainFilter({
         <CollapsibleTrigger asChild>
           <Button variant="outline" size="sm" className="gap-2">
             <Filter className="size-4" />
-            <span>Filter by Chain</span>
+            <span>Chain</span>
             {hasFilter && (
               <Badge variant="secondary" className="ml-1">
                 {selectedCount}

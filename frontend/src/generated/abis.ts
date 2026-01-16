@@ -1,4 +1,168 @@
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// IAssetPriceOracleAndSwapper
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+export const iAssetPriceOracleAndSwapperAbi = [
+  {
+    type: 'function',
+    inputs: [
+      { name: 'assetA', internalType: 'address', type: 'address' },
+      { name: 'assetB', internalType: 'address', type: 'address' },
+    ],
+    name: 'assetPair',
+    outputs: [
+      {
+        name: '',
+        internalType: 'struct AssetPair',
+        type: 'tuple',
+        components: [
+          { name: 'assetA', internalType: 'address', type: 'address' },
+          { name: 'assetB', internalType: 'address', type: 'address' },
+          { name: 'swapEngine', internalType: 'address', type: 'address' },
+          { name: 'poolInfo', internalType: 'bytes', type: 'bytes' },
+          {
+            name: 'priceStrategy',
+            internalType: 'enum PriceStrategy',
+            type: 'uint8',
+          },
+          { name: 'swapperAccuracy', internalType: 'uint16', type: 'uint16' },
+          { name: 'priceOracle', internalType: 'address', type: 'address' },
+        ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: 'amountIn', internalType: 'uint256', type: 'uint256' },
+      { name: 'assetA', internalType: 'address', type: 'address' },
+      { name: 'assetB', internalType: 'address', type: 'address' },
+    ],
+    name: 'getQuote',
+    outputs: [
+      { name: 'quote', internalType: 'uint256', type: 'uint256' },
+      { name: 'verified', internalType: 'bool', type: 'bool' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [
+      {
+        name: '_assetPair',
+        internalType: 'struct AssetPair',
+        type: 'tuple',
+        components: [
+          { name: 'assetA', internalType: 'address', type: 'address' },
+          { name: 'assetB', internalType: 'address', type: 'address' },
+          { name: 'swapEngine', internalType: 'address', type: 'address' },
+          { name: 'poolInfo', internalType: 'bytes', type: 'bytes' },
+          {
+            name: 'priceStrategy',
+            internalType: 'enum PriceStrategy',
+            type: 'uint8',
+          },
+          { name: 'swapperAccuracy', internalType: 'uint16', type: 'uint16' },
+          { name: 'priceOracle', internalType: 'address', type: 'address' },
+        ],
+      },
+    ],
+    name: 'register',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [{ name: 'swapSlippage_', internalType: 'uint16', type: 'uint16' }],
+    name: 'setSwapSlippage',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: 'amountIn', internalType: 'uint256', type: 'uint256' },
+      { name: 'assetA', internalType: 'address', type: 'address' },
+      { name: 'assetB', internalType: 'address', type: 'address' },
+    ],
+    name: 'swapForInput',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: 'amountIn', internalType: 'uint256', type: 'uint256' },
+      { name: 'assetA', internalType: 'address', type: 'address' },
+      { name: 'assetB', internalType: 'address', type: 'address' },
+    ],
+    name: 'swapForInputQuote',
+    outputs: [
+      { name: 'minAmountOut', internalType: 'uint256', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: 'amountOut', internalType: 'uint256', type: 'uint256' },
+      { name: 'assetA', internalType: 'address', type: 'address' },
+      { name: 'assetB', internalType: 'address', type: 'address' },
+    ],
+    name: 'swapForOutput',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    inputs: [
+      { name: 'amountOut', internalType: 'uint256', type: 'uint256' },
+      { name: 'assetA', internalType: 'address', type: 'address' },
+      { name: 'assetB', internalType: 'address', type: 'address' },
+    ],
+    name: 'swapForOutputQuote',
+    outputs: [
+      { name: 'maxAmountIn', internalType: 'uint256', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [],
+    name: 'swapSlippage',
+    outputs: [{ name: '', internalType: 'uint16', type: 'uint16' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'event',
+    anonymous: false,
+    inputs: [
+      {
+        name: 'assetA',
+        internalType: 'address',
+        type: 'address',
+        indexed: false,
+      },
+      {
+        name: 'assetB',
+        internalType: 'address',
+        type: 'address',
+        indexed: false,
+      },
+    ],
+    name: 'AssetPairRegistered',
+  },
+  { type: 'error', inputs: [], name: 'AssetPairNotRegistered' },
+  { type: 'error', inputs: [], name: 'InvalidAssetPair' },
+  { type: 'error', inputs: [], name: 'InvalidPoolInfo' },
+  { type: 'error', inputs: [], name: 'InvalidSwapSlippage' },
+  { type: 'error', inputs: [], name: 'PriceMismatch' },
+  { type: 'error', inputs: [], name: 'PriceOracleRequired' },
+  { type: 'error', inputs: [], name: 'SwapFailed' },
+] as const
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // ICoverageAgent
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -552,7 +716,11 @@ export const iEigenOperatorProxyAbi = [
     inputs: [
       { name: 'serviceManager_', internalType: 'address', type: 'address' },
       { name: 'coverageAgent_', internalType: 'address', type: 'address' },
-      { name: '_strategyAddresses', internalType: 'address[]', type: 'address[]' },
+      {
+        name: '_strategyAddresses',
+        internalType: 'address[]',
+        type: 'address[]',
+      },
       { name: '_magnitudes', internalType: 'uint64[]', type: 'uint64[]' },
     ],
     name: 'allocate',

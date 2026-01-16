@@ -61,7 +61,7 @@ export function ContractTypeFilter({
         <CollapsibleTrigger asChild>
           <Button variant="outline" size="sm" className="gap-2">
             <Filter className="size-4" />
-            <span>Filter by Type</span>
+            <span>Type</span>
             {hasFilter && (
               <Badge variant="secondary" className="ml-1">
                 {selectedCount}

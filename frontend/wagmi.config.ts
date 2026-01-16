@@ -11,6 +11,8 @@ export default defineConfig({
         "ICoverageAgent.sol/ICoverageAgent.json",
         "ICoverageProvider.sol/ICoverageProvider.json",
         "IEigenServiceManager.sol/IEigenServiceManager.json",
+        "IAssetPriceOracleAndSwapper.sol/IAssetPriceOracleAndSwapper.json",
+        "IEigenOperatorProxy.sol/IEigenOperatorProxy.json",
       ],
     }),
   ],

@@ -17,11 +17,11 @@ import {
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
-interface ContractSpecificInfoProps {
+interface CoverageAgentInfoProps {
   contract: CoverageContract
 }
 
-function CoverageAgentInfo({ contract }: { contract: CoverageContract }) {
+export function CoverageAgentInfo({ contract }: CoverageAgentInfoProps) {
   const { contracts } = useContracts()
 
   // Check if chainId is supported
@@ -126,15 +126,5 @@ function CoverageAgentInfo({ contract }: { contract: CoverageContract }) {
       </CardContent>
     </Card>
   )
-}
-
-export function ContractSpecificInfo({ contract }: ContractSpecificInfoProps) {
-  if (contract.type === "CoverageAgent") {
-    return <CoverageAgentInfo contract={contract} />
-  }
-
-  // For other contract types, return null for now
-  // Can be extended later for CoverageProvider or other types
-  return null
 }
 

@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { useContracts } from "@/hooks/use-contracts"
 import { ContractSelector } from "@/components/ContractSelector"
-import { ContractSpecificInfo } from "@/components/ContractSpecificInfo"
+import { ContractSpecificInteractions } from "@/components/contract-specific-interactions"
 import { FunctionCard } from "@/components/FunctionCard"
 
 export function InteractPage() {
@@ -55,7 +55,7 @@ export function InteractPage() {
 
       {selectedContract && (
         <>
-          <ContractSpecificInfo contract={selectedContract} />
+          <ContractSpecificInteractions contract={selectedContract} />
           <FunctionCard contract={selectedContract} />
         </>
       )}

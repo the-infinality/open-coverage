@@ -1,10 +1,10 @@
-import { useMemo } from "react"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { toast } from "sonner"
 import { useAccount, useWalletClient } from "wagmi"
 import { type AbiFunction } from "viem"
 import { getPublicClientForChain } from "@/lib/wagmi"
-import { getAbisForContractType, type NamedAbi } from "@/lib/abi"
+import { getAbisForContractType, getAbisForCoverageProviderWithInterfaces, type NamedAbi } from "@/lib/abi"
+import { useCheckCoverageProviderSupport } from "@/hooks/use-interface-support"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -24,7 +24,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { cn, truncateAddress } from "@/lib/utils"
-import { ChevronDown, Play, Eye, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react"
+import { ChevronDown, Play, Eye, AlertCircle, CheckCircle2, RefreshCw, Loader2 } from "lucide-react"
 import type { CoverageContract } from "@/types/contracts"
 
 interface FunctionCallResult {
@@ -414,10 +414,40 @@ interface FunctionCardProps {
 }
 
 export function FunctionCard({ contract }: FunctionCardProps) {
-  const namedAbis = useMemo(
-    () => getAbisForContractType(contract.type, contract.additionalFields?.providerType),
-    [contract.type, contract.additionalFields?.providerType]
+  // For CoverageProvider contracts, query interface support via ERC-165
+  const { isLoading: isLoadingInterfaces, supports } = useCheckCoverageProviderSupport(
+    contract.address,
+    contract.chainId,
+    contract.type === "CoverageProvider" ? ["IEigenServiceManager", "IAssetPriceOracleAndSwapper"] : []
   )
+
+  const namedAbis = useMemo(() => {
+    // For CoverageProvider, use detected interfaces instead of additionalFields
+    if (contract.type === "CoverageProvider") {
+      return getAbisForCoverageProviderWithInterfaces(supports)
+    }
+    // For other contract types, use the standard method
+    return getAbisForContractType(contract.type, contract.additionalFields?.providerType)
+  }, [contract.type, contract.additionalFields?.providerType, supports])
+
+  // Show loading state while detecting interfaces for CoverageProvider
+  if (contract.type === "CoverageProvider" && isLoadingInterfaces) {
+    return (
+      <Card className="h-fit">
+        <CardHeader>
+          <CardTitle>Contract Functions</CardTitle>
+          <CardDescription>
+            Detecting supported interfaces...
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <Card className="h-fit">
@@ -425,6 +455,11 @@ export function FunctionCard({ contract }: FunctionCardProps) {
         <CardTitle>Contract Functions</CardTitle>
         <CardDescription>
           Read and write functions for {contract.name}
+          {contract.type === "CoverageProvider" && (
+            <span className="ml-2 text-xs">
+              (Detected: {Object.entries(supports).filter(([, v]) => v).map(([k]) => k).join(", ") || "Base interfaces"})
+            </span>
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent className="h-fit space-y-8">
