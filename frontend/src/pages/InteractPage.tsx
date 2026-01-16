@@ -1,19 +1,8 @@
 import { useMemo } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
-import { type Abi, type AbiFunction } from "viem"
 
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { useContracts } from "@/hooks/use-contracts"
-import { getAbiForContractType } from "@/lib/abi"
 import { ContractSelector } from "@/components/ContractSelector"
 import { ContractSpecificInfo } from "@/components/ContractSpecificInfo"
 import { FunctionCard } from "@/components/FunctionCard"
@@ -30,35 +19,6 @@ export function InteractPage() {
     }
     return null
   }, [contractId, getContractById])
-
-  const abi = useMemo(
-    () =>
-      selectedContract
-        ? (getAbiForContractType(selectedContract.type) as Abi)
-        : [],
-    [selectedContract]
-  )
-
-  const readFunctions = useMemo(
-    () =>
-      abi.filter(
-        (item): item is AbiFunction =>
-          item.type === "function" &&
-          (item.stateMutability === "view" || item.stateMutability === "pure")
-      ),
-    [abi]
-  )
-
-  const writeFunctions = useMemo(
-    () =>
-      abi.filter(
-        (item): item is AbiFunction =>
-          item.type === "function" &&
-          item.stateMutability !== "view" &&
-          item.stateMutability !== "pure"
-      ),
-    [abi]
-  )
 
   if (contracts.length === 0) {
     return (
@@ -88,66 +48,17 @@ export function InteractPage() {
         description="Choose a contract to interact with"
         contractId={contractId}
         onContractChange={(contractId: string | null) => {
-          if(contractId === null) navigate('/interact')
-          navigate(`/interact/${contractId}`)
+          if (contractId === null) navigate("/interact");
+          navigate(`/interact/${contractId}`);
         }}
       />
 
       {selectedContract && (
         <>
           <ContractSpecificInfo contract={selectedContract} />
-          <Card className="h-fit">
-          <CardHeader>
-            <CardTitle>Contract Functions</CardTitle>
-            <CardDescription>
-              Read and write functions for {selectedContract.name}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="h-fit">
-            <Tabs defaultValue="read" key={contractId}>
-              <TabsList className="w-full">
-                <TabsTrigger value="read" className="flex-1">
-                  Read ({readFunctions.length})
-                </TabsTrigger>
-                <TabsTrigger value="write" className="flex-1">
-                  Write ({writeFunctions.length})
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="read" className="mt-4">
-                <ScrollArea className="h-fit">
-                  <div className="divide-y rounded-lg border">
-                    {readFunctions.map((fn, index) => (
-                      <FunctionCard
-                        key={index}
-                        fn={fn}
-                        contractAddress={selectedContract.address}
-                        abi={abi}
-                        chainId={selectedContract.chainId}
-                      />
-                    ))}
-                  </div>
-                </ScrollArea>
-              </TabsContent>
-              <TabsContent value="write" className="mt-4">
-                <ScrollArea className="h-fit">
-                  <div className="divide-y rounded-lg border">
-                    {writeFunctions.map((fn, index) => (
-                      <FunctionCard
-                        key={index}
-                        fn={fn}
-                        contractAddress={selectedContract.address}
-                        abi={abi}
-                        chainId={selectedContract.chainId}
-                      />
-                    ))}
-                  </div>
-                </ScrollArea>
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
+          <FunctionCard contract={selectedContract} />
         </>
       )}
     </div>
-  )
+  );
 }

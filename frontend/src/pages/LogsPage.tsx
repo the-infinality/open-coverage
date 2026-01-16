@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { useBlockNumber } from "wagmi"
-import { type Abi, type AbiEvent, decodeEventLog } from "viem"
+import { type AbiEvent, decodeEventLog } from "viem"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useContracts } from "@/hooks/use-contracts"
-import { getAbiForContractType } from "@/lib/abi"
+import { getMergedAbiForContractType } from "@/lib/abi"
 import { CopyableAddress } from "@/components/ui/copyable-address"
 import { RefreshCw } from "lucide-react"
 import { ContractSelector } from "@/components/ContractSelector"
@@ -53,7 +53,7 @@ export function LogsPage() {
   const publicClient = getPublicClientForChain(chainId || 1)
 
   const abi = selectedContract
-    ? (getAbiForContractType(selectedContract.type) as Abi)
+    ? getMergedAbiForContractType(selectedContract.type, selectedContract.additionalFields?.providerType)
     : []
 
   const events = abi.filter(

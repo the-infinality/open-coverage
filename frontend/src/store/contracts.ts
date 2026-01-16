@@ -111,9 +111,8 @@ export function importContractsFromJson(
               address: contract.address.toLowerCase() as Address,
               type: contract.type,
               chainId: contract.chainId,
-              abi: contract.abi ?? existingContract.abi,
               createdAt: existingContract.createdAt, // Preserve original creation date
-              providerType: contract.providerType ?? existingContract.providerType,
+              additionalFields: contract.additionalFields ?? existingContract.additionalFields,
             }
             existingContracts[existingIndex] = updatedContract
             updated++
@@ -131,9 +130,8 @@ export function importContractsFromJson(
         address: contract.address.toLowerCase() as Address,
         type: contract.type,
         chainId: contract.chainId,
-        abi: contract.abi,
         createdAt: contract.createdAt || Date.now(),
-        providerType: contract.providerType,
+        additionalFields: contract.additionalFields,
       }
 
       existingContracts.push(newContract)

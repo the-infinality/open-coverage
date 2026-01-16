@@ -1,4 +1,4 @@
-import type { Abi, Address } from "viem"
+import type { Address } from "viem"
 
 export type ContractType = 
   | "CoverageAgent"
@@ -6,15 +6,18 @@ export type ContractType =
 
 export type ProviderType = "EigenLayer" | "Catalysis" | "Symbiotic"
 
+export interface CoverageProviderAdditionalFields {
+  providerType: ProviderType
+}
+
 export interface CoverageContract {
   id: string
   name: string
   address: Address
   type: ContractType
   chainId: number
-  abi?: Abi
   createdAt: number
-  providerType?: ProviderType
+  additionalFields?: CoverageProviderAdditionalFields
 }
 
 export interface ContractMethod {

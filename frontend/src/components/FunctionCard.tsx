@@ -1,12 +1,23 @@
+import { useMemo } from "react"
 import { useState } from "react"
 import { toast } from "sonner"
 import { useAccount, useWalletClient } from "wagmi"
-import { type Abi, type AbiFunction } from "viem"
+import { type AbiFunction } from "viem"
 import { getPublicClientForChain } from "@/lib/wagmi"
+import { getAbisForContractType, type NamedAbi } from "@/lib/abi"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Collapsible,
   CollapsibleContent,
@@ -14,6 +25,7 @@ import {
 } from "@/components/ui/collapsible"
 import { cn, truncateAddress } from "@/lib/utils"
 import { ChevronDown, Play, Eye, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react"
+import type { CoverageContract } from "@/types/contracts"
 
 interface FunctionCallResult {
   success: boolean
@@ -21,19 +33,17 @@ interface FunctionCallResult {
   error?: string
 }
 
-interface FunctionCardProps {
+interface FunctionMethodProps {
   fn: AbiFunction
   contractAddress: `0x${string}`
-  abi: Abi
   chainId: number
 }
 
-export function FunctionCard({
+function FunctionMethod({
   fn,
   contractAddress,
-  abi,
   chainId,
-}: FunctionCardProps) {
+}: FunctionMethodProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [result, setResult] = useState<FunctionCallResult | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -81,7 +91,7 @@ export function FunctionCard({
         // Read call
         const data = await publicClient?.readContract({
           address: contractAddress,
-          abi,
+          abi: [fn],
           functionName: fn.name,
           args: parsedArgs,
         })
@@ -96,7 +106,7 @@ export function FunctionCard({
 
         const { request } = await publicClient!.simulateContract({
           address: contractAddress,
-          abi,
+          abi: [fn],
           functionName: fn.name,
           args: parsedArgs,
           account: address,
@@ -153,7 +163,7 @@ export function FunctionCard({
 
       const simulateResult = await publicClient?.simulateContract({
         address: contractAddress,
-        abi,
+        abi: [fn],
         functionName: fn.name,
         args: parsedArgs,
         account: address || "0x0000000000000000000000000000000000000000",
@@ -321,3 +331,112 @@ export function FunctionCard({
   )
 }
 
+interface AbiSectionProps {
+  namedAbi: NamedAbi
+  contractAddress: `0x${string}`
+  chainId: number
+}
+
+function AbiSection({ namedAbi, contractAddress, chainId }: AbiSectionProps) {
+  const readFunctions = useMemo(
+    () =>
+      namedAbi.abi.filter(
+        (item): item is AbiFunction =>
+          item.type === "function" &&
+          (item.stateMutability === "view" || item.stateMutability === "pure")
+      ),
+    [namedAbi.abi]
+  )
+
+  const writeFunctions = useMemo(
+    () =>
+      namedAbi.abi.filter(
+        (item): item is AbiFunction =>
+          item.type === "function" &&
+          item.stateMutability !== "view" &&
+          item.stateMutability !== "pure"
+      ),
+    [namedAbi.abi]
+  )
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <h3 className="font-semibold text-sm">{namedAbi.name}</h3>
+        <span className="text-xs text-muted-foreground">
+          ({readFunctions.length} read, {writeFunctions.length} write)
+        </span>
+      </div>
+      <Tabs defaultValue="read">
+        <TabsList className="w-full">
+          <TabsTrigger value="read" className="flex-1">
+            Read ({readFunctions.length})
+          </TabsTrigger>
+          <TabsTrigger value="write" className="flex-1">
+            Write ({writeFunctions.length})
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="read" className="mt-4">
+          <ScrollArea className="h-fit">
+            <div className="divide-y rounded-lg border">
+              {readFunctions.map((fn, index) => (
+                <FunctionMethod
+                  key={index}
+                  fn={fn}
+                  contractAddress={contractAddress}
+                  chainId={chainId}
+                />
+              ))}
+            </div>
+          </ScrollArea>
+        </TabsContent>
+        <TabsContent value="write" className="mt-4">
+          <ScrollArea className="h-fit">
+            <div className="divide-y rounded-lg border">
+              {writeFunctions.map((fn, index) => (
+                <FunctionMethod
+                  key={index}
+                  fn={fn}
+                  contractAddress={contractAddress}
+                  chainId={chainId}
+                />
+              ))}
+            </div>
+          </ScrollArea>
+        </TabsContent>
+      </Tabs>
+    </div>
+  )
+}
+
+interface FunctionCardProps {
+  contract: CoverageContract
+}
+
+export function FunctionCard({ contract }: FunctionCardProps) {
+  const namedAbis = useMemo(
+    () => getAbisForContractType(contract.type, contract.additionalFields?.providerType),
+    [contract.type, contract.additionalFields?.providerType]
+  )
+
+  return (
+    <Card className="h-fit">
+      <CardHeader>
+        <CardTitle>Contract Functions</CardTitle>
+        <CardDescription>
+          Read and write functions for {contract.name}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="h-fit space-y-8">
+        {namedAbis.map((namedAbi, index) => (
+          <AbiSection
+            key={index}
+            namedAbi={namedAbi}
+            contractAddress={contract.address}
+            chainId={contract.chainId}
+          />
+        ))}
+      </CardContent>
+    </Card>
+  )
+}

@@ -230,19 +230,37 @@ export function AddContractPage() {
       return
     }
 
-    // Require provider type for CoverageProvider
-    if (values.type === "CoverageProvider" && !values.providerType) {
-      toast.error("Please select a provider type")
-      return
+    switch (values.type) {
+      case "CoverageProvider":
+        switch (values.providerType) {
+          case "EigenLayer":
+            addContract({
+              name: values.name,
+              address: values.address as `0x${string}`,
+              type: values.type as ContractType,
+              chainId: values.chainId,
+              additionalFields: { providerType: values.providerType },
+            })
+            break;
+          default:{
+            addContract({
+              name: values.name,
+              address: values.address as `0x${string}`,
+              type: values.type as ContractType,
+              chainId: values.chainId,
+            })
+          }
+        }
+        break;
+      default: {
+        addContract({
+          name: values.name,
+          address: values.address as `0x${string}`,
+          type: values.type as ContractType,
+          chainId: values.chainId,
+        });
+      }
     }
-
-    addContract({
-      name: values.name,
-      address: values.address as `0x${string}`,
-      type: values.type as ContractType,
-      chainId: values.chainId,
-      providerType: values.providerType,
-    })
 
     toast.success("Contract added successfully")
     form.reset()
