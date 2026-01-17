@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {IAllocationManager} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {IDiamondCut} from "src/diamond/interfaces/IDiamondCut.sol";
+import {IDiamondOwner} from "src/diamond/interfaces/IDiamondOwner.sol";
 import {IDiamondLoupe} from "src/diamond/interfaces/IDiamondLoupe.sol";
 import {IERC165} from "src/diamond/interfaces/IERC165.sol";
 import {Diamond} from "src/diamond/Diamond.sol";
@@ -13,14 +14,13 @@ import {AssetPriceOracleAndSwapperStorage} from "../../storage/AssetPriceOracleA
 import {IEigenServiceManager} from "./interfaces/IEigenServiceManager.sol";
 import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
-import {IDiamondCut} from "src/diamond/interfaces/IDiamondCut.sol";
 
 /// @title EigenCoverageDiamond
 /// @author p-dealwis, Infinality
 /// @notice EIP-2535 Diamond proxy for Eigen coverage management
 /// @dev Uses the diamond pattern with fallback-based selector routing.
 ///      All function calls are routed to the appropriate facet via delegatecall.
-contract EigenCoverageDiamond is Diamond, EigenCoverageStorage, AssetPriceOracleAndSwapperStorage, IDiamondCut {
+contract EigenCoverageDiamond is Diamond, EigenCoverageStorage, AssetPriceOracleAndSwapperStorage {
     /// @notice Struct for initialization arguments
     struct DiamondArgs {
         address owner;
@@ -34,21 +34,23 @@ contract EigenCoverageDiamond is Diamond, EigenCoverageStorage, AssetPriceOracle
     /// @param _diamondCut The initial facet cuts to add
     /// @param _args The initialization arguments
     constructor(IDiamondCut.FacetCut[] memory _diamondCut, DiamondArgs memory _args) {
-        // Set the contract owner
-        LibDiamond.setContractOwner(_args.owner);
-
         // Execute the diamond cut to add initial facets
         LibDiamond.diamondCut(_diamondCut, address(0), "");
 
-        // Register supported interfaces
+        // Set the contract owner
+        LibDiamond.setContractOwner(_args.owner);
+
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
+
+        // Register supported interfaces
         ds.supportedInterfaces[type(IDiamondCut).interfaceId] = true;
+        ds.supportedInterfaces[type(IDiamondOwner).interfaceId] = true;
         ds.supportedInterfaces[type(IDiamondLoupe).interfaceId] = true;
         ds.supportedInterfaces[type(IERC165).interfaceId] = true;
+
         ds.supportedInterfaces[type(IEigenServiceManager).interfaceId] = true;
         ds.supportedInterfaces[type(IAssetPriceOracleAndSwapper).interfaceId] = true;
         ds.supportedInterfaces[type(ICoverageProvider).interfaceId] = true;
-        ds.supportedInterfaces[type(IDiamondCut).interfaceId] = true;
 
         // Initialize app-specific storage
         _eigenAddresses = _args.eigenAddresses;
@@ -69,10 +71,5 @@ contract EigenCoverageDiamond is Diamond, EigenCoverageStorage, AssetPriceOracle
         IAllocationManager(_eigenAddresses.allocationManager).updateAVSMetadataURI(address(this), _metadataUri);
     }
 
-    /// @inheritdoc IDiamondCut
-    function diamondCut(FacetCut[] calldata _diamondCut, address _init, bytes calldata _calldata) external override {
-        LibDiamond.enforceIsContractOwner();
-        LibDiamond.diamondCut(_diamondCut, _init, _calldata);
-    }
 }
 

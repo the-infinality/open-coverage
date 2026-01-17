@@ -31,7 +31,7 @@ interface InterfaceSupportResult {
 export function useCheckCoverageProviderSupport(
   contractAddress: `0x${string}`,
   chainId: number,
-  interfaces: InterfaceName[] = ["IEigenServiceManager", "IAssetPriceOracleAndSwapper"]
+  interfaces: InterfaceName[] = ["IEigenServiceManager", "IAssetPriceOracleAndSwapper", "IDiamondOwner", "ICoverageProvider"]
 ): InterfaceSupportResult {
   const isChainSupported = supportedChains.some((chain) => chain.id === chainId)
   const supportedChainId = isChainSupported ? (chainId as SupportedChainId) : undefined
@@ -60,6 +60,7 @@ export function useCheckCoverageProviderSupport(
       IEigenServiceManager: false,
       IAssetPriceOracleAndSwapper: false,
       ICoverageProvider: false,
+      IDiamondOwner: false,
     }
 
     if (data) {

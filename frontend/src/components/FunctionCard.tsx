@@ -418,7 +418,7 @@ export function FunctionCard({ contract }: FunctionCardProps) {
   const { isLoading: isLoadingInterfaces, supports } = useCheckCoverageProviderSupport(
     contract.address,
     contract.chainId,
-    contract.type === "CoverageProvider" ? ["IEigenServiceManager", "IAssetPriceOracleAndSwapper"] : []
+    contract.type === "CoverageProvider" ? ["IEigenServiceManager", "IAssetPriceOracleAndSwapper", "IDiamondOwner", "ICoverageProvider"] : []
   )
 
   const namedAbis = useMemo(() => {

@@ -281,6 +281,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         int256 backing = _coverageBackingAmount(operator, strategy, coverageAgent);
         // Check to see if agent has a deficit of coverage (negative backing)
         if (backing < 0) {
+            // Safety check: prevent converting negative int256.min to uint256 overflow
             revert InsufficientCoverageAvailable(uint256(-backing));
         }
     }
@@ -301,6 +302,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         uint256 totalCoverageByOperator = _totalCoverageByOperatorStrategy(operator, strategy, coverageAgent);
 
         // Calculate backing: positive = fully backed, negative = deficit
+        // casting to 'int256' is safe because both won't possibly hold more than 2^256 - 1
+        // forge-lint: disable-next-line(unsafe-typecast)
         backing = int256(totalAllocatedCoverage) - int256(totalCoverageByOperator);
     }
 

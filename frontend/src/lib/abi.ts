@@ -1,6 +1,6 @@
 import type { Abi } from "viem"
 import type { ContractType, ProviderType } from "@/types/contracts"
-import { iCoverageAgentAbi, iCoverageProviderAbi, iEigenServiceManagerAbi, iAssetPriceOracleAndSwapperAbi, iEigenOperatorProxyAbi } from "@/generated/abis"
+import { iCoverageAgentAbi, iCoverageProviderAbi, iEigenServiceManagerAbi, iAssetPriceOracleAndSwapperAbi, iEigenOperatorProxyAbi, iDiamondOwnerAbi } from "@/generated/abis"
 import type { InterfaceName } from "@/lib/interface-ids"
 
 export interface NamedAbi {
@@ -13,20 +13,11 @@ export interface NamedAbi {
  * @param contractType - The type of contract (CoverageAgent or CoverageProvider)
  * @param providerType - Optional provider type for CoverageProvider contracts
  * @returns Array of named ABIs for the contract type
- * @deprecated Use getAbisForContractTypeWithInterfaces for CoverageProvider contracts
  */
-export function getAbisForContractType(contractType: ContractType, providerType?: ProviderType): NamedAbi[] {
+export function getAbisForContractType(contractType: ContractType): NamedAbi[] {
   switch (contractType) {
     case "CoverageAgent":
       return [{ name: "ICoverageAgent", abi: iCoverageAgentAbi as Abi }]
-    case "CoverageProvider":
-      if (providerType === "EigenLayer") {
-        return [
-          { name: "ICoverageProvider", abi: iCoverageProviderAbi as Abi },
-          { name: "IEigenServiceManager", abi: iEigenServiceManagerAbi as Abi },
-        ]
-      }
-      return [{ name: "ICoverageProvider", abi: iCoverageProviderAbi as Abi }]
     case "EigenOperatorProxy":
       return [{ name: "IEigenOperatorProxy", abi: iEigenOperatorProxyAbi as Abi }]
     default:
@@ -42,9 +33,11 @@ export function getAbisForContractType(contractType: ContractType, providerType?
 export function getAbisForCoverageProviderWithInterfaces(
   supportedInterfaces: Record<InterfaceName, boolean>
 ): NamedAbi[] {
-  const abis: NamedAbi[] = [
-    { name: "ICoverageProvider", abi: iCoverageProviderAbi as Abi }
-  ]
+  const abis: NamedAbi[] = []
+
+  if (supportedInterfaces.ICoverageProvider) {
+    abis.push({ name: "ICoverageProvider", abi: iCoverageProviderAbi as Abi })
+  }
 
   if (supportedInterfaces.IEigenServiceManager) {
     abis.push({ name: "IEigenServiceManager", abi: iEigenServiceManagerAbi as Abi })
@@ -52,6 +45,10 @@ export function getAbisForCoverageProviderWithInterfaces(
 
   if (supportedInterfaces.IAssetPriceOracleAndSwapper) {
     abis.push({ name: "IAssetPriceOracleAndSwapper", abi: iAssetPriceOracleAndSwapperAbi as Abi })
+  }
+
+  if (supportedInterfaces.IDiamondOwner) {
+    abis.push({ name: "IDiamondOwner", abi: iDiamondOwnerAbi as Abi })
   }
 
   return abis
@@ -63,7 +60,7 @@ export function getAbisForCoverageProviderWithInterfaces(
  * @param providerType - Optional provider type for CoverageProvider contracts
  * @returns Merged ABI array for the contract type
  */
-export function getMergedAbiForContractType(contractType: ContractType, providerType?: ProviderType): Abi {
-  const namedAbis = getAbisForContractType(contractType, providerType)
+export function getMergedAbiForContractType(contractType: ContractType): Abi {
+  const namedAbis = getAbisForContractType(contractType)
   return namedAbis.flatMap(n => n.abi) as Abi
 }

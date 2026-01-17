@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {DiamondCutFacet} from "../../src/diamond/facets/DiamondCutFacet.sol";
 import {DiamondLoupeFacet} from "../../src/diamond/facets/DiamondLoupeFacet.sol";
 import {IDiamondCut} from "../../src/diamond/interfaces/IDiamondCut.sol";
+import {IDiamondOwner} from "../../src/diamond/interfaces/IDiamondOwner.sol";
 import {IDiamond} from "../../src/diamond/interfaces/IDiamond.sol";
 import {IDiamondLoupe} from "../../src/diamond/interfaces/IDiamondLoupe.sol";
 import {IERC165} from "../../src/diamond/interfaces/IERC165.sol";
@@ -51,8 +52,10 @@ library DiamondFacetsDeployer {
     /// @notice Gets function selectors for DiamondCutFacet
     /// @return selectors Array of function selectors
     function getDiamondCutSelectors() internal pure returns (bytes4[] memory selectors) {
-        selectors = new bytes4[](1);
+        selectors = new bytes4[](3);
         selectors[0] = IDiamondCut.diamondCut.selector;
+        selectors[1] = IDiamondOwner.owner.selector;
+        selectors[2] = IDiamondOwner.setOwner.selector;
     }
 
     /// @notice Gets function selectors for DiamondLoupeFacet

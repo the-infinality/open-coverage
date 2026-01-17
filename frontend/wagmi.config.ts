@@ -13,6 +13,7 @@ export default defineConfig({
         "IEigenServiceManager.sol/IEigenServiceManager.json",
         "IAssetPriceOracleAndSwapper.sol/IAssetPriceOracleAndSwapper.json",
         "IEigenOperatorProxy.sol/IEigenOperatorProxy.json",
+        "IDiamondOwner.sol/IDiamondOwner.json",
       ],
     }),
   ],

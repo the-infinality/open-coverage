@@ -19,6 +19,7 @@ import {ICoverageAgent} from "src/interfaces/ICoverageAgent.sol";
 import {IStrategyManager} from "eigenlayer-contracts/interfaces/IStrategyManager.sol";
 import {ISignatureUtilsMixinTypes} from "eigenlayer-contracts/interfaces/ISignatureUtilsMixin.sol";
 import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {IDiamondOwner} from "src/diamond/interfaces/IDiamondOwner.sol";
 import {MockPriceOracle} from "../utils/MockPriceOracle.sol";
 import {CoverageClaim, CoverageClaimStatus} from "src/interfaces/ICoverageProvider.sol";
 import {UniswapV3SwapperEngine} from "src/swapper-engines/UniswapV3SwapperEngine.sol";
@@ -1214,6 +1215,16 @@ contract EigenTest is EigenTestDeployer {
         // Second slash should fail
         vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId));
         _executeSlash(claimIds, amounts);
+    }
+
+    function test_owner() public view {
+        assertEq(IDiamondOwner(address(eigenCoverageDiamond)).owner(), address(this));
+    }
+
+    function test_setOwner() public {
+        address newOwner = makeAddr("newOwner");
+        IDiamondOwner(address(eigenCoverageDiamond)).setOwner(newOwner);
+        assertEq(IDiamondOwner(address(eigenCoverageDiamond)).owner(), newOwner);
     }
 }
 

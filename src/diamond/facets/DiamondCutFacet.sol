@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IDiamondCut} from "../interfaces/IDiamondCut.sol";
+import {IDiamondOwner} from "../interfaces/IDiamondOwner.sol";
 import {LibDiamond} from "../libraries/LibDiamond.sol";
 
 /// @title DiamondCutFacet
@@ -18,6 +19,19 @@ contract DiamondCutFacet is IDiamondCut {
     function diamondCut(FacetCut[] calldata _diamondCut, address _init, bytes calldata _calldata) external override {
         LibDiamond.enforceIsContractOwner();
         LibDiamond.diamondCut(_diamondCut, _init, _calldata);
+    }
+
+    /// @inheritdoc IDiamondOwner
+    /// @dev As specified in EIP-2535. This function returns the address of the contract owner.
+    /// @return owner The address of the contract owner
+    function owner() external view override returns (address) {
+        return LibDiamond.contractOwner();
+    }
+
+    /// @inheritdoc IDiamondOwner
+    function setOwner(address newOwner) external override {
+        LibDiamond.enforceIsContractOwner();
+        LibDiamond.setContractOwner(newOwner);
     }
 }
 

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IDiamond} from "./IDiamond.sol";
+import {IDiamondOwner} from "./IDiamondOwner.sol";
 
 /// @title IDiamondCut
 /// @author EIP-2535 Diamonds
@@ -9,7 +10,7 @@ import {IDiamond} from "./IDiamond.sol";
 /// @dev See https://eips.ethereum.org/EIPS/eip-2535
 ///      This interface extends IDiamond and adds the diamondCut function.
 ///      It is part of the EIP-2535 Diamond standard specification.
-interface IDiamondCut is IDiamond {
+interface IDiamondCut is IDiamond, IDiamondOwner {
     /// @notice Add/replace/remove any number of functions and optionally execute a function with delegatecall
     /// @dev As specified in EIP-2535. This function allows arbitrary execution via delegatecall,
     ///      so access must be carefully restricted (typically to contract owner).
