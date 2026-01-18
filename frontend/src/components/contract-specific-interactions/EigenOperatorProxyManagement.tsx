@@ -217,7 +217,7 @@ function PendingAdminCard({
     },
   })
 
-  const { data: isPendingForConnected } = useReadContract({
+  const { data: isPendingForConnected, refetch: refetchIsPending } = useReadContract({
     address: eigenAddresses?.permissionController,
     abi: iPermissionControllerAbi,
     functionName: "isPendingAdmin",
@@ -235,8 +235,9 @@ function PendingAdminCard({
     if (isSuccess) {
       refetchPending()
       refetchAdmins()
+      refetchIsPending()
     }
-  }, [isSuccess, refetchPending, refetchAdmins])
+  }, [isSuccess, refetchPending, refetchAdmins, refetchIsPending])
 
   const handleAcceptAdmin = () => {
     if (!eigenAddresses) return
