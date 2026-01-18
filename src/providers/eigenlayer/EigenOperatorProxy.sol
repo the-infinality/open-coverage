@@ -47,19 +47,25 @@ contract EigenOperatorProxy is IEigenOperatorProxy {
         external
         onlyHandler
     {
+        uint32 operatorSetId = IEigenServiceManager(serviceManager_).getOperatorSetId(coverageAgent_);
+        OperatorSet memory operatorSet = OperatorSet({avs: serviceManager_, id: operatorSetId});
+
+        // Check if already registered to this coverage agent's operator set
+        if (IAllocationManager(_eigenAddresses.allocationManager).isMemberOfOperatorSet(address(this), operatorSet)) {
+            revert AlreadyRegistered();
+        }
+
         // Build the register params
         uint32[] memory operatorSetIds = new uint32[](1);
-        operatorSetIds[0] = IEigenServiceManager(serviceManager_).getOperatorSetId(coverageAgent_);
+        operatorSetIds[0] = operatorSetId;
 
         IAllocationManager.RegisterParams memory params =
             IAllocationManagerTypes.RegisterParams({avs: serviceManager_, operatorSetIds: operatorSetIds, data: ""});
 
-        // 1. Register the operator set to the service manager, which in turn calls RegisterOperator on the Eigen Service Manager
+        // Register the operator set to the service manager
         IAllocationManager(_eigenAddresses.allocationManager).registerForOperatorSets(address(this), params);
 
-        // 2. Set the operator split to 0, all rewards go to restakers
-        IRewardsCoordinator(_eigenAddresses.rewardsCoordinator)
-            .setOperatorAVSSplit(address(this), serviceManager_, rewardsSplit_);
+        _setRewardsSplit(serviceManager_, coverageAgent_, rewardsSplit_);
     }
 
     /// @inheritdoc IEigenOperatorProxy
@@ -89,6 +95,18 @@ contract EigenOperatorProxy is IEigenOperatorProxy {
 
         // Allocates the operator set. Can only be called after ALLOCATION_CONFIGURATION_DELAY (approximately 17.5 days) has passed since registration.
         IAllocationManager(_eigenAddresses.allocationManager).modifyAllocations(address(this), allocations);
+    }
+
+    /// @inheritdoc IEigenOperatorProxy
+    function setRewardsSplit(address serviceManager_, address coverageAgent_, uint16 rewardsSplit_) external onlyHandler {
+        _setRewardsSplit(serviceManager_, coverageAgent_, rewardsSplit_);
+    }
+
+    function _setRewardsSplit(address serviceManager_, address coverageAgent_, uint16 rewardsSplit_) private {
+        if (rewardsSplit_ > 10000) revert InvalidRewardsSplit(rewardsSplit_);
+        uint32 operatorSetId = IEigenServiceManager(serviceManager_).getOperatorSetId(coverageAgent_);
+        OperatorSet memory operatorSet = OperatorSet({avs: serviceManager_, id: operatorSetId});
+        IRewardsCoordinator(_eigenAddresses.rewardsCoordinator).setOperatorSetSplit(address(this), operatorSet, rewardsSplit_);
     }
 
     /// @inheritdoc IEigenOperatorProxy

@@ -12,6 +12,9 @@ interface IEigenOperatorProxy {
     error NotRestaker();
     /// @dev Error thrown when the operator is already registered
     error AlreadyRegistered();
+
+    /// @dev Error thrown when the rewards split is not between 0 and 10000
+    error InvalidRewardsSplit(uint16 rewardsSplit);
     /// @dev Error thrown when the staker is the zero address
     error ZeroAddress();
 
@@ -20,6 +23,12 @@ interface IEigenOperatorProxy {
     /// @param coverageAgent_ The coverage agent to register
     /// @param rewardsSplit_ The rewards split to set for the coverage agent
     function registerCoverageAgent(address serviceManager_, address coverageAgent_, uint16 rewardsSplit_) external;
+
+    /// @notice Set the rewards split for a coverage agent
+    /// @param serviceManager_ The service manager to set the rewards split for
+    /// @param coverageAgent_ The coverage agent to set the rewards split for
+    /// @param rewardsSplit_ The rewards split to set for the coverage agent
+    function setRewardsSplit(address serviceManager_, address coverageAgent_, uint16 rewardsSplit_) external;
 
     /// @notice Update the operator metadata URI
     /// @param _metadataUri The new metadata URI

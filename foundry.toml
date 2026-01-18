@@ -11,7 +11,7 @@ via_ir = false
 
 # Default chain ID for testing (Ethereum mainnet fork)
 # Can be overridden for other operations with --chain-id <id>
-# chain_id = 1
+chain_id = 1
 
 remappings = [
   "@openzeppelin-v5/contracts/=lib/openzepplin-contracts-v5/contracts/",
