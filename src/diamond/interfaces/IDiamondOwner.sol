@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-
 /// @title IDiamondOwner
 /// @notice Interface for getting the diamond owner
 /// @dev Adds formal ownership functionality

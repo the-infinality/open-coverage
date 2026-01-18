@@ -98,7 +98,10 @@ contract EigenOperatorProxy is IEigenOperatorProxy {
     }
 
     /// @inheritdoc IEigenOperatorProxy
-    function setRewardsSplit(address serviceManager_, address coverageAgent_, uint16 rewardsSplit_) external onlyHandler {
+    function setRewardsSplit(address serviceManager_, address coverageAgent_, uint16 rewardsSplit_)
+        external
+        onlyHandler
+    {
         _setRewardsSplit(serviceManager_, coverageAgent_, rewardsSplit_);
     }
 
@@ -106,7 +109,8 @@ contract EigenOperatorProxy is IEigenOperatorProxy {
         if (rewardsSplit_ > 10000) revert InvalidRewardsSplit(rewardsSplit_);
         uint32 operatorSetId = IEigenServiceManager(serviceManager_).getOperatorSetId(coverageAgent_);
         OperatorSet memory operatorSet = OperatorSet({avs: serviceManager_, id: operatorSetId});
-        IRewardsCoordinator(_eigenAddresses.rewardsCoordinator).setOperatorSetSplit(address(this), operatorSet, rewardsSplit_);
+        IRewardsCoordinator(_eigenAddresses.rewardsCoordinator)
+            .setOperatorSetSplit(address(this), operatorSet, rewardsSplit_);
     }
 
     /// @inheritdoc IEigenOperatorProxy

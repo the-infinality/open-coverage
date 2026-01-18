@@ -141,7 +141,6 @@ export function AddContractPage() {
   const watchedAddress = useWatch({ control: form.control, name: "address" })
 
   const { coverageProvider } = useCheckCoverageProvider(watchedType === "CoverageProvider" ? watchedAddress as `0x${string}` : undefined, watchedChainId)
-  console.log("Coverage Provider:", coverageProvider)
 
   // Validate contract address when it changes
   useEffect(() => {

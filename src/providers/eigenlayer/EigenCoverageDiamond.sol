@@ -70,6 +70,5 @@ contract EigenCoverageDiamond is Diamond, EigenCoverageStorage, AssetPriceOracle
     function _initializeAVSMetadataURI(string memory _metadataUri) private {
         IAllocationManager(_eigenAddresses.allocationManager).updateAVSMetadataURI(address(this), _metadataUri);
     }
-
 }
 
