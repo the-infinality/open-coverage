@@ -5,6 +5,7 @@ import {EigenTestDeployer} from "../utils/EigenTestDeployer.sol";
 import {EigenOperatorProxy} from "src/providers/eigenlayer/EigenOperatorProxy.sol";
 import {IEigenOperatorProxy} from "src/providers/eigenlayer/interfaces/IEigenOperatorProxy.sol";
 import {IEigenServiceManager} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
+import {EigenAddresses} from "src/providers/eigenlayer/Types.sol";
 import {NotOperatorAuthorized, StrategyNotWhitelisted} from "src/providers/eigenlayer/Errors.sol";
 import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermissionController.sol";
 import {IDelegationManager} from "eigenlayer-contracts/interfaces/IDelegationManager.sol";
@@ -91,6 +92,17 @@ contract EigenOperatorProxyTest is EigenTestDeployer {
     /// @notice Test handler() returns correct address
     function test_handler_returnsCorrectAddress() public view {
         assertEq(operatorProxy.handler(), handler);
+    }
+
+    /// @notice Test eigenAddresses() returns correct EigenLayer contract addresses
+    function test_eigenAddresses_returnsCorrectAddresses() public view {
+        EigenAddresses memory expectedAddresses = eigenServiceManager.eigenAddresses();
+        EigenAddresses memory actualAddresses = operatorProxy.eigenAddresses();
+
+        assertEq(actualAddresses.delegationManager, expectedAddresses.delegationManager);
+        assertEq(actualAddresses.allocationManager, expectedAddresses.allocationManager);
+        assertEq(actualAddresses.rewardsCoordinator, expectedAddresses.rewardsCoordinator);
+        assertEq(actualAddresses.permissionController, expectedAddresses.permissionController);
     }
 
     // ============ Update Operator Metadata URI Tests ============

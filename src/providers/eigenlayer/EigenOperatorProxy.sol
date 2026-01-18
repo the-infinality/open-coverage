@@ -120,6 +120,11 @@ contract EigenOperatorProxy is IEigenOperatorProxy {
         return _handler;
     }
 
+    /// @inheritdoc IEigenOperatorProxy
+    function eigenAddresses() external view returns (EigenAddresses memory) {
+        return _eigenAddresses;
+    }
+
     function _onlyHandler() internal view {
         if (msg.sender != _handler) revert NotOperatorAuthorized(address(this), msg.sender);
     }

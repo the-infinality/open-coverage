@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.28;
+import {EigenAddresses} from "../Types.sol";
 
 interface IEigenOperatorProxy {
     /// @dev Error thrown when the caller is not the service manager
@@ -49,4 +50,8 @@ interface IEigenOperatorProxy {
     /// @notice Get the handler for the operator proxy
     /// @return handler The handler's address administating the operator proxy.
     function handler() external view returns (address handler);
+
+    /// @notice Get the EigenLayer contract addresses
+    /// @return The EigenAddresses struct containing all EigenLayer contract addresses
+    function eigenAddresses() external view returns (EigenAddresses memory);
 }
