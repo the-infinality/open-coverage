@@ -1,5 +1,5 @@
 import type { Abi } from "viem"
-import type { ContractType, ProviderType } from "@/types/contracts"
+import type { ContractType } from "@/types/contracts"
 import { iCoverageAgentAbi, iCoverageProviderAbi, iEigenServiceManagerAbi, iAssetPriceOracleAndSwapperAbi, iEigenOperatorProxyAbi, iDiamondOwnerAbi } from "@/generated/abis"
 import type { InterfaceName } from "@/lib/interface-ids"
 

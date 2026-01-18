@@ -751,6 +751,42 @@ export const iEigenOperatorProxyAbi = [
   {
     type: 'function',
     inputs: [],
+    name: 'eigenAddresses',
+    outputs: [
+      {
+        name: '',
+        internalType: 'struct EigenAddresses',
+        type: 'tuple',
+        components: [
+          {
+            name: 'allocationManager',
+            internalType: 'address',
+            type: 'address',
+          },
+          {
+            name: 'delegationManager',
+            internalType: 'address',
+            type: 'address',
+          },
+          { name: 'strategyManager', internalType: 'address', type: 'address' },
+          {
+            name: 'rewardsCoordinator',
+            internalType: 'address',
+            type: 'address',
+          },
+          {
+            name: 'permissionController',
+            internalType: 'address',
+            type: 'address',
+          },
+        ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    inputs: [],
     name: 'handler',
     outputs: [{ name: 'handler', internalType: 'address', type: 'address' }],
     stateMutability: 'view',
@@ -768,6 +804,17 @@ export const iEigenOperatorProxyAbi = [
   },
   {
     type: 'function',
+    inputs: [
+      { name: 'serviceManager_', internalType: 'address', type: 'address' },
+      { name: 'coverageAgent_', internalType: 'address', type: 'address' },
+      { name: 'rewardsSplit_', internalType: 'uint16', type: 'uint16' },
+    ],
+    name: 'setRewardsSplit',
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     inputs: [{ name: '_metadataUri', internalType: 'string', type: 'string' }],
     name: 'updateOperatorMetadataURI',
     outputs: [],
@@ -775,6 +822,11 @@ export const iEigenOperatorProxyAbi = [
   },
   { type: 'error', inputs: [], name: 'AlreadyAllocated' },
   { type: 'error', inputs: [], name: 'AlreadyRegistered' },
+  {
+    type: 'error',
+    inputs: [{ name: 'rewardsSplit', internalType: 'uint16', type: 'uint16' }],
+    name: 'InvalidRewardsSplit',
+  },
   { type: 'error', inputs: [], name: 'NotOperator' },
   { type: 'error', inputs: [], name: 'NotRestaker' },
   { type: 'error', inputs: [], name: 'NotServiceManager' },
