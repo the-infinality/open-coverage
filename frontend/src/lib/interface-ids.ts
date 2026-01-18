@@ -8,4 +8,3 @@ export const INTERFACE_IDS = {
 } as const
 
 export type InterfaceName = keyof typeof INTERFACE_IDS
-

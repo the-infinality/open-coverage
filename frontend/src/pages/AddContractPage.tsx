@@ -41,11 +41,12 @@ import {
 import { useContracts } from "@/hooks/use-contracts"
 import { getContractTypes } from "@/lib/contract-utils"
 import { getSupportedChainsInfo, getPublicClientForChain } from "@/lib/wagmi"
-import { generateContractName } from "@/lib/utils"
+import { cn, generateContractName } from "@/lib/utils"
 import type { ContractType, ProviderType } from "@/types/contracts"
 import eigenlayerLogo from "@/assets/eigenlayer.jpg"
 import catalysisLogo from "@/assets/catalysis.jpg"
 import symbioticLogo from "@/assets/symbiotic.png"
+import { useCheckCoverageProvider } from "@/hooks/use-interface-support"
 
 // Get supported chain IDs for validation
 const supportedChainIds = getSupportedChainsInfo().map((c) => c.id)
@@ -139,7 +140,8 @@ export function AddContractPage() {
   const watchedChainId = useWatch({ control: form.control, name: "chainId" })
   const watchedAddress = useWatch({ control: form.control, name: "address" })
 
-
+  const { coverageProvider } = useCheckCoverageProvider(watchedType === "CoverageProvider" ? watchedAddress as `0x${string}` : undefined, watchedChainId)
+  console.log("Coverage Provider:", coverageProvider)
 
   // Validate contract address when it changes
   useEffect(() => {
@@ -232,25 +234,12 @@ export function AddContractPage() {
 
     switch (values.type) {
       case "CoverageProvider":
-        switch (values.providerType) {
-          case "EigenLayer":
-            addContract({
-              name: values.name,
-              address: values.address as `0x${string}`,
-              type: values.type as ContractType,
-              chainId: values.chainId,
-              additionalFields: { providerType: values.providerType },
-            })
-            break;
-          default:{
-            addContract({
-              name: values.name,
-              address: values.address as `0x${string}`,
-              type: values.type as ContractType,
-              chainId: values.chainId,
-            })
-          }
-        }
+        addContract({
+          name: values.name,
+          address: values.address as `0x${string}`,
+          type: values.type as ContractType,
+          chainId: values.chainId,
+        })
         break;
       default: {
         addContract({
@@ -287,10 +276,7 @@ export function AddContractPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Contract Type</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                    >
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select contract type" />
@@ -313,80 +299,6 @@ export function AddContractPage() {
                 )}
               />
 
-              {/* Provider Type Badges - Only shown for CoverageProvider */}
-              {watchedType === "CoverageProvider" && (
-                <FormField
-                  control={form.control}
-                  name="providerType"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Provider Type</FormLabel>
-                      <FormControl>
-                        <div className="flex flex-wrap gap-3">
-                          {providerTypes.map((provider) => {
-                            const isSelected = field.value === provider.value
-                            const isDisabled = provider.disabled
-
-                            const badge = (
-                              <button
-                                key={provider.value}
-                                type="button"
-                                disabled={isDisabled}
-                                onClick={() => {
-                                  if (!isDisabled) {
-                                    field.onChange(provider.value)
-                                  }
-                                }}
-                                className={`
-                                  relative flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 transition-all
-                                  ${isSelected
-                                    ? "border-primary bg-primary/10 shadow-sm"
-                                    : isDisabled
-                                      ? "border-muted bg-muted/30 opacity-50 cursor-not-allowed"
-                                      : "border-border hover:border-primary/50 hover:bg-accent cursor-pointer"
-                                  }
-                                `}
-                              >
-                                <img
-                                  src={provider.icon}
-                                  alt={provider.label}
-                                  className={`h-6 w-6 rounded ${isDisabled ? "grayscale" : ""}`}
-                                />
-                                <span className={`font-medium ${isDisabled ? "text-muted-foreground" : ""}`}>
-                                  {provider.label}
-                                </span>
-                                {isSelected && (
-                                  <CheckCircle2 className="h-4 w-4 text-primary ml-1" />
-                                )}
-                              </button>
-                            )
-
-                            if (provider.comingSoon) {
-                              return (
-                                <Tooltip key={provider.value}>
-                                  <TooltipTrigger asChild>
-                                    {badge}
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Coming Soon</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              )
-                            }
-
-                            return badge
-                          })}
-                        </div>
-                      </FormControl>
-                      <FormDescription>
-                        Select the restaking protocol this provider integrates with
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
-
               {/* Chain - Second */}
               <FormField
                 control={form.control}
@@ -397,7 +309,7 @@ export function AddContractPage() {
                     <FormControl>
                       <div className="flex flex-wrap gap-3">
                         {supportedChains.map((chain) => {
-                          const isSelected = field.value === chain.id
+                          const isSelected = field.value === chain.id;
 
                           return (
                             <button
@@ -406,9 +318,10 @@ export function AddContractPage() {
                               onClick={() => field.onChange(chain.id)}
                               className={`
                                 relative flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 transition-all
-                                ${isSelected
-                                  ? "border-primary bg-primary/10 shadow-sm"
-                                  : "border-border hover:border-primary/50 hover:bg-accent cursor-pointer"
+                                ${
+                                  isSelected
+                                    ? "border-primary bg-primary/10 shadow-sm"
+                                    : "border-border hover:border-primary/50 hover:bg-accent cursor-pointer"
                                 }
                               `}
                             >
@@ -419,7 +332,9 @@ export function AddContractPage() {
                               />
                               <span className="font-medium">{chain.name}</span>
                               {chain.isTestnet && (
-                                <span className={`text-xs px-1.5 py-0.5 rounded-full ${chain.colors.bg} ${chain.colors.text}`}>
+                                <span
+                                  className={`text-xs px-1.5 py-0.5 rounded-full ${chain.colors.bg} ${chain.colors.text}`}
+                                >
                                   Testnet
                                 </span>
                               )}
@@ -427,7 +342,7 @@ export function AddContractPage() {
                                 <CheckCircle2 className="h-4 w-4 text-primary ml-1" />
                               )}
                             </button>
-                          )
+                          );
                         })}
                       </div>
                     </FormControl>
@@ -448,23 +363,31 @@ export function AddContractPage() {
                     <FormLabel>Contract Address</FormLabel>
                     <FormControl>
                       <div className="relative">
-                        <Input placeholder="0x..." {...field} className="pr-10" />
+                        <Input
+                          placeholder="0x..."
+                          {...field}
+                          className="pr-10"
+                        />
                         <div className="absolute right-3 top-1/2 -translate-y-1/2">
                           {validation.isValidating && (
                             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                           )}
-                          {!validation.isValidating && validation.hasCode === true && (
-                            <CheckCircle2 className="h-4 w-4 text-green-500" />
-                          )}
-                          {!validation.isValidating && validation.hasCode === false && (
-                            <AlertCircle className="h-4 w-4 text-destructive" />
-                          )}
+                          {!validation.isValidating &&
+                            validation.hasCode === true && (
+                              <CheckCircle2 className="h-4 w-4 text-green-500" />
+                            )}
+                          {!validation.isValidating &&
+                            validation.hasCode === false && (
+                              <AlertCircle className="h-4 w-4 text-destructive" />
+                            )}
                         </div>
                       </div>
                     </FormControl>
                     <FormDescription>
                       {validation.error ? (
-                        <span className="text-destructive">{validation.error}</span>
+                        <span className="text-destructive">
+                          {validation.error}
+                        </span>
                       ) : validation.hasCode ? (
                         <span className="text-green-600 dark:text-green-400">
                           Contract found
@@ -478,6 +401,57 @@ export function AddContractPage() {
                 )}
               />
 
+              {/* Provider Type Badges - Only shown for CoverageProvider */}
+              {watchedType === "CoverageProvider" && (
+                <div>
+                <div className="flex flex-wrap gap-3">
+                  {providerTypes.map((provider) => {
+                    const isSelected = coverageProvider === provider.value;
+
+                    const badge = (
+                      <div
+                        key={provider.value}
+                        className={cn(
+                          "relative flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 transition-all",
+                          {
+                            "border-primary bg-primary/10 shadow-sm": isSelected
+                          }
+                        )}
+                      >
+                        <img
+                          src={provider.icon}
+                          alt={provider.label}
+                          className={`h-6 w-6 rounded`}
+                        />
+                        <span
+                          className={`font-medium`}
+                        >
+                          {provider.label}
+                        </span>
+                        {isSelected && (
+                          <CheckCircle2 className="h-4 w-4 text-primary ml-1" />
+                        )}
+                      </div>
+                    );
+
+                    if (provider.comingSoon) {
+                      return (
+                        <Tooltip key={provider.value}>
+                          <TooltipTrigger asChild>{badge}</TooltipTrigger>
+                          <TooltipContent>
+                            <p>Coming Soon</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      );
+                    }
+
+                    return badge;
+                  })}
+                </div>
+                  <label className="text-sm text-muted-foreground">The type of coverage provider this contract integrates with</label>
+                </div>
+              )}
+
               {/* Name */}
               <FormField
                 control={form.control}
@@ -489,15 +463,16 @@ export function AddContractPage() {
                       <Input {...field} />
                     </FormControl>
                     <FormDescription>
-                      A friendly name to identify this contract (auto-generated, feel free to change)
+                      A friendly name to identify this contract (auto-generated,
+                      feel free to change)
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
 
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="w-full"
                 disabled={!validation.hasCode || validation.isValidating}
               >
@@ -515,5 +490,5 @@ export function AddContractPage() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
