@@ -427,8 +427,8 @@ export function FunctionCard({ contract }: FunctionCardProps) {
       return getAbisForCoverageProviderWithInterfaces(supports)
     }
     // For other contract types, use the standard method
-    return getAbisForContractType(contract.type, contract.additionalFields?.providerType)
-  }, [contract.type, contract.additionalFields?.providerType, supports])
+    return getAbisForContractType(contract.type)
+  }, [contract.type, supports])
 
   // Show loading state while detecting interfaces for CoverageProvider
   if (contract.type === "CoverageProvider" && isLoadingInterfaces) {

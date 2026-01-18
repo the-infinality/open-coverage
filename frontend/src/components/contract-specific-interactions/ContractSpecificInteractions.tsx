@@ -1,5 +1,6 @@
 import type { CoverageContract } from "@/types/contracts"
 import { EigenOperatorProxyManagement } from "./EigenOperatorProxyManagement"
+import { EigenProviderOperatorManagement } from "./EigenProviderOperatorManagement"
 import { CoverageAgentInfo } from "./CoverageAgentInfo"
 
 interface ContractSpecificInteractionsProps {
@@ -15,8 +16,15 @@ export function ContractSpecificInteractions({ contract }: ContractSpecificInter
     return <EigenOperatorProxyManagement contract={contract} />
   }
 
+  // Show operator management for EigenLayer providers
+  if (
+    contract.type === "CoverageProvider" && 
+    contract.additionalFields?.providerType === "EigenLayer"
+  ) {
+    return <EigenProviderOperatorManagement contract={contract} />
+  }
+
   // For other contract types, return null for now
-  // Can be extended later for CoverageProvider or other types
   return null
 }
 
