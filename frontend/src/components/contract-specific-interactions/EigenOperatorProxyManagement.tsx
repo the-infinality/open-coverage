@@ -797,7 +797,7 @@ function StakingCard({
       refetchBalance()
       refetchAllowance()
     }
-  }, [isDelegateSuccess, isDepositSuccess, isApproveSuccess])
+  }, [isDelegateSuccess, isDepositSuccess, isApproveSuccess, refetchDelegated, refetchDelegatedTo, refetchDeposits, refetchBalance, refetchAllowance])
 
   const handleDelegate = () => {
     if (!eigenAddresses) return
