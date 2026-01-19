@@ -4,7 +4,21 @@ permissions: {}
 
 on:
   push:
+    paths:
+      - "src/**"
+      - "test/**"
+      - "utils/**"
+      - "script/**"
+      - "foundry.toml"
+      - ".github/workflows/test.yml"
   pull_request:
+    paths:
+      - "src/**"
+      - "test/**"
+      - "utils/**"
+      - "script/**"
+      - "foundry.toml"
+      - ".github/workflows/test.yml"
   workflow_dispatch:
 
 env:
