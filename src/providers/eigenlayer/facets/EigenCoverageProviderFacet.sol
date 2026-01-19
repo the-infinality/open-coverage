@@ -264,7 +264,10 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         if (minimumReward > reward) revert InsufficientReward(minimumReward, reward);
 
         if (data.maxDuration > 0 && duration > data.maxDuration) revert DurationExceedsMax(data.maxDuration, duration);
-        require(duration + block.timestamp <= data.expiryTimestamp, DurationExceedsExpiry(data.expiryTimestamp, duration + block.timestamp));
+        require(
+            duration + block.timestamp <= data.expiryTimestamp,
+            DurationExceedsExpiry(data.expiryTimestamp, duration + block.timestamp)
+        );
     }
 
     /// @notice Updates the operator's coverage tracking map for a strategy and coverage agent

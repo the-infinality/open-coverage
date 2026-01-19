@@ -243,9 +243,7 @@ contract EigenTest is EigenTestDeployer {
         address unauthorized = makeAddr("unauthorized");
         vm.prank(unauthorized);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                IEigenServiceManager.NotOperatorAuthorized.selector, address(operator), unauthorized
-            )
+            abi.encodeWithSelector(IEigenServiceManager.NotOperatorAuthorized.selector, address(operator), unauthorized)
         );
         eigenCoverageProvider.closePosition(positionId);
     }
