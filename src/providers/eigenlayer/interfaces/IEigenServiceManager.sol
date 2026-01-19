@@ -20,7 +20,12 @@ struct EigenCoveragePosition {
 /// @notice An interface for the Eigen coverage provider.
 interface IEigenServiceManager {
     error StrategyAssetAlreadyRegistered(address asset);
-    error StrategyNotWhitelisted(address strategy);
+    error CoverageAgentAlreadyRegistered();
+    error InvalidAVS();
+    error NotOperatorAuthorized(address operator, address handler);
+    error InvalidAsset(address strategyAsset, address positionAsset);
+    error NotAllocated();
+    error NotImplemented();
 
     function eigenAddresses() external view returns (EigenAddresses memory);
 

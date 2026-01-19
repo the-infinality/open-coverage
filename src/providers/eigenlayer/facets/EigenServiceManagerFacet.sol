@@ -12,7 +12,6 @@ import {IRewardsCoordinatorTypes} from "eigenlayer-contracts/interfaces/IRewards
 import {Refundable, CoverageClaimStatus} from "src/interfaces/ICoverageProvider.sol";
 import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
 import {EigenAddresses} from "../Types.sol";
-import {InvalidAVS, NotAllocated} from "../Errors.sol";
 import {IEigenServiceManager, EigenCoveragePosition} from "../interfaces/IEigenServiceManager.sol";
 import {CoverageClaim, ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
 import {ICoverageAgent} from "src/interfaces/ICoverageAgent.sol";
