@@ -1,0 +1,10 @@
+node_modules
+dist
+build
+coverage
+*.lock
+yarn.lock
+package-lock.json
+.vite
+.cache
+
