@@ -100,6 +100,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
                 positionData.operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector
             )) revert IEigenServiceManager.NotOperatorAuthorized(positionData.operator, msg.sender);
 
+        require(positionData.data.expiryTimestamp >= block.timestamp, PositionExpired(positionId));
         positions[positionId].data.expiryTimestamp = block.timestamp;
         emit PositionClosed(positionId);
     }
@@ -257,12 +258,13 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     /// @notice Validates the claim parameters meet the position requirements
     function _validatePosition(CoveragePosition memory data, uint256 amount, uint256 duration, uint256 reward)
         private
-        pure
+        view
     {
         uint256 minimumReward = (amount * data.minRate * duration) / (10000 * 365 days);
         if (minimumReward > reward) revert InsufficientReward(minimumReward, reward);
 
         if (data.maxDuration > 0 && duration > data.maxDuration) revert DurationExceedsMax(data.maxDuration, duration);
+        require(duration + block.timestamp <= data.expiryTimestamp, DurationExceedsExpiry(data.expiryTimestamp, duration + block.timestamp));
     }
 
     /// @notice Updates the operator's coverage tracking map for a strategy and coverage agent
