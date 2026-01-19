@@ -391,7 +391,6 @@ export const iCoverageProviderAbi = [
   {
     type: 'function',
     inputs: [
-      { name: 'coverageAgent', internalType: 'address', type: 'address' },
       {
         name: 'data',
         internalType: 'struct CoveragePosition',
@@ -827,9 +826,15 @@ export const iEigenOperatorProxyAbi = [
     inputs: [{ name: 'rewardsSplit', internalType: 'uint16', type: 'uint16' }],
     name: 'InvalidRewardsSplit',
   },
+  { type: 'error', inputs: [], name: 'NotHandler' },
   { type: 'error', inputs: [], name: 'NotOperator' },
   { type: 'error', inputs: [], name: 'NotRestaker' },
   { type: 'error', inputs: [], name: 'NotServiceManager' },
+  {
+    type: 'error',
+    inputs: [{ name: 'strategy', internalType: 'address', type: 'address' }],
+    name: 'StrategyNotWhitelisted',
+  },
   { type: 'error', inputs: [], name: 'ZeroAddress' },
 ] as const
 
@@ -1009,14 +1014,29 @@ export const iEigenServiceManagerAbi = [
     ],
     stateMutability: 'view',
   },
+  { type: 'error', inputs: [], name: 'CoverageAgentAlreadyRegistered' },
+  { type: 'error', inputs: [], name: 'InvalidAVS' },
+  {
+    type: 'error',
+    inputs: [
+      { name: 'strategyAsset', internalType: 'address', type: 'address' },
+      { name: 'positionAsset', internalType: 'address', type: 'address' },
+    ],
+    name: 'InvalidAsset',
+  },
+  { type: 'error', inputs: [], name: 'NotAllocated' },
+  { type: 'error', inputs: [], name: 'NotImplemented' },
+  {
+    type: 'error',
+    inputs: [
+      { name: 'operator', internalType: 'address', type: 'address' },
+      { name: 'handler', internalType: 'address', type: 'address' },
+    ],
+    name: 'NotOperatorAuthorized',
+  },
   {
     type: 'error',
     inputs: [{ name: 'asset', internalType: 'address', type: 'address' }],
     name: 'StrategyAssetAlreadyRegistered',
-  },
-  {
-    type: 'error',
-    inputs: [{ name: 'strategy', internalType: 'address', type: 'address' }],
-    name: 'StrategyNotWhitelisted',
   },
 ] as const

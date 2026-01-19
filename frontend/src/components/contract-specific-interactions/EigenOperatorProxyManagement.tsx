@@ -593,6 +593,59 @@ function StrategySelectItem({ address, chainId }: { address: `0x${string}`, chai
   )
 }
 
+// Reusable Strategy Select component for selecting whitelisted strategies from a service manager
+interface StrategySelectProps {
+  value: string
+  onValueChange: (value: string) => void
+  serviceManagerAddress: string | undefined
+  chainId: SupportedChainId | undefined
+  placeholder?: string
+  disabled?: boolean
+}
+
+function StrategySelect({ 
+  value, 
+  onValueChange, 
+  serviceManagerAddress, 
+  chainId,
+  placeholder,
+  disabled 
+}: StrategySelectProps) {
+  const { strategies: whitelistedStrategies, isLoading: isLoadingStrategies } = useWhitelistedStrategies(
+    serviceManagerAddress,
+    chainId
+  )
+
+  return (
+    <Select 
+      value={value} 
+      onValueChange={onValueChange}
+      disabled={disabled || !serviceManagerAddress || isLoadingStrategies}
+    >
+      <SelectTrigger className="font-mono">
+        <SelectValue placeholder={
+          !serviceManagerAddress 
+            ? "Select a service manager first..." 
+            : isLoadingStrategies 
+              ? "Loading strategies..." 
+              : placeholder || "Select strategy..."
+        } />
+      </SelectTrigger>
+      <SelectContent>
+        {!whitelistedStrategies || whitelistedStrategies.length === 0 ? (
+          <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+            No whitelisted strategies found
+          </div>
+        ) : (
+          whitelistedStrategies.map((address) => (
+            <StrategySelectItem key={address} address={address} chainId={chainId} />
+          ))
+        )}
+      </SelectContent>
+    </Select>
+  )
+}
+
 // Deposit Item Component - displays individual deposit with strategy details
 function DepositItem({ 
   strategyAddress, 
@@ -701,12 +754,6 @@ function StakingCard({
 
   // Get selected provider contract
   const selectedServiceManager = getSelectedProvider(selectedServiceManagerId, availableProviders)
-
-  // Get whitelisted strategies from selected service manager
-  const { strategies: whitelistedStrategies, isLoading: isLoadingStrategies } = useWhitelistedStrategies(
-    selectedServiceManager?.address || undefined,
-    chainId
-  )
 
   // Check if connected user is delegated
   const { data: isDelegated, refetch: refetchDelegated } = useReadContract({
@@ -1017,32 +1064,12 @@ function StakingCard({
 
             <div className="space-y-2">
               <Label>Strategy</Label>
-              <Select 
-                value={selectedStrategy} 
+              <StrategySelect
+                value={selectedStrategy}
                 onValueChange={setSelectedStrategy}
-                disabled={!selectedServiceManager || isLoadingStrategies}
-              >
-                <SelectTrigger className="font-mono">
-                  <SelectValue placeholder={
-                    !selectedServiceManager 
-                      ? "Select a service manager first..." 
-                      : isLoadingStrategies 
-                        ? "Loading strategies..." 
-                        : "Select strategy..."
-                  } />
-                </SelectTrigger>
-                <SelectContent>
-                  {!whitelistedStrategies || whitelistedStrategies.length === 0 ? (
-                    <div className="px-2 py-4 text-center text-sm text-muted-foreground">
-                      No whitelisted strategies found
-                    </div>
-                  ) : (
-                    whitelistedStrategies.map((address) => (
-                      <StrategySelectItem key={address} address={address} chainId={chainId} />
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
+                serviceManagerAddress={selectedServiceManager?.address}
+                chainId={chainId}
+              />
             </div>
 
             {selectedStrategy && underlyingToken && (
@@ -1360,11 +1387,12 @@ function AllocateForm({ contract, chainId }: { contract: CoverageContract; chain
           {strategies.map((strategy, index) => (
             <div key={index} className="flex gap-2 items-start p-3 rounded-lg border bg-muted/30">
               <div className="flex-1 space-y-3">
-                <Input
-                  placeholder="Strategy address (0x...)"
+                <StrategySelect
                   value={strategy.address}
-                  onChange={(e) => updateStrategyAddress(index, e.target.value)}
-                  className="font-mono text-sm"
+                  onValueChange={(value) => updateStrategyAddress(index, value)}
+                  serviceManagerAddress={selectedServiceManager?.address}
+                  chainId={chainId}
+                  placeholder="Select strategy..."
                 />
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">

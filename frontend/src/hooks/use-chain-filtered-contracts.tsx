@@ -21,7 +21,13 @@ export function useChainFilteredContracts(chainId: number) {
     )
   }, [contracts, chainId])
 
-  return { serviceManagers, coverageAgents }
+  const operatorProxies = useMemo(() => {
+    return contracts.filter(
+      (c) => c.chainId === chainId && c.type === "EigenOperatorProxy"
+    )
+  }, [contracts, chainId])
+
+  return { serviceManagers, coverageAgents, operatorProxies }
 }
 
 /**
@@ -67,5 +73,16 @@ export function getSelectedCoverageAgent(
 ): CoverageContract | null {
   if (!selectedId) return null
   return coverageAgents.find(ca => ca.id === selectedId) || null
+}
+
+/**
+ * Helper to get the selected operator proxy from a list by ID
+ */
+export function getSelectedOperatorProxy(
+  selectedId: string,
+  operatorProxies: CoverageContract[]
+): CoverageContract | null {
+  if (!selectedId) return null
+  return operatorProxies.find(op => op.id === selectedId) || null
 }
 
