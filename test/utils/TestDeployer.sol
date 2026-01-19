@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {stdJson} from "forge-std/StdJson.sol";
+
 import {getConfig} from "utils/Config.sol";
 
 contract TestDeployer is Test {
@@ -18,6 +19,7 @@ contract TestDeployer is Test {
     address rETH;
 
     function setUp() public virtual {
+        vm.chainId(1);
         string memory chainJson = getConfig(CHAIN_CONFIG_SUFFIX);
         string memory selectorPrefix = string.concat("$['", vm.toString(block.chainid), "']");
 

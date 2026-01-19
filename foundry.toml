@@ -9,10 +9,6 @@ optimizer = false
 optimizer_runs = 1000000
 via_ir = false
 
-# Default chain ID for testing (Ethereum mainnet fork)
-# Can be overridden for other operations with --chain-id <id>
-chain_id = 1
-
 remappings = [
   "@openzeppelin-v5/contracts/=lib/openzepplin-contracts-v5/contracts/",
   "@openzeppelin-v5/contracts-upgradeable/=lib/openzepplin-contracts-upgradeable-v5/contracts/",
