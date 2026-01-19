@@ -155,7 +155,6 @@ function RegisteredProviderSelect({
  */
 function ClaimItem({
     claimData,
-    chainId,
     isSelected,
     onSelect,
     onRemove,
@@ -163,7 +162,6 @@ function ClaimItem({
     tokenSymbol,
 }: {
     claimData: LoadedClaimData
-    chainId: SupportedChainId | undefined
     isSelected: boolean
     onSelect: (selected: boolean) => void
     onRemove: () => void
@@ -185,7 +183,7 @@ function ClaimItem({
                     {canSlash && (
                         <Checkbox
                             checked={isSelected}
-                            onCheckedChange={onSelect}
+                            onChange={(e) => onSelect(e.target.checked)}
                             id={`claim-${claimId}`}
                         />
                     )}
@@ -1011,7 +1009,6 @@ function CoverageClaimsManagement({
                                         <ClaimItem
                                             key={`${claimData.providerAddress}-${claimData.claimId}`}
                                             claimData={claimData}
-                                            chainId={chainId}
                                             isSelected={selectedClaimIds.has(claimData.claimId)}
                                             onSelect={(selected) =>
                                                 handleToggleClaimSelection(
