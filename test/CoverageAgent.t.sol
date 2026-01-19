@@ -27,14 +27,14 @@ contract MockCoverageProvider is ICoverageProvider {
         isRegistered = true;
     }
 
-    function createPosition(address coverageAgent, CoveragePosition memory data, bytes calldata)
+    function createPosition(CoveragePosition memory data, bytes calldata)
         external
         override
         returns (uint256 positionId)
     {
         positionId = nextPositionId++;
         _positions[positionId] = data;
-        ICoverageAgent(coverageAgent).onRegisterPosition(positionId);
+        ICoverageAgent(data.coverageAgent).onRegisterPosition(positionId);
         emit PositionCreated(positionId);
     }
 
@@ -240,7 +240,7 @@ contract CoverageAgentTest is TestDeployer {
         vm.expectEmit(true, true, false, false);
         emit ICoverageAgent.PositionRegistered(address(mockProvider), 0);
 
-        uint256 positionId = mockProvider.createPosition(address(coverageAgent), position, "");
+        uint256 positionId = mockProvider.createPosition(position, "");
         assertEq(positionId, 0);
     }
 
@@ -261,7 +261,7 @@ contract CoverageAgentTest is TestDeployer {
             slashCoordinator: address(0)
         });
 
-        uint256 positionId = mockProvider.createPosition(address(coverageAgent), position, "");
+        uint256 positionId = mockProvider.createPosition(position, "");
 
         // Step 3: Verify position was created
         CoveragePosition memory createdPosition = mockProvider.position(positionId);
@@ -307,8 +307,8 @@ contract CoverageAgentTest is TestDeployer {
             slashCoordinator: address(0x456)
         });
 
-        uint256 positionId1 = mockProvider.createPosition(address(coverageAgent), position1, "");
-        uint256 positionId2 = provider2.createPosition(address(coverageAgent), position2, "");
+        uint256 positionId1 = mockProvider.createPosition(position1, "");
+        uint256 positionId2 = provider2.createPosition(position2, "");
 
         // Verify positions
         assertEq(positionId1, 0);
@@ -337,7 +337,7 @@ contract CoverageAgentTest is TestDeployer {
             refundable: Refundable.None,
             slashCoordinator: address(0)
         });
-        uint256 positionId = mockProvider.createPosition(address(coverageAgent), position, "");
+        uint256 positionId = mockProvider.createPosition(position, "");
 
         // Prepare coverage request
         ClaimCoverageRequest[] memory requests = new ClaimCoverageRequest[](1);
@@ -381,7 +381,7 @@ contract CoverageAgentTest is TestDeployer {
             refundable: Refundable.None,
             slashCoordinator: address(0)
         });
-        uint256 positionId = mockProvider.createPosition(address(coverageAgent), position, "");
+        uint256 positionId = mockProvider.createPosition(position, "");
 
         // Purchase one coverage
         ClaimCoverageRequest[] memory requests = new ClaimCoverageRequest[](1);
@@ -413,7 +413,7 @@ contract CoverageAgentTest is TestDeployer {
             refundable: Refundable.None,
             slashCoordinator: address(0)
         });
-        uint256 positionId = mockProvider.createPosition(address(coverageAgent), position, "");
+        uint256 positionId = mockProvider.createPosition(position, "");
 
         // Purchase first coverage
         ClaimCoverageRequest[] memory requests1 = new ClaimCoverageRequest[](1);
@@ -469,7 +469,7 @@ contract CoverageAgentTest is TestDeployer {
             refundable: Refundable.None,
             slashCoordinator: address(0)
         });
-        uint256 positionId = mockProvider.createPosition(address(coverageAgent), position, "");
+        uint256 positionId = mockProvider.createPosition(position, "");
 
         // Purchase coverage
         ClaimCoverageRequest[] memory requests = new ClaimCoverageRequest[](1);
@@ -517,7 +517,7 @@ contract CoverageAgentTest is TestDeployer {
             refundable: Refundable.None,
             slashCoordinator: address(0)
         });
-        uint256 positionId = mockProvider.createPosition(address(coverageAgent), position, "");
+        uint256 positionId = mockProvider.createPosition(position, "");
 
         // Purchase coverage with multiple claims
         ClaimCoverageRequest[] memory requests = new ClaimCoverageRequest[](2);
@@ -592,8 +592,8 @@ contract CoverageAgentTest is TestDeployer {
             refundable: Refundable.None,
             slashCoordinator: address(0)
         });
-        uint256 positionId1 = mockProvider.createPosition(address(coverageAgent), position1, "");
-        uint256 positionId2 = provider2.createPosition(address(coverageAgent), position2, "");
+        uint256 positionId1 = mockProvider.createPosition(position1, "");
+        uint256 positionId2 = provider2.createPosition(position2, "");
 
         // Purchase coverage with claims from different providers
         ClaimCoverageRequest[] memory requests = new ClaimCoverageRequest[](2);
@@ -645,7 +645,7 @@ contract CoverageAgentTest is TestDeployer {
             refundable: Refundable.None,
             slashCoordinator: address(0)
         });
-        uint256 positionId = mockProvider.createPosition(address(coverageAgent), position, "");
+        uint256 positionId = mockProvider.createPosition(position, "");
 
         // Purchase coverage
         ClaimCoverageRequest[] memory requests = new ClaimCoverageRequest[](1);
@@ -686,7 +686,7 @@ contract CoverageAgentTest is TestDeployer {
             refundable: Refundable.None,
             slashCoordinator: address(0)
         });
-        uint256 positionId = mockProvider.createPosition(address(coverageAgent), position, "");
+        uint256 positionId = mockProvider.createPosition(position, "");
 
         // Purchase one coverage
         ClaimCoverageRequest[] memory requests = new ClaimCoverageRequest[](1);
@@ -720,7 +720,7 @@ contract CoverageAgentTest is TestDeployer {
             refundable: Refundable.None,
             slashCoordinator: address(0)
         });
-        uint256 positionId = mockProvider.createPosition(address(coverageAgent), position, "");
+        uint256 positionId = mockProvider.createPosition(position, "");
 
         // Purchase first coverage
         ClaimCoverageRequest[] memory requests1 = new ClaimCoverageRequest[](1);

@@ -97,11 +97,10 @@ interface ICoverageProvider {
 
     /// @notice Create a new coverage position and register it with a coverage agent.
     /// @dev Should call the `registerPosition` function of the coverage agent.
-    /// @param coverageAgent The coverage agent to create the coverage position for.
-    /// @param data The coverage position data to create.
+    /// @param data The coverage position data to create (includes coverageAgent address).
     /// @param additionalData Any extra data to be used when creating the position
     /// @return positionId The id of the created coverage position.
-    function createPosition(address coverageAgent, CoveragePosition memory data, bytes calldata additionalData)
+    function createPosition(CoveragePosition memory data, bytes calldata additionalData)
         external
         returns (uint256 positionId);
 

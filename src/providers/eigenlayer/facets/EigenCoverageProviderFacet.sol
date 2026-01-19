@@ -57,7 +57,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
 
     /// @inheritdoc ICoverageProvider
     /// @dev The caller must have the `modifyAllocations` permission for the operator
-    function createPosition(address coverageAgent, CoveragePosition memory data, bytes calldata additionalData)
+    function createPosition(CoveragePosition memory data, bytes calldata additionalData)
         external
         returns (uint256 positionId)
     {
@@ -84,10 +84,10 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         // Ensure strategy is in operator set and operator has non-zero allocations
         IEigenServiceManager(address(this))
             .ensureAllocations(
-                createPositionAddtionalData.operator, coverageAgent, createPositionAddtionalData.strategy
+                createPositionAddtionalData.operator, data.coverageAgent, createPositionAddtionalData.strategy
             );
 
-        positionId = _registerPosition(coverageAgent, data, createPositionAddtionalData);
+        positionId = _registerPosition(data.coverageAgent, data, createPositionAddtionalData);
     }
 
     /// @inheritdoc ICoverageProvider

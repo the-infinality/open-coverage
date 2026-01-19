@@ -174,7 +174,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
         assertEq(positionId, 0);
     }
 
@@ -193,7 +193,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
         eigenCoverageProvider.closePosition(positionId);
         assertEq(eigenCoverageProvider.position(positionId).expiryTimestamp, block.timestamp);
     }
@@ -216,7 +216,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
 
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
@@ -255,7 +255,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
 
         // Calculate the maximum coverage available based on allocated stake
         uint256 maxCoverage = eigenServiceManager.coverageAllocated(
@@ -438,7 +438,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
 
         uint256 coverageAllocated = eigenServiceManager.coverageAllocated(
             address(operator), address(_getTestStrategy()), address(coverageAgent)
@@ -494,7 +494,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
 
         uint256 coverageAllocated = eigenServiceManager.coverageAllocated(
             address(operator), address(_getTestStrategy()), address(coverageAgent)
@@ -529,7 +529,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
 
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
@@ -555,7 +555,7 @@ contract EigenTest is EigenTestDeployer {
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
 
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
         vm.prank(staker);
         vm.expectRevert(
             abi.encodeWithSelector(ICoverageProvider.NotCoverageAgent.selector, staker, address(coverageAgent))
@@ -580,7 +580,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
         assertApproxEqAbs(eigenCoverageProvider.positionMaxAmount(positionId), 35735542, 4e5);
     }
 
@@ -602,7 +602,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
 
         vm.startPrank(address(coverageAgent));
         vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.DurationExceedsMax.selector, 30 days, 365 days));
@@ -627,7 +627,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
 
         vm.startPrank(address(coverageAgent));
         uint256 amount = 1000e6;
@@ -656,7 +656,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
 
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
@@ -698,7 +698,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
 
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
@@ -752,7 +752,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        positionId = eigenCoverageProvider.createPosition(data, additionalData);
     }
 
     /// @notice Sets up a slashing test with default parameters (no coordinator, Refundable.None)
@@ -1014,7 +1014,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
 
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
