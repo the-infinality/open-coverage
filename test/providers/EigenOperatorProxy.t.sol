@@ -327,7 +327,9 @@ contract EigenOperatorProxyTest is EigenTestDeployer {
         uint64[] memory magnitudes = new uint64[](1);
         magnitudes[0] = 1e18;
 
-        vm.expectRevert(abi.encodeWithSelector(IEigenOperatorProxy.StrategyNotWhitelisted.selector, nonWhitelistedStrategy));
+        vm.expectRevert(
+            abi.encodeWithSelector(IEigenOperatorProxy.StrategyNotWhitelisted.selector, nonWhitelistedStrategy)
+        );
         operatorProxy.allocate(address(eigenCoverageDiamond), address(coverageAgent), strategyAddresses, magnitudes);
     }
 

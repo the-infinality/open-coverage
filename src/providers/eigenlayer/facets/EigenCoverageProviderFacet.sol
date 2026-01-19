@@ -34,7 +34,9 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
 
     /// @inheritdoc ICoverageProvider
     function onIsRegistered() external {
-        if (coverageAgentToOperatorSetId[msg.sender] != 0) revert IEigenServiceManager.CoverageAgentAlreadyRegistered();
+        if (coverageAgentToOperatorSetId[msg.sender] != 0) {
+            revert IEigenServiceManager.CoverageAgentAlreadyRegistered();
+        }
 
         IAllocationManagerTypes.CreateSetParams[] memory params = new IAllocationManager.CreateSetParams[](1);
 
