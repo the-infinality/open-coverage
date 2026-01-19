@@ -3,11 +3,13 @@ import { RefreshCw, Loader2, User, Plus, Trash2, Settings, UserPlus, Layers, Shi
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useAccount } from "wagmi"
 import { toast } from "sonner"
 import type { CoverageContract } from "@/types/contracts"
-import { iEigenOperatorProxyAbi } from "@/generated/abis"
+import { iEigenOperatorProxyAbi, iEigenServiceManagerAbi } from "@/generated/abis"
 import { iPermissionControllerAbi, iAllocationManagerAbi, iDelegationManagerAbi, iStrategyManagerAbi, iStrategyAbi, ierc20Abi } from "@/generated/eigen-abis"
 import { supportedChains } from "@/lib/wagmi"
-import { useContracts } from "@/hooks/use-contracts"
 import { WalletRequirement } from "@/components/WalletRequirement"
+import { ContractCard } from "@/components/ContractCard"
+import { CoverageProviderSelect, CoverageAgentSelect } from "@/components/ContractSelects"
+import { useAvailableCoverageProviders, useChainFilteredContracts, getSelectedProvider, getSelectedCoverageAgent } from "@/hooks/use-chain-filtered-contracts"
 import {
   Card,
   CardContent,
@@ -29,42 +31,15 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { CopyableAddress } from "@/components/ui/copyable-address"
 
-// EigenLayer addresses by chain
-const EIGEN_ADDRESSES: Record<number, {
+// EigenAddresses type matching the contract struct
+interface EigenAddresses {
   allocationManager: `0x${string}`
   delegationManager: `0x${string}`
   strategyManager: `0x${string}`
+  rewardsCoordinator: `0x${string}`
   permissionController: `0x${string}`
-  strategies: Record<string, `0x${string}`>
-}> = {
-  1: {
-    allocationManager: "0x948a420b8CC1d6BFd0B6087C2E7c344a2CD0bc39",
-    delegationManager: "0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A",
-    strategyManager: "0x858646372CC42E1A627fcE94aa7A7033e7CF075A",
-    permissionController: "0x25E5F8B1E7aDf44518d35D5B2271f114e081f0E5",
-    strategies: {
-      rETH: "0x1BeE69b7dFFfA4E2d53C2a2Df135C388AD25dCD2",
-    },
-  },
-  11155111: {
-    allocationManager: "0x42583067658071247ec8CE0A516A58f682002d07",
-    delegationManager: "0xD4A7E1Bd8015057293f0D0A557088c286942e84b",
-    strategyManager: "0x2E3D6c0744b10eb0A4e6F679F71554a39Ec47a5D",
-    permissionController: "0x44632dfBdCb6D3E21EF613B0ca8A6A0c618F5a37",
-    strategies: {
-      WETH: "0x424246eF71b01ee33aA33aC590fd9a0855F5eFbc",
-    },
-  },
-  31337: {
-    allocationManager: "0x42583067658071247ec8CE0A516A58f682002d07",
-    delegationManager: "0xD4A7E1Bd8015057293f0D0A557088c286942e84b",
-    strategyManager: "0x2E3D6c0744b10eb0A4e6F679F71554a39Ec47a5D",
-    permissionController: "0x44632dfBdCb6D3E21EF613B0ca8A6A0c618F5a37",
-    strategies: {
-      WETH: "0x424246eF71b01ee33aA33aC590fd9a0855F5eFbc",
-    },
-  },
 }
 
 interface EigenOperatorProxyManagementProps {
@@ -78,111 +53,6 @@ interface StrategyAllocation {
 
 type SupportedChainId = (typeof supportedChains)[number]["id"]
 
-// Hook to filter contracts by chain
-function useChainFilteredContracts(chainId: number) {
-  const { contracts } = useContracts()
-
-  const serviceManagers = useMemo(() => {
-    return contracts.filter(
-      (c) => c.chainId === chainId && 
-             c.type === "CoverageProvider" && 
-             c.additionalFields?.providerType === "EigenLayer"
-    )
-  }, [contracts, chainId])
-
-  const coverageAgents = useMemo(() => {
-    return contracts.filter(
-      (c) => c.chainId === chainId && c.type === "CoverageAgent"
-    )
-  }, [contracts, chainId])
-
-  return { serviceManagers, coverageAgents }
-}
-
-// Reusable Service Manager Select component
-interface ServiceManagerSelectProps {
-  value: string
-  onValueChange: (value: string) => void
-  chainId: number
-  description?: string
-}
-
-function ServiceManagerSelect({ value, onValueChange, chainId, description }: ServiceManagerSelectProps) {
-  const { serviceManagers } = useChainFilteredContracts(chainId)
-
-  return (
-    <div className="space-y-2">
-      <Label>Service Manager</Label>
-      <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger className="font-mono">
-          <SelectValue placeholder="Select service manager..." />
-        </SelectTrigger>
-        <SelectContent>
-          {serviceManagers.length === 0 ? (
-            <div className="px-2 py-4 text-center text-sm text-muted-foreground">
-              No EigenLayer providers saved on this chain
-            </div>
-          ) : (
-            serviceManagers.map((sm) => (
-              <SelectItem key={sm.id} value={sm.address} className="font-mono">
-                <span className="flex flex-col gap-0.5">
-                  <span className="font-sans font-medium">{sm.name}</span>
-                  <span className="text-xs text-muted-foreground">{sm.address.slice(0, 10)}...{sm.address.slice(-8)}</span>
-                </span>
-              </SelectItem>
-            ))
-          )}
-        </SelectContent>
-      </Select>
-      {description && (
-        <p className="text-xs text-muted-foreground">{description}</p>
-      )}
-    </div>
-  )
-}
-
-// Reusable Coverage Agent Select component
-interface CoverageAgentSelectProps {
-  value: string
-  onValueChange: (value: string) => void
-  chainId: number
-  description?: string
-}
-
-function CoverageAgentSelect({ value, onValueChange, chainId, description }: CoverageAgentSelectProps) {
-  const { coverageAgents } = useChainFilteredContracts(chainId)
-
-  return (
-    <div className="space-y-2">
-      <Label>Coverage Agent</Label>
-      <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger className="font-mono">
-          <SelectValue placeholder="Select coverage agent..." />
-        </SelectTrigger>
-        <SelectContent>
-          {coverageAgents.length === 0 ? (
-            <div className="px-2 py-4 text-center text-sm text-muted-foreground">
-              No coverage agents saved on this chain
-            </div>
-          ) : (
-            coverageAgents.map((ca) => (
-              <SelectItem key={ca.id} value={ca.address} className="font-mono">
-                <span className="flex flex-col gap-0.5">
-                  <span className="font-sans font-medium">{ca.name}</span>
-                  <span className="text-xs text-muted-foreground">{ca.address.slice(0, 10)}...{ca.address.slice(-8)}</span>
-                </span>
-              </SelectItem>
-            ))
-          )}
-        </SelectContent>
-      </Select>
-      {description && (
-        <p className="text-xs text-muted-foreground">{description}</p>
-      )}
-    </div>
-  )
-}
-
 // Pending Admin Card Component
 function PendingAdminCard({ 
   contract, 
@@ -191,7 +61,7 @@ function PendingAdminCard({
 }: { 
   contract: CoverageContract
   chainId: SupportedChainId | undefined
-  eigenAddresses: typeof EIGEN_ADDRESSES[number] | undefined
+  eigenAddresses: EigenAddresses | undefined
 }) {
   const { address: connectedAddress } = useAccount()
 
@@ -398,7 +268,7 @@ function OperatorStrategiesCard({
 }: { 
   contract: CoverageContract
   chainId: SupportedChainId | undefined
-  eigenAddresses: typeof EIGEN_ADDRESSES[number] | undefined
+  eigenAddresses: EigenAddresses | undefined
 }) {
   // Get registered operator sets
   const { data: registeredSets, isLoading: isLoadingSets, refetch: refetchSets } = useReadContract({
@@ -570,7 +440,7 @@ function OperatorSetCard({
   operatorSet: { avs: `0x${string}`; id: number }
   operatorAddress: `0x${string}`
   chainId: SupportedChainId | undefined
-  eigenAddresses: typeof EIGEN_ADDRESSES[number] | undefined
+  eigenAddresses: EigenAddresses | undefined
 }) {
   // Get strategies in this operator set
   const { data: strategies } = useReadContract({
@@ -646,7 +516,7 @@ function StrategyAllocationRow({
   operatorAddress: `0x${string}`
   operatorSet: { avs: `0x${string}`; id: number }
   chainId: SupportedChainId | undefined
-  eigenAddresses: typeof EIGEN_ADDRESSES[number] | undefined
+  eigenAddresses: EigenAddresses | undefined
 }) {
   const { data: allocation } = useReadContract({
     address: eigenAddresses?.allocationManager,
@@ -674,6 +544,143 @@ function StrategyAllocationRow({
   )
 }
 
+// Hook to query whitelisted strategies from a service manager
+function useWhitelistedStrategies(serviceManagerAddress: string | undefined, chainId: SupportedChainId | undefined) {
+  const { data: strategies, isLoading, refetch } = useReadContract({
+    address: serviceManagerAddress as `0x${string}`,
+    abi: iEigenServiceManagerAbi,
+    functionName: "whitelistedStrategies",
+    chainId,
+    query: {
+      enabled: !!serviceManagerAddress && !!chainId,
+    },
+  })
+
+  return { strategies: strategies as `0x${string}`[] | undefined, isLoading, refetch }
+}
+
+// Strategy Select Item that displays strategy address and underlying token symbol
+function StrategySelectItem({ address, chainId }: { address: `0x${string}`, chainId: SupportedChainId | undefined }) {
+  // Get strategy underlying token
+  const { data: underlyingToken } = useReadContract({
+    address,
+    abi: iStrategyAbi,
+    functionName: "underlyingToken",
+    chainId,
+    query: {
+      enabled: !!chainId,
+    },
+  })
+
+  // Get token symbol
+  const { data: tokenSymbol } = useReadContract({
+    address: underlyingToken as `0x${string}`,
+    abi: ierc20Abi,
+    functionName: "symbol",
+    chainId,
+    query: {
+      enabled: !!underlyingToken && !!chainId,
+    },
+  })
+
+  return (
+    <SelectItem value={address} className="font-mono">
+      <span className="flex flex-col gap-0.5">
+        <span className="font-sans font-medium">{tokenSymbol || "Loading..."}</span>
+        <span className="text-xs text-muted-foreground">{address.slice(0, 10)}...{address.slice(-8)}</span>
+      </span>
+    </SelectItem>
+  )
+}
+
+// Deposit Item Component - displays individual deposit with strategy details
+function DepositItem({ 
+  strategyAddress, 
+  shares, 
+  chainId
+}: { 
+  strategyAddress: `0x${string}`
+  shares: bigint
+  chainId: SupportedChainId | undefined
+}) {
+  // Get strategy underlying token
+  const { data: underlyingToken } = useReadContract({
+    address: strategyAddress,
+    abi: iStrategyAbi,
+    functionName: "underlyingToken",
+    chainId,
+    query: {
+      enabled: !!chainId,
+    },
+  })
+
+  // Get token symbol
+  const { data: tokenSymbol } = useReadContract({
+    address: underlyingToken as `0x${string}`,
+    abi: ierc20Abi,
+    functionName: "symbol",
+    chainId,
+    query: {
+      enabled: !!underlyingToken && !!chainId,
+    },
+  })
+
+  // Get token decimals
+  const { data: tokenDecimals } = useReadContract({
+    address: underlyingToken as `0x${string}`,
+    abi: ierc20Abi,
+    functionName: "decimals",
+    chainId,
+    query: {
+      enabled: !!underlyingToken && !!chainId,
+    },
+  })
+
+  const formatShares = (value: bigint, decimals: number | undefined) => {
+    const dec = decimals ?? 18
+    return (Number(value) / 10 ** dec).toFixed(6)
+  }
+
+  return (
+    <div className="rounded-lg border bg-card p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium flex items-center gap-2">
+          <Coins className="size-4 text-primary" />
+          {tokenSymbol || "Loading..."}
+        </span>
+        <Badge variant="outline" className="font-mono">
+          {formatShares(shares, tokenDecimals)} shares
+        </Badge>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-xs">
+        <div className="space-y-1">
+          <p className="text-muted-foreground">Strategy Address</p>
+          <CopyableAddress 
+            address={strategyAddress} 
+            truncateChars={6} 
+            variant="inline" 
+            size="sm" 
+          />
+        </div>
+        <div className="space-y-1">
+          <p className="text-muted-foreground">Underlying Token</p>
+          {underlyingToken ? (
+            <CopyableAddress 
+              address={underlyingToken} 
+              truncateChars={6} 
+              variant="inline" 
+              size="sm" 
+            />
+          ) : (
+            <span className="text-muted-foreground">Loading...</span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Staking Card Component - for delegating to operator and depositing into strategies
 function StakingCard({ 
   contract, 
@@ -682,11 +689,24 @@ function StakingCard({
 }: { 
   contract: CoverageContract
   chainId: SupportedChainId | undefined
-  eigenAddresses: typeof EIGEN_ADDRESSES[number] | undefined
+  eigenAddresses: EigenAddresses | undefined
 }) {
   const { address: connectedAddress } = useAccount()
+  const [selectedServiceManagerId, setSelectedServiceManagerId] = useState<string>("")
   const [selectedStrategy, setSelectedStrategy] = useState<string>("")
   const [depositAmount, setDepositAmount] = useState<string>("")
+
+  // Get available providers for this chain
+  const { availableProviders } = useAvailableCoverageProviders(contract.chainId, [])
+
+  // Get selected provider contract
+  const selectedServiceManager = getSelectedProvider(selectedServiceManagerId, availableProviders)
+
+  // Get whitelisted strategies from selected service manager
+  const { strategies: whitelistedStrategies, isLoading: isLoadingStrategies } = useWhitelistedStrategies(
+    selectedServiceManager?.address || undefined,
+    chainId
+  )
 
   // Check if connected user is delegated
   const { data: isDelegated, refetch: refetchDelegated } = useReadContract({
@@ -873,9 +893,16 @@ function StakingCard({
   }
 
   const needsApproval = useMemo(() => {
-    if (!tokenAllowance || !depositAmount || !tokenDecimals) return false
+    // Check if we have the necessary data to calculate
+    if (tokenAllowance === undefined || !depositAmount || tokenDecimals === undefined) return false
+    
+    const parsedAmount = parseFloat(depositAmount)
+    if (isNaN(parsedAmount) || parsedAmount <= 0) return false
+    
     const decimals = tokenDecimals ?? 18
-    const amountWei = BigInt(Math.floor(parseFloat(depositAmount || "0") * 10 ** decimals))
+    const amountWei = BigInt(Math.floor(parsedAmount * 10 ** decimals))
+    
+    // Need approval if deposit amount exceeds current allowance
     return amountWei > tokenAllowance
   }, [tokenAllowance, depositAmount, tokenDecimals])
 
@@ -959,21 +986,61 @@ function StakingCard({
               </p>
             </div>
 
+            <CoverageProviderSelect
+              value={selectedServiceManagerId}
+              onValueChange={(value) => {
+                setSelectedServiceManagerId(value)
+                setSelectedStrategy("") // Reset strategy when service manager changes
+              }}
+              chainId={contract.chainId}
+              label="Service Manager"
+              description="Select a service manager to see available strategies"
+            />
+
+            {/* Coverage Provider Quick Actions */}
+            {selectedServiceManager && (
+              <div className="max-w-sm">
+                <ContractCard
+                  contract={{
+                    id: selectedServiceManager.id,
+                    address: selectedServiceManager.address as `0x${string}`,
+                    name: selectedServiceManager.name,
+                    type: "CoverageProvider",
+                    chainId: contract.chainId,
+                    additionalFields: {
+                      providerType: "EigenLayer",
+                    },
+                  }}
+                />
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label>Strategy</Label>
-              <Select value={selectedStrategy} onValueChange={setSelectedStrategy}>
+              <Select 
+                value={selectedStrategy} 
+                onValueChange={setSelectedStrategy}
+                disabled={!selectedServiceManager || isLoadingStrategies}
+              >
                 <SelectTrigger className="font-mono">
-                  <SelectValue placeholder="Select strategy..." />
+                  <SelectValue placeholder={
+                    !selectedServiceManager 
+                      ? "Select a service manager first..." 
+                      : isLoadingStrategies 
+                        ? "Loading strategies..." 
+                        : "Select strategy..."
+                  } />
                 </SelectTrigger>
                 <SelectContent>
-                  {eigenAddresses && Object.entries(eigenAddresses.strategies).map(([name, address]) => (
-                    <SelectItem key={address} value={address} className="font-mono">
-                      <span className="flex flex-col gap-0.5">
-                        <span className="font-sans font-medium">{name}</span>
-                        <span className="text-xs text-muted-foreground">{address.slice(0, 10)}...{address.slice(-8)}</span>
-                      </span>
-                    </SelectItem>
-                  ))}
+                  {!whitelistedStrategies || whitelistedStrategies.length === 0 ? (
+                    <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+                      No whitelisted strategies found
+                    </div>
+                  ) : (
+                    whitelistedStrategies.map((address) => (
+                      <StrategySelectItem key={address} address={address} chainId={chainId} />
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -1050,14 +1117,21 @@ function StakingCard({
           {deposits && deposits[0].length > 0 && (
             <>
               <Separator />
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Your Current Deposits</Label>
-                <div className="space-y-2">
+              <div className="space-y-3">
+                <div className="rounded-lg bg-muted/50 p-3">
+                  <h4 className="text-sm font-medium">Your Current Deposits</h4>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    View your deposited strategies with underlying token details.
+                  </p>
+                </div>
+                <div className="space-y-3">
                   {deposits[0].map((strategy, index) => (
-                    <div key={strategy} className="flex items-center justify-between p-2 rounded-lg border bg-muted/30">
-                      <span className="font-mono text-xs">{strategy.slice(0, 10)}...{strategy.slice(-8)}</span>
-                      <span className="text-sm font-medium">{formatBalance(deposits[1][index], 18)} shares</span>
-                    </div>
+                    <DepositItem
+                      key={strategy}
+                      strategyAddress={strategy}
+                      shares={deposits[1][index]}
+                      chainId={chainId}
+                    />
                   ))}
                 </div>
               </div>
@@ -1070,9 +1144,17 @@ function StakingCard({
 }
 
 function RegisterCoverageAgentForm({ contract, chainId }: { contract: CoverageContract; chainId: SupportedChainId | undefined }) {
-  const [serviceManager, setServiceManager] = useState("")
-  const [coverageAgent, setCoverageAgent] = useState("")
+  const [serviceManagerId, setServiceManagerId] = useState("")
+  const [coverageAgentId, setCoverageAgentId] = useState("")
   const [rewardsSplit, setRewardsSplit] = useState(0) // Stored as percentage (0-100)
+
+  // Get available providers and coverage agents
+  const { availableProviders } = useAvailableCoverageProviders(contract.chainId, [])
+  const { coverageAgents } = useChainFilteredContracts(contract.chainId)
+
+  // Look up selected contracts
+  const selectedServiceManager = getSelectedProvider(serviceManagerId, availableProviders)
+  const selectedCoverageAgent = getSelectedCoverageAgent(coverageAgentId, coverageAgents)
 
   const { writeContract, isPending, data: hash } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
@@ -1080,7 +1162,7 @@ function RegisterCoverageAgentForm({ contract, chainId }: { contract: CoverageCo
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!serviceManager || !coverageAgent) {
+    if (!selectedServiceManager || !selectedCoverageAgent) {
       toast.error("Please fill in all fields")
       return
     }
@@ -1092,7 +1174,7 @@ function RegisterCoverageAgentForm({ contract, chainId }: { contract: CoverageCo
       address: contract.address,
       abi: iEigenOperatorProxyAbi,
       functionName: "registerCoverageAgent",
-      args: [serviceManager as `0x${string}`, coverageAgent as `0x${string}`, rewardsSplitBps],
+      args: [selectedServiceManager.address as `0x${string}`, selectedCoverageAgent.address as `0x${string}`, rewardsSplitBps],
       chainId,
     }, {
       onSuccess: (hash) => {
@@ -1106,16 +1188,17 @@ function RegisterCoverageAgentForm({ contract, chainId }: { contract: CoverageCo
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <ServiceManagerSelect
-        value={serviceManager}
-        onValueChange={setServiceManager}
+      <CoverageProviderSelect
+        value={serviceManagerId}
+        onValueChange={setServiceManagerId}
         chainId={contract.chainId}
+        label="Service Manager"
         description="The EigenLayer service manager contract address"
       />
 
       <CoverageAgentSelect
-        value={coverageAgent}
-        onValueChange={setCoverageAgent}
+        value={coverageAgentId}
+        onValueChange={setCoverageAgentId}
         chainId={contract.chainId}
         description="The coverage agent contract to register with"
       />
@@ -1166,11 +1249,19 @@ function RegisterCoverageAgentForm({ contract, chainId }: { contract: CoverageCo
 }
 
 function AllocateForm({ contract, chainId }: { contract: CoverageContract; chainId: SupportedChainId | undefined }) {
-  const [serviceManager, setServiceManager] = useState("")
-  const [coverageAgent, setCoverageAgent] = useState("")
+  const [serviceManagerId, setServiceManagerId] = useState("")
+  const [coverageAgentId, setCoverageAgentId] = useState("")
   const [strategies, setStrategies] = useState<StrategyAllocation[]>([
     { address: "", magnitude: 0 }
   ])
+
+  // Get available providers and coverage agents
+  const { availableProviders } = useAvailableCoverageProviders(contract.chainId, [])
+  const { coverageAgents } = useChainFilteredContracts(contract.chainId)
+
+  // Look up selected contracts
+  const selectedServiceManager = getSelectedProvider(serviceManagerId, availableProviders)
+  const selectedCoverageAgent = getSelectedCoverageAgent(coverageAgentId, coverageAgents)
 
   const { writeContract, isPending, data: hash } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
@@ -1205,7 +1296,7 @@ function AllocateForm({ contract, chainId }: { contract: CoverageContract; chain
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!serviceManager || !coverageAgent) {
+    if (!selectedServiceManager || !selectedCoverageAgent) {
       toast.error("Please fill in service manager and coverage agent")
       return
     }
@@ -1223,7 +1314,7 @@ function AllocateForm({ contract, chainId }: { contract: CoverageContract; chain
       address: contract.address,
       abi: iEigenOperatorProxyAbi,
       functionName: "allocate",
-      args: [serviceManager as `0x${string}`, coverageAgent as `0x${string}`, strategyAddresses, magnitudes],
+      args: [selectedServiceManager.address as `0x${string}`, selectedCoverageAgent.address as `0x${string}`, strategyAddresses, magnitudes],
       chainId,
     }, {
       onSuccess: (hash) => {
@@ -1237,15 +1328,16 @@ function AllocateForm({ contract, chainId }: { contract: CoverageContract; chain
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <ServiceManagerSelect
-        value={serviceManager}
-        onValueChange={setServiceManager}
+      <CoverageProviderSelect
+        value={serviceManagerId}
+        onValueChange={setServiceManagerId}
         chainId={contract.chainId}
+        label="Service Manager"
       />
 
       <CoverageAgentSelect
-        value={coverageAgent}
-        onValueChange={setCoverageAgent}
+        value={coverageAgentId}
+        onValueChange={setCoverageAgentId}
         chainId={contract.chainId}
       />
 
@@ -1413,7 +1505,18 @@ export function EigenOperatorProxyManagement({ contract }: EigenOperatorProxyMan
     ? (contract.chainId as (typeof supportedChains)[number]["id"])
     : undefined
 
-  const eigenAddresses = chainId ? EIGEN_ADDRESSES[chainId] : undefined
+  // Query eigenAddresses from the EigenOperatorProxy contract
+  const { data: eigenAddressesData } = useReadContract({
+    address: contract.address,
+    abi: iEigenOperatorProxyAbi,
+    functionName: "eigenAddresses",
+    chainId,
+    query: {
+      enabled: isChainSupported,
+    },
+  })
+
+  const eigenAddresses = eigenAddressesData as EigenAddresses | undefined
 
   const {
     data: handler,
@@ -1432,6 +1535,23 @@ export function EigenOperatorProxyManagement({ contract }: EigenOperatorProxyMan
 
   return (
     <div className="space-y-4">
+      {/* Staking Management Section */}
+      <h2 className="text-lg font-semibold">Staking Management</h2>
+      
+      {/* Staking Card */}
+      {eigenAddresses && (
+        <StakingCard 
+          contract={contract} 
+          chainId={chainId} 
+          eigenAddresses={eigenAddresses} 
+        />
+      )}
+
+      <Separator className="my-6" />
+
+      {/* Operator Management Section */}
+      <h2 className="text-lg font-semibold">Operator Management</h2>
+
       {/* Handler Info Card */}
       <Card>
         <CardHeader>
@@ -1494,15 +1614,6 @@ export function EigenOperatorProxyManagement({ contract }: EigenOperatorProxyMan
       {/* Operator Strategies Card */}
       {eigenAddresses && (
         <OperatorStrategiesCard 
-          contract={contract} 
-          chainId={chainId} 
-          eigenAddresses={eigenAddresses} 
-        />
-      )}
-
-      {/* Staking Card */}
-      {eigenAddresses && (
-        <StakingCard 
           contract={contract} 
           chainId={chainId} 
           eigenAddresses={eigenAddresses} 
