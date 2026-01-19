@@ -104,12 +104,12 @@ npx wagmi generate
 
 ## Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `VITE_LOCAL_RPC` | RPC URL for local network | `http://127.0.0.1:8545` |
-| `VITE_MAINNET_ARCHIVE_RPC` | RPC URL for Ethereum Mainnet | `https://eth.llamarpc.com` |
-| `VITE_SEPOLIA_ARCHIVE_RPC` | RPC URL for Sepolia testnet | `https://rpc.sepolia.org` |
-| `VITE_WALLETCONNECT_PROJECT_ID` | WalletConnect Project ID for wallet connection | `demo` |
+| Variable                        | Description                                    | Default                    |
+| ------------------------------- | ---------------------------------------------- | -------------------------- |
+| `VITE_LOCAL_RPC`                | RPC URL for local network                      | `http://127.0.0.1:8545`    |
+| `VITE_MAINNET_ARCHIVE_RPC`      | RPC URL for Ethereum Mainnet                   | `https://eth.llamarpc.com` |
+| `VITE_SEPOLIA_ARCHIVE_RPC`      | RPC URL for Sepolia testnet                    | `https://rpc.sepolia.org`  |
+| `VITE_WALLETCONNECT_PROJECT_ID` | WalletConnect Project ID for wallet connection | `demo`                     |
 
 Copy `.env.example` to `.env` and configure your RPC URLs:
 

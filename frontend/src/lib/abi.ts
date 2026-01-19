@@ -1,11 +1,18 @@
 import type { Abi } from "viem"
 import type { ContractType } from "@/types/contracts"
-import { iCoverageAgentAbi, iCoverageProviderAbi, iEigenServiceManagerAbi, iAssetPriceOracleAndSwapperAbi, iEigenOperatorProxyAbi, iDiamondOwnerAbi } from "@/generated/abis"
+import {
+    iCoverageAgentAbi,
+    iCoverageProviderAbi,
+    iEigenServiceManagerAbi,
+    iAssetPriceOracleAndSwapperAbi,
+    iEigenOperatorProxyAbi,
+    iDiamondOwnerAbi,
+} from "@/generated/abis"
 import type { InterfaceName } from "@/lib/interface-ids"
 
 export interface NamedAbi {
-  name: string
-  abi: Abi
+    name: string
+    abi: Abi
 }
 
 /**
@@ -15,16 +22,16 @@ export interface NamedAbi {
  * @returns Array of named ABIs for the contract type
  */
 export function getAbisForContractType(contractType: ContractType): NamedAbi[] {
-  switch (contractType) {
-    case "CoverageAgent":
-      return [{ name: "ICoverageAgent", abi: iCoverageAgentAbi as Abi }]
-    case "EigenOperatorProxy":
-      return [{ name: "IEigenOperatorProxy", abi: iEigenOperatorProxyAbi as Abi }]
-    case "CoverageProvider":
-      return [{ name: "ICoverageProvider", abi: iCoverageProviderAbi as Abi }]
-    default:
-      throw new Error(`Unknown contract type: ${contractType}`)
-  }
+    switch (contractType) {
+        case "CoverageAgent":
+            return [{ name: "ICoverageAgent", abi: iCoverageAgentAbi as Abi }]
+        case "EigenOperatorProxy":
+            return [{ name: "IEigenOperatorProxy", abi: iEigenOperatorProxyAbi as Abi }]
+        case "CoverageProvider":
+            return [{ name: "ICoverageProvider", abi: iCoverageProviderAbi as Abi }]
+        default:
+            throw new Error(`Unknown contract type: ${contractType}`)
+    }
 }
 
 /**
@@ -33,27 +40,30 @@ export function getAbisForContractType(contractType: ContractType): NamedAbi[] {
  * @returns Array of named ABIs based on supported interfaces
  */
 export function getAbisForCoverageProviderWithInterfaces(
-  supportedInterfaces: Record<InterfaceName, boolean>
+    supportedInterfaces: Record<InterfaceName, boolean>
 ): NamedAbi[] {
-  const abis: NamedAbi[] = []
+    const abis: NamedAbi[] = []
 
-  if (supportedInterfaces.ICoverageProvider) {
-    abis.push({ name: "ICoverageProvider", abi: iCoverageProviderAbi as Abi })
-  }
+    if (supportedInterfaces.ICoverageProvider) {
+        abis.push({ name: "ICoverageProvider", abi: iCoverageProviderAbi as Abi })
+    }
 
-  if (supportedInterfaces.IEigenServiceManager) {
-    abis.push({ name: "IEigenServiceManager", abi: iEigenServiceManagerAbi as Abi })
-  }
+    if (supportedInterfaces.IEigenServiceManager) {
+        abis.push({ name: "IEigenServiceManager", abi: iEigenServiceManagerAbi as Abi })
+    }
 
-  if (supportedInterfaces.IAssetPriceOracleAndSwapper) {
-    abis.push({ name: "IAssetPriceOracleAndSwapper", abi: iAssetPriceOracleAndSwapperAbi as Abi })
-  }
+    if (supportedInterfaces.IAssetPriceOracleAndSwapper) {
+        abis.push({
+            name: "IAssetPriceOracleAndSwapper",
+            abi: iAssetPriceOracleAndSwapperAbi as Abi,
+        })
+    }
 
-  if (supportedInterfaces.IDiamondOwner) {
-    abis.push({ name: "IDiamondOwner", abi: iDiamondOwnerAbi as Abi })
-  }
+    if (supportedInterfaces.IDiamondOwner) {
+        abis.push({ name: "IDiamondOwner", abi: iDiamondOwnerAbi as Abi })
+    }
 
-  return abis
+    return abis
 }
 
 /**
@@ -63,6 +73,6 @@ export function getAbisForCoverageProviderWithInterfaces(
  * @returns Merged ABI array for the contract type
  */
 export function getMergedAbiForContractType(contractType: ContractType): Abi {
-  const namedAbis = getAbisForContractType(contractType)
-  return namedAbis.flatMap(n => n.abi) as Abi
+    const namedAbis = getAbisForContractType(contractType)
+    return namedAbis.flatMap((n) => n.abi) as Abi
 }

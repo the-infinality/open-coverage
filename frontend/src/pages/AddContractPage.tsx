@@ -11,33 +11,23 @@ import { Loader2, CheckCircle2, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
+    Form,
+    FormControl,
+    FormDescription,
+    FormField,
+    FormItem,
+    FormLabel,
+    FormMessage,
 } from "@/components/ui/form"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
 } from "@/components/ui/select"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useContracts } from "@/hooks/use-contracts"
 import { getContractTypes } from "@/lib/contract-utils"
 import { getSupportedChainsInfo, getPublicClientForChain } from "@/lib/wagmi"
@@ -53,441 +43,452 @@ const supportedChainIds = getSupportedChainsInfo().map((c) => c.id)
 
 // Validate address format without checksum - just check length and hex format
 const isValidAddressFormat = (address: string): boolean => {
-  return /^0x[a-fA-F0-9]{40}$/.test(address)
+    return /^0x[a-fA-F0-9]{40}$/.test(address)
 }
 
 const formSchema = z.object({
-  name: z.string().min(1, "Name is required").max(50, "Name too long"),
-  address: z.string().refine((val) => isValidAddressFormat(val), {
-    message: "Invalid Ethereum address format",
-  }),
-  chainId: z.number().refine((val) => supportedChainIds.includes(val), {
-    message: "Please select a valid chain",
-  }),
-  type: z.enum(["CoverageAgent", "CoverageProvider", "EigenOperatorProxy"]),
-  providerType: z.enum(["EigenLayer", "Catalysis", "Symbiotic"]).optional(),
+    name: z.string().min(1, "Name is required").max(50, "Name too long"),
+    address: z.string().refine((val) => isValidAddressFormat(val), {
+        message: "Invalid Ethereum address format",
+    }),
+    chainId: z.number().refine((val) => supportedChainIds.includes(val), {
+        message: "Please select a valid chain",
+    }),
+    type: z.enum(["CoverageAgent", "CoverageProvider", "EigenOperatorProxy"]),
+    providerType: z.enum(["EigenLayer", "Catalysis", "Symbiotic"]).optional(),
 })
 
 type FormData = {
-  name: string
-  address: string
-  chainId: number
-  type: "CoverageAgent" | "CoverageProvider" | "EigenOperatorProxy"
-  providerType?: ProviderType
+    name: string
+    address: string
+    chainId: number
+    type: "CoverageAgent" | "CoverageProvider" | "EigenOperatorProxy"
+    providerType?: ProviderType
 }
-
 
 // Provider type options with metadata
 const providerTypes: {
-  value: ProviderType
-  label: string
-  icon: string
-  disabled: boolean
-  comingSoon?: boolean
+    value: ProviderType
+    label: string
+    icon: string
+    disabled: boolean
+    comingSoon?: boolean
 }[] = [
-  {
-    value: "EigenLayer",
-    label: "EigenLayer",
-    icon: eigenlayerLogo,
-    disabled: false,
-  },
-  {
-    value: "Catalysis",
-    label: "Catalysis",
-    icon: catalysisLogo,
-    disabled: true,
-    comingSoon: true,
-  },
-  {
-    value: "Symbiotic",
-    label: "Symbiotic",
-    icon: symbioticLogo,
-    disabled: true,
-    comingSoon: true,
-  },
+    {
+        value: "EigenLayer",
+        label: "EigenLayer",
+        icon: eigenlayerLogo,
+        disabled: false,
+    },
+    {
+        value: "Catalysis",
+        label: "Catalysis",
+        icon: catalysisLogo,
+        disabled: true,
+        comingSoon: true,
+    },
+    {
+        value: "Symbiotic",
+        label: "Symbiotic",
+        icon: symbioticLogo,
+        disabled: true,
+        comingSoon: true,
+    },
 ]
 
 interface ContractValidationState {
-  isValidating: boolean
-  hasCode: boolean | null
-  error: string | null
+    isValidating: boolean
+    hasCode: boolean | null
+    error: string | null
 }
 
 export function AddContractPage() {
-  const navigate = useNavigate()
-  const connectedChainId = useChainId()
-  const { addContract, contracts } = useContracts()
-  const supportedChains = getSupportedChainsInfo()
+    const navigate = useNavigate()
+    const connectedChainId = useChainId()
+    const { addContract, contracts } = useContracts()
+    const supportedChains = getSupportedChainsInfo()
 
-  const [validation, setValidation] = useState<ContractValidationState>({
-    isValidating: false,
-    hasCode: null,
-    error: null,
-  })
+    const [validation, setValidation] = useState<ContractValidationState>({
+        isValidating: false,
+        hasCode: null,
+        error: null,
+    })
 
-  const form = useForm<FormData>({
-    resolver: zodResolver(formSchema) as unknown as undefined,
-    defaultValues: {
-      name: "",
-      address: "",
-      chainId: connectedChainId,
-      type: "CoverageAgent",
-      providerType: undefined,
-    },
-  })
+    const form = useForm<FormData>({
+        resolver: zodResolver(formSchema) as unknown as undefined,
+        defaultValues: {
+            name: "",
+            address: "",
+            chainId: connectedChainId,
+            type: "CoverageAgent",
+            providerType: undefined,
+        },
+    })
 
-  const watchedType = useWatch({ control: form.control, name: "type" })
-  const watchedChainId = useWatch({ control: form.control, name: "chainId" })
-  const watchedAddress = useWatch({ control: form.control, name: "address" })
+    const watchedType = useWatch({ control: form.control, name: "type" })
+    const watchedChainId = useWatch({ control: form.control, name: "chainId" })
+    const watchedAddress = useWatch({ control: form.control, name: "address" })
 
-  const { coverageProvider } = useCheckCoverageProvider(watchedType === "CoverageProvider" ? watchedAddress as `0x${string}` : undefined, watchedChainId)
+    const { coverageProvider } = useCheckCoverageProvider(
+        watchedType === "CoverageProvider" ? (watchedAddress as `0x${string}`) : undefined,
+        watchedChainId
+    )
 
-  // Validate contract address when it changes
-  useEffect(() => {
-    const validateContract = async () => {
-      if (!watchedAddress || !isValidAddressFormat(watchedAddress)) {
-        setValidation({ isValidating: false, hasCode: null, error: null })
-        return
-      }
+    // Validate contract address when it changes
+    useEffect(() => {
+        const validateContract = async () => {
+            if (!watchedAddress || !isValidAddressFormat(watchedAddress)) {
+                setValidation({ isValidating: false, hasCode: null, error: null })
+                return
+            }
 
-      if (!watchedChainId) {
-        setValidation({ isValidating: false, hasCode: null, error: "Please select a chain" })
-        return
-      }
+            if (!watchedChainId) {
+                setValidation({
+                    isValidating: false,
+                    hasCode: null,
+                    error: "Please select a chain",
+                })
+                return
+            }
 
-      // Get public client for the selected chain
-      const chainPublicClient = getPublicClientForChain(watchedChainId)
-      if (!chainPublicClient) {
-        setValidation({ isValidating: false, hasCode: null, error: "Invalid chain" })
-        return
-      }
+            // Get public client for the selected chain
+            const chainPublicClient = getPublicClientForChain(watchedChainId)
+            if (!chainPublicClient) {
+                setValidation({ isValidating: false, hasCode: null, error: "Invalid chain" })
+                return
+            }
 
-      setValidation({ isValidating: true, hasCode: null, error: null })
+            setValidation({ isValidating: true, hasCode: null, error: null })
 
-      try {
-        // Check if there's code at the address
-        const code = await chainPublicClient.getBytecode({ address: getAddress(watchedAddress) })
-        const hasCode = code !== undefined && code !== "0x"
+            try {
+                // Check if there's code at the address
+                const code = await chainPublicClient.getBytecode({
+                    address: getAddress(watchedAddress),
+                })
+                const hasCode = code !== undefined && code !== "0x"
 
-        if (!hasCode) {
-          setValidation({
-            isValidating: false,
-            hasCode: false,
-            error: "No contract found at this address",
-          })
-          return
+                if (!hasCode) {
+                    setValidation({
+                        isValidating: false,
+                        hasCode: false,
+                        error: "No contract found at this address",
+                    })
+                    return
+                }
+
+                setValidation({
+                    isValidating: false,
+                    hasCode: true,
+                    error: null,
+                })
+            } catch {
+                setValidation({
+                    isValidating: false,
+                    hasCode: null,
+                    error: "Failed to validate contract",
+                })
+            }
         }
 
-        setValidation({
-          isValidating: false,
-          hasCode: true,
-          error: null,
-        })
-      } catch {
-        setValidation({
-          isValidating: false,
-          hasCode: null,
-          error: "Failed to validate contract",
-        })
-      }
+        const timeoutId = setTimeout(validateContract, 500)
+        return () => clearTimeout(timeoutId)
+    }, [watchedAddress, watchedChainId, watchedType])
+
+    // Reset provider type when contract type changes
+    useEffect(() => {
+        if (watchedType !== "CoverageProvider") {
+            form.setValue("providerType", undefined)
+        }
+    }, [watchedType, form])
+
+    // Auto-generate name when contract type changes
+    useEffect(() => {
+        form.setValue("name", generateContractName(watchedType, contracts))
+    }, [watchedType, form, contracts])
+
+    function onSubmit(values: FormData) {
+        // Check if contract already exists
+        const exists = contracts.some(
+            (c) =>
+                c.address.toLowerCase() === values.address.toLowerCase() &&
+                c.chainId === values.chainId
+        )
+
+        if (exists) {
+            toast.error("Contract already exists for this chain")
+            return
+        }
+
+        // Check if name already exists
+        const nameExists = contracts.some((c) => c.name.toLowerCase() === values.name.toLowerCase())
+
+        if (nameExists) {
+            toast.error("A contract with this name already exists. Please choose a different name.")
+            return
+        }
+
+        switch (values.type) {
+            case "CoverageProvider":
+                addContract({
+                    name: values.name,
+                    address: values.address as `0x${string}`,
+                    type: values.type as ContractType,
+                    chainId: values.chainId,
+                })
+                break
+            default: {
+                addContract({
+                    name: values.name,
+                    address: values.address as `0x${string}`,
+                    type: values.type as ContractType,
+                    chainId: values.chainId,
+                })
+            }
+        }
+
+        toast.success("Contract added successfully")
+        form.reset()
+        navigate("/")
     }
 
-    const timeoutId = setTimeout(validateContract, 500)
-    return () => clearTimeout(timeoutId)
-  }, [watchedAddress, watchedChainId, watchedType])
+    return (
+        <div className="mx-auto max-w-2xl">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Add Contract</CardTitle>
+                    <CardDescription>
+                        Add a new contract to interact with. Contracts are stored locally in your
+                        browser.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Form {...form}>
+                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                            {/* Contract Type - First */}
+                            <FormField
+                                control={form.control}
+                                name="type"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Contract Type</FormLabel>
+                                        <Select onValueChange={field.onChange} value={field.value}>
+                                            <FormControl>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select contract type" />
+                                                </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                                {getContractTypes().map((type) => (
+                                                    <SelectItem key={type.value} value={type.value}>
+                                                        {type.label}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <FormDescription>
+                                            The type of contract determines which ABI and methods
+                                            are available
+                                        </FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
 
-  // Reset provider type when contract type changes
-  useEffect(() => {
-    if (watchedType !== "CoverageProvider") {
-      form.setValue("providerType", undefined)
-    }
-  }, [watchedType, form])
+                            {/* Chain - Second */}
+                            <FormField
+                                control={form.control}
+                                name="chainId"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Chain</FormLabel>
+                                        <FormControl>
+                                            <div className="flex flex-wrap gap-3">
+                                                {supportedChains.map((chain) => {
+                                                    const isSelected = field.value === chain.id
 
-  // Auto-generate name when contract type changes
-  useEffect(() => {
-    form.setValue("name", generateContractName(watchedType, contracts))
-  }, [watchedType, form, contracts])
-
-  function onSubmit(values: FormData) {
-    // Check if contract already exists
-    const exists = contracts.some(
-      (c) =>
-        c.address.toLowerCase() === values.address.toLowerCase() &&
-        c.chainId === values.chainId
-    )
-
-    if (exists) {
-      toast.error("Contract already exists for this chain")
-      return
-    }
-
-    // Check if name already exists
-    const nameExists = contracts.some(
-      (c) => c.name.toLowerCase() === values.name.toLowerCase()
-    )
-
-    if (nameExists) {
-      toast.error("A contract with this name already exists. Please choose a different name.")
-      return
-    }
-
-    switch (values.type) {
-      case "CoverageProvider":
-        addContract({
-          name: values.name,
-          address: values.address as `0x${string}`,
-          type: values.type as ContractType,
-          chainId: values.chainId,
-        })
-        break;
-      default: {
-        addContract({
-          name: values.name,
-          address: values.address as `0x${string}`,
-          type: values.type as ContractType,
-          chainId: values.chainId,
-        });
-      }
-    }
-
-    toast.success("Contract added successfully")
-    form.reset()
-    navigate("/")
-  }
-
-  return (
-    <div className="mx-auto max-w-2xl">
-      <Card>
-        <CardHeader>
-          <CardTitle>Add Contract</CardTitle>
-          <CardDescription>
-            Add a new contract to interact with. Contracts are stored locally in
-            your browser.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              {/* Contract Type - First */}
-              <FormField
-                control={form.control}
-                name="type"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Contract Type</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select contract type" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {getContractTypes().map((type) => (
-                          <SelectItem key={type.value} value={type.value}>
-                            {type.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>
-                      The type of contract determines which ABI and methods are
-                      available
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* Chain - Second */}
-              <FormField
-                control={form.control}
-                name="chainId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Chain</FormLabel>
-                    <FormControl>
-                      <div className="flex flex-wrap gap-3">
-                        {supportedChains.map((chain) => {
-                          const isSelected = field.value === chain.id;
-
-                          return (
-                            <button
-                              key={chain.id}
-                              type="button"
-                              onClick={() => field.onChange(chain.id)}
-                              className={`
+                                                    return (
+                                                        <button
+                                                            key={chain.id}
+                                                            type="button"
+                                                            onClick={() => field.onChange(chain.id)}
+                                                            className={`
                                 relative flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 transition-all
                                 ${
-                                  isSelected
-                                    ? "border-primary bg-primary/10 shadow-sm"
-                                    : "border-border hover:border-primary/50 hover:bg-accent cursor-pointer"
+                                    isSelected
+                                        ? "border-primary bg-primary/10 shadow-sm"
+                                        : "border-border hover:border-primary/50 hover:bg-accent cursor-pointer"
                                 }
                               `}
+                                                        >
+                                                            <img
+                                                                src={chain.icon}
+                                                                alt={chain.name}
+                                                                className="h-6 w-6 rounded-full"
+                                                            />
+                                                            <span className="font-medium">
+                                                                {chain.name}
+                                                            </span>
+                                                            {chain.isTestnet && (
+                                                                <span
+                                                                    className={`text-xs px-1.5 py-0.5 rounded-full ${chain.colors.bg} ${chain.colors.text}`}
+                                                                >
+                                                                    Testnet
+                                                                </span>
+                                                            )}
+                                                            {isSelected && (
+                                                                <CheckCircle2 className="h-4 w-4 text-primary ml-1" />
+                                                            )}
+                                                        </button>
+                                                    )
+                                                })}
+                                            </div>
+                                        </FormControl>
+                                        <FormDescription>
+                                            The blockchain network where this contract is deployed
+                                        </FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            {/* Contract Address - Third */}
+                            <FormField
+                                control={form.control}
+                                name="address"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Contract Address</FormLabel>
+                                        <FormControl>
+                                            <div className="relative">
+                                                <Input
+                                                    placeholder="0x..."
+                                                    {...field}
+                                                    className="pr-10"
+                                                />
+                                                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                                    {validation.isValidating && (
+                                                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                                    )}
+                                                    {!validation.isValidating &&
+                                                        validation.hasCode === true && (
+                                                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                                        )}
+                                                    {!validation.isValidating &&
+                                                        validation.hasCode === false && (
+                                                            <AlertCircle className="h-4 w-4 text-destructive" />
+                                                        )}
+                                                </div>
+                                            </div>
+                                        </FormControl>
+                                        <FormDescription>
+                                            {validation.error ? (
+                                                <span className="text-destructive">
+                                                    {validation.error}
+                                                </span>
+                                            ) : validation.hasCode ? (
+                                                <span className="text-green-600 dark:text-green-400">
+                                                    Contract found
+                                                </span>
+                                            ) : (
+                                                "The Ethereum address of the contract"
+                                            )}
+                                        </FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            {/* Provider Type Badges - Only shown for CoverageProvider */}
+                            {watchedType === "CoverageProvider" && (
+                                <div>
+                                    <div className="flex flex-wrap gap-3">
+                                        {providerTypes.map((provider) => {
+                                            const isSelected = coverageProvider === provider.value
+
+                                            const badge = (
+                                                <div
+                                                    key={provider.value}
+                                                    className={cn(
+                                                        "relative flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 transition-all",
+                                                        {
+                                                            "border-primary bg-primary/10 shadow-sm":
+                                                                isSelected,
+                                                        }
+                                                    )}
+                                                >
+                                                    <img
+                                                        src={provider.icon}
+                                                        alt={provider.label}
+                                                        className={`h-6 w-6 rounded`}
+                                                    />
+                                                    <span className={`font-medium`}>
+                                                        {provider.label}
+                                                    </span>
+                                                    {isSelected && (
+                                                        <CheckCircle2 className="h-4 w-4 text-primary ml-1" />
+                                                    )}
+                                                </div>
+                                            )
+
+                                            if (provider.comingSoon) {
+                                                return (
+                                                    <Tooltip key={provider.value}>
+                                                        <TooltipTrigger asChild>
+                                                            {badge}
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            <p>Coming Soon</p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                )
+                                            }
+
+                                            return badge
+                                        })}
+                                    </div>
+                                    <label className="text-sm text-muted-foreground">
+                                        The type of coverage provider this contract integrates with
+                                    </label>
+                                </div>
+                            )}
+
+                            {/* Name */}
+                            <FormField
+                                control={form.control}
+                                name="name"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Name</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} />
+                                        </FormControl>
+                                        <FormDescription>
+                                            A friendly name to identify this contract
+                                            (auto-generated, feel free to change)
+                                        </FormDescription>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+
+                            <Button
+                                type="submit"
+                                className="w-full"
+                                disabled={!validation.hasCode || validation.isValidating}
                             >
-                              <img
-                                src={chain.icon}
-                                alt={chain.name}
-                                className="h-6 w-6 rounded-full"
-                              />
-                              <span className="font-medium">{chain.name}</span>
-                              {chain.isTestnet && (
-                                <span
-                                  className={`text-xs px-1.5 py-0.5 rounded-full ${chain.colors.bg} ${chain.colors.text}`}
-                                >
-                                  Testnet
-                                </span>
-                              )}
-                              {isSelected && (
-                                <CheckCircle2 className="h-4 w-4 text-primary ml-1" />
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </FormControl>
-                    <FormDescription>
-                      The blockchain network where this contract is deployed
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* Contract Address - Third */}
-              <FormField
-                control={form.control}
-                name="address"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Contract Address</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Input
-                          placeholder="0x..."
-                          {...field}
-                          className="pr-10"
-                        />
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                          {validation.isValidating && (
-                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                          )}
-                          {!validation.isValidating &&
-                            validation.hasCode === true && (
-                              <CheckCircle2 className="h-4 w-4 text-green-500" />
-                            )}
-                          {!validation.isValidating &&
-                            validation.hasCode === false && (
-                              <AlertCircle className="h-4 w-4 text-destructive" />
-                            )}
-                        </div>
-                      </div>
-                    </FormControl>
-                    <FormDescription>
-                      {validation.error ? (
-                        <span className="text-destructive">
-                          {validation.error}
-                        </span>
-                      ) : validation.hasCode ? (
-                        <span className="text-green-600 dark:text-green-400">
-                          Contract found
-                        </span>
-                      ) : (
-                        "The Ethereum address of the contract"
-                      )}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* Provider Type Badges - Only shown for CoverageProvider */}
-              {watchedType === "CoverageProvider" && (
-                <div>
-                <div className="flex flex-wrap gap-3">
-                  {providerTypes.map((provider) => {
-                    const isSelected = coverageProvider === provider.value;
-
-                    const badge = (
-                      <div
-                        key={provider.value}
-                        className={cn(
-                          "relative flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 transition-all",
-                          {
-                            "border-primary bg-primary/10 shadow-sm": isSelected
-                          }
-                        )}
-                      >
-                        <img
-                          src={provider.icon}
-                          alt={provider.label}
-                          className={`h-6 w-6 rounded`}
-                        />
-                        <span
-                          className={`font-medium`}
-                        >
-                          {provider.label}
-                        </span>
-                        {isSelected && (
-                          <CheckCircle2 className="h-4 w-4 text-primary ml-1" />
-                        )}
-                      </div>
-                    );
-
-                    if (provider.comingSoon) {
-                      return (
-                        <Tooltip key={provider.value}>
-                          <TooltipTrigger asChild>{badge}</TooltipTrigger>
-                          <TooltipContent>
-                            <p>Coming Soon</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      );
-                    }
-
-                    return badge;
-                  })}
-                </div>
-                  <label className="text-sm text-muted-foreground">The type of coverage provider this contract integrates with</label>
-                </div>
-              )}
-
-              {/* Name */}
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Name</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormDescription>
-                      A friendly name to identify this contract (auto-generated,
-                      feel free to change)
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={!validation.hasCode || validation.isValidating}
-              >
-                {validation.isValidating ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Verifying Contract...
-                  </>
-                ) : (
-                  "Add Contract"
-                )}
-              </Button>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
-    </div>
-  );
+                                {validation.isValidating ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Verifying Contract...
+                                    </>
+                                ) : (
+                                    "Add Contract"
+                                )}
+                            </Button>
+                        </form>
+                    </Form>
+                </CardContent>
+            </Card>
+        </div>
+    )
 }
