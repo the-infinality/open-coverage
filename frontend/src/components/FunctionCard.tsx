@@ -33,6 +33,126 @@ interface FunctionCallResult {
   error?: string
 }
 
+// Type for ABI parameter with components (tuples)
+interface AbiParameterWithComponents {
+  name?: string
+  type: string
+  components?: AbiParameterWithComponents[]
+}
+
+/**
+ * Renders inputs for a single ABI parameter, handling tuples recursively
+ */
+function ParameterInput({
+  param,
+  path,
+  args,
+  setArgs,
+  depth = 0,
+}: {
+  param: AbiParameterWithComponents
+  path: string
+  args: Record<string, string>
+  setArgs: (args: Record<string, string>) => void
+  depth?: number
+}) {
+  const isTuple = param.type === "tuple" || param.type.startsWith("tuple")
+  const isArray = param.type.endsWith("[]")
+  const displayName = param.name || path.split(".").pop() || "value"
+
+  // For tuple types with components, render nested inputs
+  if (isTuple && param.components && param.components.length > 0 && !isArray) {
+    return (
+      <div className={cn("space-y-2 p-2.5 border border-border rounded-md", depth > 0 && "ml-4")}>
+        <Label className="text-xs font-medium">
+          {displayName}{" "}
+          <span className="text-muted-foreground">({param.type})</span>
+        </Label>
+        <div className="space-y-3">
+          {param.components.map((component, idx) => (
+            <ParameterInput
+              key={idx}
+              param={component}
+              path={`${path}.${component.name || idx}`}
+              args={args}
+              setArgs={setArgs}
+              depth={depth + 1}
+            />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // For simple types (or tuple arrays which need JSON input)
+  return (
+    <div className={cn(depth > 0 && "")}>
+      <Label className="text-xs">
+        {displayName}{" "}
+        <span className="text-muted-foreground">({param.type})</span>
+      </Label>
+      <Input
+        placeholder={param.type}
+        className="mt-1 font-mono text-sm"
+        value={args[path] || ""}
+        onChange={(e) =>
+          setArgs({
+            ...args,
+            [path]: e.target.value,
+          })
+        }
+      />
+    </div>
+  )
+}
+
+/**
+ * Parses a flat args object with dot-notation paths into nested values for tuple parameters
+ */
+function parseArgsForParam(
+  param: AbiParameterWithComponents,
+  args: Record<string, string>,
+  basePath: string
+): unknown {
+  const isTuple = param.type === "tuple" || param.type.startsWith("tuple")
+  const isArray = param.type.endsWith("[]")
+
+  // For tuple types with components (not arrays), build nested object
+  if (isTuple && param.components && param.components.length > 0 && !isArray) {
+    const result: Record<string, unknown> = {}
+    for (const component of param.components) {
+      const componentPath = `${basePath}.${component.name || param.components.indexOf(component)}`
+      result[component.name || String(param.components.indexOf(component))] = parseArgsForParam(
+        component,
+        args,
+        componentPath
+      )
+    }
+    return result
+  }
+
+  // For simple types, parse the value
+  const value = args[basePath] || ""
+  
+  if (param.type === "uint256" || param.type === "int256" || param.type.match(/^u?int\d+$/)) {
+    return BigInt(value || "0")
+  }
+  if (param.type === "bool") {
+    return value.toLowerCase() === "true"
+  }
+  if (param.type.endsWith("[]") || param.type === "tuple[]") {
+    try {
+      return JSON.parse(value)
+    } catch {
+      return []
+    }
+  }
+  if (param.type === "bytes" || param.type.match(/^bytes\d+$/)) {
+    return value as `0x${string}`
+  }
+  return value
+}
+
 interface FunctionMethodProps {
   fn: AbiFunction
   contractAddress: `0x${string}`
@@ -68,23 +188,10 @@ function FunctionMethod({
     setResult(null)
 
     try {
-      // Parse arguments
+      // Parse arguments (handles tuples recursively)
       const parsedArgs = fn.inputs.map((input, index) => {
-        const value = args[input.name || `arg${index}`] || ""
-        if (input.type === "uint256" || input.type === "int256") {
-          return BigInt(value || "0")
-        }
-        if (input.type === "bool") {
-          return value.toLowerCase() === "true"
-        }
-        if (input.type.endsWith("[]")) {
-          try {
-            return JSON.parse(value)
-          } catch {
-            return []
-          }
-        }
-        return value
+        const basePath = input.name || `arg${index}`
+        return parseArgsForParam(input as AbiParameterWithComponents, args, basePath)
       })
 
       if (isReadFunction) {
@@ -143,22 +250,10 @@ function FunctionMethod({
     setResult(null)
 
     try {
+      // Parse arguments (handles tuples recursively)
       const parsedArgs = fn.inputs.map((input, index) => {
-        const value = args[input.name || `arg${index}`] || ""
-        if (input.type === "uint256" || input.type === "int256") {
-          return BigInt(value || "0")
-        }
-        if (input.type === "bool") {
-          return value.toLowerCase() === "true"
-        }
-        if (input.type.endsWith("[]")) {
-          try {
-            return JSON.parse(value)
-          } catch {
-            return []
-          }
-        }
-        return value
+        const basePath = input.name || `arg${index}`
+        return parseArgsForParam(input as AbiParameterWithComponents, args, basePath)
       })
 
       const simulateResult = await publicClient?.simulateContract({
@@ -231,23 +326,13 @@ function FunctionMethod({
           {fn.inputs.length > 0 && (
             <div className="space-y-3">
               {fn.inputs.map((input, index) => (
-                <div key={index}>
-                  <Label className="text-xs">
-                    {input.name || `arg${index}`}{" "}
-                    <span className="text-muted-foreground">({input.type})</span>
-                  </Label>
-                  <Input
-                    placeholder={input.type}
-                    className="mt-1 font-mono text-sm"
-                    value={args[input.name || `arg${index}`] || ""}
-                    onChange={(e) =>
-                      setArgs({
-                        ...args,
-                        [input.name || `arg${index}`]: e.target.value,
-                      })
-                    }
-                  />
-                </div>
+                <ParameterInput
+                  key={index}
+                  param={input as AbiParameterWithComponents}
+                  path={input.name || `arg${index}`}
+                  args={args}
+                  setArgs={setArgs}
+                />
               ))}
             </div>
           )}
@@ -427,8 +512,8 @@ export function FunctionCard({ contract }: FunctionCardProps) {
       return getAbisForCoverageProviderWithInterfaces(supports)
     }
     // For other contract types, use the standard method
-    return getAbisForContractType(contract.type, contract.additionalFields?.providerType)
-  }, [contract.type, contract.additionalFields?.providerType, supports])
+    return getAbisForContractType(contract.type)
+  }, [contract.type, supports])
 
   // Show loading state while detecting interfaces for CoverageProvider
   if (contract.type === "CoverageProvider" && isLoadingInterfaces) {

@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {NotImplemented} from "../Errors.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/EnumerableMap.sol";
 import {IAllocationManager, IAllocationManagerTypes} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
 import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermissionController.sol";
 import {Refundable} from "src/interfaces/ICoverageProvider.sol";
-import {CoverageAgentAlreadyRegistered, NotOperatorAuthorized, InvalidAsset} from "../Errors.sol";
 import {
     IEigenServiceManager,
     CreatePositionAddtionalData,
     EigenCoveragePosition
 } from "../interfaces/IEigenServiceManager.sol";
+import {IEigenOperatorProxy} from "../interfaces/IEigenOperatorProxy.sol";
 import {
     ICoverageProvider,
     CoveragePosition,
@@ -35,7 +34,9 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
 
     /// @inheritdoc ICoverageProvider
     function onIsRegistered() external {
-        if (coverageAgentToOperatorSetId[msg.sender] != 0) revert CoverageAgentAlreadyRegistered();
+        if (coverageAgentToOperatorSetId[msg.sender] != 0) {
+            revert IEigenServiceManager.CoverageAgentAlreadyRegistered();
+        }
 
         IAllocationManagerTypes.CreateSetParams[] memory params = new IAllocationManager.CreateSetParams[](1);
 
@@ -57,7 +58,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
 
     /// @inheritdoc ICoverageProvider
     /// @dev The caller must have the `modifyAllocations` permission for the operator
-    function createPosition(address coverageAgent, CoveragePosition memory data, bytes calldata additionalData)
+    function createPosition(CoveragePosition memory data, bytes calldata additionalData)
         external
         returns (uint256 positionId)
     {
@@ -71,23 +72,23 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
                 createPositionAddtionalData.operator,
                 _eigenAddresses.allocationManager,
                 IAllocationManager.modifyAllocations.selector
-            )) revert NotOperatorAuthorized(createPositionAddtionalData.operator, msg.sender);
+            )) revert IEigenServiceManager.NotOperatorAuthorized(createPositionAddtionalData.operator, msg.sender);
 
-        if (!strategyWhitelist[createPositionAddtionalData.strategy]) {
-            revert IEigenServiceManager.StrategyNotWhitelisted(createPositionAddtionalData.strategy);
+        if (!_strategyWhitelist.contains(createPositionAddtionalData.strategy)) {
+            revert IEigenOperatorProxy.StrategyNotWhitelisted(createPositionAddtionalData.strategy);
         }
 
         if (address(IStrategy(createPositionAddtionalData.strategy).underlyingToken()) != data.asset) {
-            revert InvalidAsset(createPositionAddtionalData.strategy, data.asset);
+            revert IEigenServiceManager.InvalidAsset(createPositionAddtionalData.strategy, data.asset);
         }
 
         // Ensure strategy is in operator set and operator has non-zero allocations
         IEigenServiceManager(address(this))
             .ensureAllocations(
-                createPositionAddtionalData.operator, coverageAgent, createPositionAddtionalData.strategy
+                createPositionAddtionalData.operator, data.coverageAgent, createPositionAddtionalData.strategy
             );
 
-        positionId = _registerPosition(coverageAgent, data, createPositionAddtionalData);
+        positionId = _registerPosition(data.coverageAgent, data, createPositionAddtionalData);
     }
 
     /// @inheritdoc ICoverageProvider
@@ -97,7 +98,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
 
         if (!_checkOperatorPermissions(
                 positionData.operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector
-            )) revert NotOperatorAuthorized(positionData.operator, msg.sender);
+            )) revert IEigenServiceManager.NotOperatorAuthorized(positionData.operator, msg.sender);
 
         positions[positionId].data.expiryTimestamp = block.timestamp;
         emit PositionClosed(positionId);
@@ -150,7 +151,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     /// @inheritdoc ICoverageProvider
     function liquidateClaim(uint256) external pure {
         //TODO: Implement liquidateClaim
-        revert NotImplemented();
+        revert IEigenServiceManager.NotImplemented();
     }
 
     /// @inheritdoc ICoverageProvider

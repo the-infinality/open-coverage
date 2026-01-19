@@ -40,20 +40,16 @@ export function ContractTypeFilter({
   }
 
   const handleSelectAll = () => {
-    if (selectedTypes.size === availableTypes.length) {
-      onSelectionChange(new Set())
-    } else {
-      onSelectionChange(new Set(availableTypes))
-    }
+    onSelectionChange(new Set(availableTypes))
   }
 
   const handleClear = () => {
-    onSelectionChange(new Set(availableTypes))
+    onSelectionChange(new Set())
   }
 
   const selectedCount = selectedTypes.size
   const allSelected = selectedTypes.size === availableTypes.length
-  const hasFilter = selectedCount > 0 && selectedCount < availableTypes.length
+  const hasFilter = selectedCount > 0
 
   return (
     <Collapsible className="w-fit">
@@ -64,12 +60,7 @@ export function ContractTypeFilter({
             <span>Type</span>
             {hasFilter && (
               <Badge variant="secondary" className="ml-1">
-                {selectedCount}
-              </Badge>
-            )}
-            {allSelected && (
-              <Badge variant="secondary" className="ml-1">
-                All
+                {allSelected ? "All" : selectedCount}
               </Badge>
             )}
           </Button>

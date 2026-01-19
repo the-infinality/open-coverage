@@ -8,11 +8,9 @@ import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
 import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
 import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermissionController.sol";
 
-import {IEigenServiceManager} from "./interfaces/IEigenServiceManager.sol";
 import {IEigenOperatorProxy} from "./interfaces/IEigenOperatorProxy.sol";
+import {IEigenServiceManager} from "./interfaces/IEigenServiceManager.sol";
 import {EigenAddresses} from "./Types.sol";
-
-import {NotOperatorAuthorized, StrategyNotWhitelisted} from "./Errors.sol";
 
 /// @title EigenOperatorProxy
 /// @author p-dealwis, Infinality
@@ -130,7 +128,7 @@ contract EigenOperatorProxy is IEigenOperatorProxy {
     }
 
     function _onlyHandler() internal view {
-        if (msg.sender != _handler) revert NotOperatorAuthorized(address(this), msg.sender);
+        if (msg.sender != _handler) revert NotHandler();
     }
 
     modifier onlyHandler() {

@@ -1,6 +1,7 @@
 import type { CoverageContract } from "@/types/contracts"
 import { EigenOperatorProxyManagement } from "./EigenOperatorProxyManagement"
 import { CoverageAgentInfo } from "./CoverageAgentInfo"
+import { CoverageProviderInfo } from "./CoverageProviderInfo"
 
 interface ContractSpecificInteractionsProps {
   contract: CoverageContract
@@ -15,8 +16,11 @@ export function ContractSpecificInteractions({ contract }: ContractSpecificInter
     return <EigenOperatorProxyManagement contract={contract} />
   }
 
+  if (contract.type === "CoverageProvider") {
+    return <CoverageProviderInfo contract={contract} />
+  }
+
   // For other contract types, return null for now
-  // Can be extended later for CoverageProvider or other types
   return null
 }
 

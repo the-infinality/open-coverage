@@ -174,7 +174,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
         assertEq(positionId, 0);
     }
 
@@ -193,7 +193,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
         eigenCoverageProvider.closePosition(positionId);
         assertEq(eigenCoverageProvider.position(positionId).expiryTimestamp, block.timestamp);
     }
@@ -216,7 +216,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
 
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
@@ -255,7 +255,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
 
         // Calculate the maximum coverage available based on allocated stake
         uint256 maxCoverage = eigenServiceManager.coverageAllocated(
@@ -316,6 +316,93 @@ contract EigenTest is EigenTestDeployer {
         assertEq(strategies[0], address(_getTestStrategy()));
     }
 
+    function test_whitelistedStrategies() public {
+        // Initially should have 1 strategy (set in setUp)
+        address[] memory strategies = eigenServiceManager.whitelistedStrategies();
+        assertEq(strategies.length, 1);
+        assertEq(strategies[0], address(_getTestStrategy()));
+        assertTrue(eigenServiceManager.isStrategyWhitelisted(address(_getTestStrategy())));
+    }
+
+    function test_whitelistedStrategies_afterRemoval() public {
+        // Remove the strategy from whitelist
+        eigenServiceManager.setStrategyWhitelist(address(_getTestStrategy()), false);
+
+        // Should be empty now
+        address[] memory strategies = eigenServiceManager.whitelistedStrategies();
+        assertEq(strategies.length, 0);
+        assertFalse(eigenServiceManager.isStrategyWhitelisted(address(_getTestStrategy())));
+    }
+
+    function test_whitelistedStrategies_addAndRemove() public {
+        // Start with 1 strategy from setUp
+        address[] memory strategies = eigenServiceManager.whitelistedStrategies();
+        assertEq(strategies.length, 1);
+
+        // Remove the strategy
+        eigenServiceManager.setStrategyWhitelist(address(_getTestStrategy()), false);
+        strategies = eigenServiceManager.whitelistedStrategies();
+        assertEq(strategies.length, 0);
+
+        // Re-add the strategy
+        eigenServiceManager.setStrategyWhitelist(address(_getTestStrategy()), true);
+        strategies = eigenServiceManager.whitelistedStrategies();
+        assertEq(strategies.length, 1);
+        assertEq(strategies[0], address(_getTestStrategy()));
+    }
+
+    function test_RevertWhen_whitelistStrategy_alreadyWhitelisted() public {
+        // Strategy is already whitelisted in setUp
+        assertTrue(eigenServiceManager.isStrategyWhitelisted(address(_getTestStrategy())));
+
+        // Trying to whitelist the same strategy again should fail
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IEigenServiceManager.StrategyAssetAlreadyRegistered.selector,
+                address(_getTestStrategy().underlyingToken())
+            )
+        );
+        eigenServiceManager.setStrategyWhitelist(address(_getTestStrategy()), true);
+    }
+
+    function test_RevertWhen_whitelistStrategy_sameAssetDifferentStrategy() public {
+        // Strategy is already whitelisted in setUp
+        assertTrue(eigenServiceManager.isStrategyWhitelisted(address(_getTestStrategy())));
+
+        // Create a mock strategy with the same underlying token
+        MockStrategy mockStrategy = new MockStrategy(address(_getTestStrategy().underlyingToken()));
+
+        // Trying to whitelist a different strategy with the same asset should fail
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IEigenServiceManager.StrategyAssetAlreadyRegistered.selector,
+                address(_getTestStrategy().underlyingToken())
+            )
+        );
+        eigenServiceManager.setStrategyWhitelist(address(mockStrategy), true);
+    }
+
+    function test_whitelistStrategy_sameAssetAfterRemoval() public {
+        // Strategy is already whitelisted in setUp
+        assertTrue(eigenServiceManager.isStrategyWhitelisted(address(_getTestStrategy())));
+
+        // Create a mock strategy with the same underlying token
+        MockStrategy mockStrategy = new MockStrategy(address(_getTestStrategy().underlyingToken()));
+
+        // First remove the existing strategy
+        eigenServiceManager.setStrategyWhitelist(address(_getTestStrategy()), false);
+        assertFalse(eigenServiceManager.isStrategyWhitelisted(address(_getTestStrategy())));
+
+        // Now we can whitelist the new strategy with the same asset
+        eigenServiceManager.setStrategyWhitelist(address(mockStrategy), true);
+        assertTrue(eigenServiceManager.isStrategyWhitelisted(address(mockStrategy)));
+
+        // Verify the asset is now mapped to the new strategy
+        address[] memory strategies = eigenServiceManager.whitelistedStrategies();
+        assertEq(strategies.length, 1);
+        assertEq(strategies[0], address(mockStrategy));
+    }
+
     function test_RevertWhen_claimPosition_insufficientCoverageOnClaim() public {
         _setupwithAllocations();
 
@@ -351,7 +438,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
 
         uint256 coverageAllocated = eigenServiceManager.coverageAllocated(
             address(operator), address(_getTestStrategy()), address(coverageAgent)
@@ -407,7 +494,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
 
         uint256 coverageAllocated = eigenServiceManager.coverageAllocated(
             address(operator), address(_getTestStrategy()), address(coverageAgent)
@@ -442,7 +529,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
 
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
@@ -468,7 +555,7 @@ contract EigenTest is EigenTestDeployer {
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
 
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
         vm.prank(staker);
         vm.expectRevert(
             abi.encodeWithSelector(ICoverageProvider.NotCoverageAgent.selector, staker, address(coverageAgent))
@@ -493,7 +580,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
         assertApproxEqAbs(eigenCoverageProvider.positionMaxAmount(positionId), 35735542, 4e5);
     }
 
@@ -515,7 +602,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
 
         vm.startPrank(address(coverageAgent));
         vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.DurationExceedsMax.selector, 30 days, 365 days));
@@ -540,7 +627,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
 
         vm.startPrank(address(coverageAgent));
         uint256 amount = 1000e6;
@@ -569,7 +656,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
 
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
@@ -611,7 +698,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
 
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
@@ -665,7 +752,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        positionId = eigenCoverageProvider.createPosition(data, additionalData);
     }
 
     /// @notice Sets up a slashing test with default parameters (no coordinator, Refundable.None)
@@ -927,7 +1014,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
-        uint256 positionId = eigenCoverageProvider.createPosition(address(coverageAgent), data, additionalData);
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
 
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
@@ -1250,5 +1337,20 @@ contract MockSlashCoordinator is ISlashCoordinator {
         } else if (_status == SlashStatus.Failed) {
             emit SlashFailed(claimId);
         }
+    }
+}
+
+// ============ Mock Strategy ============
+
+/// @notice Mock strategy for testing whitelist behavior with same underlying asset
+contract MockStrategy {
+    IERC20 private _underlyingToken;
+
+    constructor(address underlyingToken_) {
+        _underlyingToken = IERC20(underlyingToken_);
+    }
+
+    function underlyingToken() external view returns (IERC20) {
+        return _underlyingToken;
     }
 }

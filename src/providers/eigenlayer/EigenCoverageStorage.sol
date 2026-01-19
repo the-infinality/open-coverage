@@ -43,8 +43,9 @@ abstract contract EigenCoverageStorage {
     /// @notice Mapping from coverage agent address to their operator set ID
     mapping(address => uint32) public coverageAgentToOperatorSetId;
 
-    /// @notice Mapping of whitelisted strategies
-    mapping(address => bool) public strategyWhitelist;
+    /// @notice Mapping of whitelisted strategies (address => 1 if whitelisted)
+    /// @dev Use EnumerableMap to allow enumeration of all whitelisted strategies
+    EnumerableMap.AddressToUintMap internal _strategyWhitelist;
 
     /// @notice Mapping from asset address to strategy address
     mapping(address => address) public assetToStrategy;

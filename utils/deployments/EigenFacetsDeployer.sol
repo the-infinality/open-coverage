@@ -54,19 +54,20 @@ library EigenFacetsDeployer {
     /// @notice Gets function selectors for EigenServiceManagerFacet
     /// @return selectors Array of function selectors
     function getEigenServiceManagerSelectors() internal pure returns (bytes4[] memory selectors) {
-        selectors = new bytes4[](12);
+        selectors = new bytes4[](13);
         selectors[0] = IEigenServiceManager.eigenAddresses.selector;
         selectors[1] = IEigenServiceManager.registerOperator.selector;
         selectors[2] = IEigenServiceManager.setStrategyWhitelist.selector;
         selectors[3] = IEigenServiceManager.isStrategyWhitelisted.selector;
-        selectors[4] = IEigenServiceManager.getOperatorSetId.selector;
-        selectors[5] = IEigenServiceManager.coverageAllocated.selector;
-        selectors[6] = IEigenServiceManager.captureRewards.selector;
-        selectors[7] = IEigenServiceManager.submitOperatorReward.selector;
-        selectors[8] = IEigenServiceManager.updateAVSMetadataURI.selector;
-        selectors[9] = IEigenServiceManager.slashOperator.selector;
-        selectors[10] = IEigenServiceManager.ensureAllocations.selector;
-        selectors[11] = IEigenServiceManager.getAllocationedStrategies.selector;
+        selectors[4] = IEigenServiceManager.whitelistedStrategies.selector;
+        selectors[5] = IEigenServiceManager.getOperatorSetId.selector;
+        selectors[6] = IEigenServiceManager.coverageAllocated.selector;
+        selectors[7] = IEigenServiceManager.captureRewards.selector;
+        selectors[8] = IEigenServiceManager.submitOperatorReward.selector;
+        selectors[9] = IEigenServiceManager.updateAVSMetadataURI.selector;
+        selectors[10] = IEigenServiceManager.slashOperator.selector;
+        selectors[11] = IEigenServiceManager.ensureAllocations.selector;
+        selectors[12] = IEigenServiceManager.getAllocationedStrategies.selector;
     }
 
     /// @notice Gets function selectors for EigenCoverageProviderFacet

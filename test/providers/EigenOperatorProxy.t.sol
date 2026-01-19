@@ -6,7 +6,8 @@ import {EigenOperatorProxy} from "src/providers/eigenlayer/EigenOperatorProxy.so
 import {IEigenOperatorProxy} from "src/providers/eigenlayer/interfaces/IEigenOperatorProxy.sol";
 import {IEigenServiceManager} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
 import {EigenAddresses} from "src/providers/eigenlayer/Types.sol";
-import {NotOperatorAuthorized, StrategyNotWhitelisted} from "src/providers/eigenlayer/Errors.sol";
+import {IEigenOperatorProxy} from "src/providers/eigenlayer/interfaces/IEigenOperatorProxy.sol";
+import {IEigenServiceManager} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
 import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermissionController.sol";
 import {IDelegationManager} from "eigenlayer-contracts/interfaces/IDelegationManager.sol";
 import {IAllocationManager, IAllocationManagerTypes} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
@@ -145,7 +146,7 @@ contract EigenOperatorProxyTest is EigenTestDeployer {
     /// @notice Test registerCoverageAgent reverts when called by non-handler
     function test_RevertWhen_registerCoverageAgent_calledByNonHandler() public {
         vm.prank(nonHandler);
-        vm.expectRevert(abi.encodeWithSelector(NotOperatorAuthorized.selector, address(operatorProxy), nonHandler));
+        vm.expectRevert(abi.encodeWithSelector(IEigenOperatorProxy.NotHandler.selector));
         operatorProxy.registerCoverageAgent(address(eigenCoverageDiamond), address(coverageAgent), 0);
     }
 
@@ -211,7 +212,7 @@ contract EigenOperatorProxyTest is EigenTestDeployer {
         operatorProxy.registerCoverageAgent(address(eigenCoverageDiamond), address(coverageAgent), 0);
 
         vm.prank(nonHandler);
-        vm.expectRevert(abi.encodeWithSelector(NotOperatorAuthorized.selector, address(operatorProxy), nonHandler));
+        vm.expectRevert(abi.encodeWithSelector(IEigenOperatorProxy.NotHandler.selector));
         operatorProxy.setRewardsSplit(address(eigenCoverageDiamond), address(coverageAgent), 5000);
     }
 
@@ -311,7 +312,7 @@ contract EigenOperatorProxyTest is EigenTestDeployer {
         magnitudes[0] = 1e18;
 
         vm.prank(nonHandler);
-        vm.expectRevert(abi.encodeWithSelector(NotOperatorAuthorized.selector, address(operatorProxy), nonHandler));
+        vm.expectRevert(abi.encodeWithSelector(IEigenOperatorProxy.NotHandler.selector));
         operatorProxy.allocate(address(eigenCoverageDiamond), address(coverageAgent), strategyAddresses, magnitudes);
     }
 
@@ -326,7 +327,9 @@ contract EigenOperatorProxyTest is EigenTestDeployer {
         uint64[] memory magnitudes = new uint64[](1);
         magnitudes[0] = 1e18;
 
-        vm.expectRevert(abi.encodeWithSelector(StrategyNotWhitelisted.selector, nonWhitelistedStrategy));
+        vm.expectRevert(
+            abi.encodeWithSelector(IEigenOperatorProxy.StrategyNotWhitelisted.selector, nonWhitelistedStrategy)
+        );
         operatorProxy.allocate(address(eigenCoverageDiamond), address(coverageAgent), strategyAddresses, magnitudes);
     }
 
@@ -394,9 +397,7 @@ contract EigenOperatorProxyTest is EigenTestDeployer {
 
         for (uint256 i = 0; i < randomAddresses.length; i++) {
             vm.prank(randomAddresses[i]);
-            vm.expectRevert(
-                abi.encodeWithSelector(NotOperatorAuthorized.selector, address(operatorProxy), randomAddresses[i])
-            );
+            vm.expectRevert(abi.encodeWithSelector(IEigenOperatorProxy.NotHandler.selector));
             operatorProxy.registerCoverageAgent(address(eigenCoverageDiamond), address(coverageAgent), 0);
         }
     }

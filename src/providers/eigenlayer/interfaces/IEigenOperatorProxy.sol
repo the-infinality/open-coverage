@@ -13,6 +13,10 @@ interface IEigenOperatorProxy {
     error NotRestaker();
     /// @dev Error thrown when the operator is already registered
     error AlreadyRegistered();
+    /// @dev Error thrown when the strategy is not whitelisted
+    error StrategyNotWhitelisted(address strategy);
+    /// @dev Error thrown when the caller is not the handler
+    error NotHandler();
 
     /// @dev Error thrown when the rewards split is not between 0 and 10000
     error InvalidRewardsSplit(uint16 rewardsSplit);

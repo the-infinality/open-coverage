@@ -20,6 +20,8 @@ export function getAbisForContractType(contractType: ContractType): NamedAbi[] {
       return [{ name: "ICoverageAgent", abi: iCoverageAgentAbi as Abi }]
     case "EigenOperatorProxy":
       return [{ name: "IEigenOperatorProxy", abi: iEigenOperatorProxyAbi as Abi }]
+    case "CoverageProvider":
+      return [{ name: "ICoverageProvider", abi: iCoverageProviderAbi as Abi }]
     default:
       throw new Error(`Unknown contract type: ${contractType}`)
   }

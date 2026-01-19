@@ -54,49 +54,31 @@ export function ContractsPage() {
     return Array.from(new Set(contracts.map((c) => c.type))) as ContractType[]
   }, [contracts])
 
-  // Initialize all chains as selected when component mounts or contracts change
+  // Clean up chain selections when available chains change (e.g., contract deleted)
   useEffect(() => {
-    if (availableChainIds.length === 0) return
-
-    // If no chains are selected, select all available
-    if (selectedChainIds.size === 0) {
-      setSelectedChainIds(new Set(availableChainIds))
-      return
-    }
+    if (availableChainIds.length === 0 || selectedChainIds.size === 0) return
 
     // Update selection to only include available chains
     const validChainIds = availableChainIds.filter((id) =>
       selectedChainIds.has(id)
     )
-    if (validChainIds.length === 0) {
-      // If no valid chains, select all available
-      setSelectedChainIds(new Set(availableChainIds))
-    } else if (validChainIds.length !== selectedChainIds.size) {
-      // If some chains are no longer available, update selection
+    if (validChainIds.length !== selectedChainIds.size) {
+      // Some selected chains are no longer available, update selection
       setSelectedChainIds(new Set(validChainIds))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availableChainIds])
 
-  // Initialize all contract types as selected when component mounts or contracts change
+  // Clean up contract type selections when available types change
   useEffect(() => {
-    if (availableContractTypes.length === 0) return
-
-    // If no types are selected, select all available
-    if (selectedContractTypes.size === 0) {
-      setSelectedContractTypes(new Set(availableContractTypes))
-      return
-    }
+    if (availableContractTypes.length === 0 || selectedContractTypes.size === 0) return
 
     // Update selection to only include available types
     const validTypes = availableContractTypes.filter((type) =>
       selectedContractTypes.has(type)
     )
-    if (validTypes.length === 0) {
-      // If no valid types, select all available
-      setSelectedContractTypes(new Set(availableContractTypes))
-    } else if (validTypes.length !== selectedContractTypes.size) {
-      // If some types are no longer available, update selection
+    if (validTypes.length !== selectedContractTypes.size) {
+      // Some selected types are no longer available, update selection
       setSelectedContractTypes(new Set(validTypes))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

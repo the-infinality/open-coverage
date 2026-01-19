@@ -53,7 +53,7 @@ export function LogsPage() {
   const publicClient = getPublicClientForChain(chainId || 1)
 
   const abi = selectedContract
-    ? getMergedAbiForContractType(selectedContract.type, selectedContract.additionalFields?.providerType)
+    ? getMergedAbiForContractType(selectedContract.type)
     : []
 
   const events = abi.filter(
