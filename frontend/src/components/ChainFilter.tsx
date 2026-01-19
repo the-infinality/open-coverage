@@ -48,20 +48,16 @@ export function ChainFilter({
   }
 
   const handleSelectAll = () => {
-    if (selectedChainIds.size === availableChainIds.length) {
-      onSelectionChange(new Set())
-    } else {
-      onSelectionChange(new Set(availableChainIds))
-    }
+    onSelectionChange(new Set(availableChainIds))
   }
 
   const handleClear = () => {
-    onSelectionChange(new Set(availableChainIds))
+    onSelectionChange(new Set())
   }
 
   const selectedCount = selectedChainIds.size
   const allSelected = selectedChainIds.size === availableChainIds.length
-  const hasFilter = selectedCount > 0 && selectedCount < availableChainIds.length
+  const hasFilter = selectedCount > 0
 
   return (
     <Collapsible className="w-fit">
@@ -72,12 +68,7 @@ export function ChainFilter({
             <span>Chain</span>
             {hasFilter && (
               <Badge variant="secondary" className="ml-1">
-                {selectedCount}
-              </Badge>
-            )}
-            {allSelected && (
-              <Badge variant="secondary" className="ml-1">
-                All
+                {allSelected ? "All" : selectedCount}
               </Badge>
             )}
           </Button>
