@@ -198,6 +198,56 @@ contract EigenTest is EigenTestDeployer {
         assertEq(eigenCoverageProvider.position(positionId).expiryTimestamp, block.timestamp);
     }
 
+    function test_RevertWhen_closePosition_expired() public {
+        _setupwithAllocations();
+
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0)
+        });
+        bytes memory additionalData = abi.encode(
+            CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
+        );
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
+
+        // Warp past the expiry timestamp
+        vm.warp(block.timestamp + 366 days);
+
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.PositionExpired.selector, positionId));
+        eigenCoverageProvider.closePosition(positionId);
+    }
+
+    function test_RevertWhen_closePosition_notAuthorized() public {
+        _setupwithAllocations();
+
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0)
+        });
+        bytes memory additionalData = abi.encode(
+            CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
+        );
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
+
+        // Try to close from an unauthorized address
+        address unauthorized = makeAddr("unauthorized");
+        vm.prank(unauthorized);
+        vm.expectRevert(
+            abi.encodeWithSelector(IEigenServiceManager.NotOperatorAuthorized.selector, address(operator), unauthorized)
+        );
+        eigenCoverageProvider.closePosition(positionId);
+    }
+
     function test_claimPosition() public {
         _setupwithAllocations();
 
@@ -316,7 +366,7 @@ contract EigenTest is EigenTestDeployer {
         assertEq(strategies[0], address(_getTestStrategy()));
     }
 
-    function test_whitelistedStrategies() public {
+    function test_whitelistedStrategies() public view {
         // Initially should have 1 strategy (set in setUp)
         address[] memory strategies = eigenServiceManager.whitelistedStrategies();
         assertEq(strategies.length, 1);
@@ -635,6 +685,42 @@ contract EigenTest is EigenTestDeployer {
         uint256 minimumReward = (amount * data.minRate * duration) / (10000 * 365 days);
         vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.InsufficientReward.selector, minimumReward, 10));
         eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10);
+        vm.stopPrank();
+    }
+
+    function test_RevertWhen_claimPosition_durationExceedsExpiry() public {
+        _setupwithAllocations();
+
+        _stakeAndDelegateToOperator(1000e18);
+
+        // Create position with expiry 100 days from now
+        uint256 expiryTimestamp = block.timestamp + 100 days;
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 0, // No max duration limit
+            expiryTimestamp: expiryTimestamp,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0)
+        });
+        bytes memory additionalData = abi.encode(
+            CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
+        );
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+
+        // Try to claim with duration that would exceed expiry (101 days)
+        uint256 duration = 101 days;
+        uint256 completionTimestamp = block.timestamp + duration;
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ICoverageProvider.DurationExceedsExpiry.selector, expiryTimestamp, completionTimestamp
+            )
+        );
+        eigenCoverageProvider.claimCoverage(positionId, 1000e6, duration, 10e6);
         vm.stopPrank();
     }
 

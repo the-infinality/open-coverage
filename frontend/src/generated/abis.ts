@@ -641,6 +641,14 @@ export const iCoverageProviderAbi = [
   {
     type: 'error',
     inputs: [
+      { name: 'expiryTimestamp', internalType: 'uint256', type: 'uint256' },
+      { name: 'completionTimestamp', internalType: 'uint256', type: 'uint256' },
+    ],
+    name: 'DurationExceedsExpiry',
+  },
+  {
+    type: 'error',
+    inputs: [
       { name: 'maxDuration', internalType: 'uint256', type: 'uint256' },
       { name: 'duration', internalType: 'uint256', type: 'uint256' },
     ],

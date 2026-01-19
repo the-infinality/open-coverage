@@ -94,11 +94,12 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
 
         uint32 distributionStartTime = _claimRewardDistribution.lastDistributedTimestamp;
 
-        uint32 duration = uint32(
+        // Calculate the amount of time that has elapsed since the last distribution for the claim
+        uint32 elapsedDuration = uint32(
             _min(block.timestamp - distributionStartTime, _claim.duration + _claim.createdAt - distributionStartTime)
         );
 
-        if (duration == 0) {
+        if (elapsedDuration == 0) {
             return (0, 0, distributionStartTime);
         }
 
@@ -122,7 +123,7 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
             coverageAsset,
             amount,
             distributionStartTime,
-            duration,
+            elapsedDuration,
             "Coverage reward"
         );
 

@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "generate": "wagmi generate"
+    "generate": "yarn generate-abi && yarn generate-operator-bytecode",
+    "generate-abi": "wagmi generate",
+    "generate-operator-bytecode": "node scripts/generate-operator-bytecode.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

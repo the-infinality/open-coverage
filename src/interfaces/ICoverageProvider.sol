@@ -82,6 +82,7 @@ interface ICoverageProvider {
     error RewardTransferFailed();
     error InsufficientCoverageAvailable(uint256 deficit);
     error DurationExceedsMax(uint256 maxDuration, uint256 duration);
+    error DurationExceedsExpiry(uint256 expiryTimestamp, uint256 completionTimestamp);
     error InvalidClaim(uint256 claimId);
     error SlashFailed(uint256 claimId);
     error SlashAmountExceedsClaim(uint256 claimId, uint256 slash, uint256 claim);

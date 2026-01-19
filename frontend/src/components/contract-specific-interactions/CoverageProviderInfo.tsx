@@ -1,53 +1,83 @@
-import { useMemo, useState, useEffect, useRef } from "react"
-import { type Address, isAddress, encodeAbiParameters, formatUnits, decodeEventLog } from "viem"
-import { RefreshCw, Loader2, Plus, CheckCircle2, Trash2, X, Layers } from "lucide-react"
-import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useConfig } from "wagmi"
-import { readContract } from "wagmi/actions"
-import { toast } from "sonner"
-import type { CoverageContract } from "@/types/contracts"
-import { iEigenServiceManagerAbi, iCoverageProviderAbi } from "@/generated/abis"
-import { iStrategyAbi, ierc20Abi } from "@/generated/eigen-abis"
-import { supportedChains } from "@/lib/wagmi"
-import { useCheckCoverageProviderSupport } from "@/hooks/use-interface-support"
-import { useChainFilteredContracts, getSelectedOperatorProxy, getSelectedCoverageAgent } from "@/hooks/use-chain-filtered-contracts"
-import { OperatorProxySelect, CoverageAgentSelect } from "@/components/ContractSelects"
-import { CopyableAddress } from "@/components/ui/copyable-address"
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import {
+  type Address,
+  isAddress,
+  encodeAbiParameters,
+  formatUnits,
+  decodeEventLog,
+} from "viem";
+import {
+  RefreshCw,
+  Loader2,
+  Plus,
+  CheckCircle2,
+  Trash2,
+  X,
+  Layers,
+} from "lucide-react";
+import {
+  useReadContract,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+  useConfig,
+} from "wagmi";
+import { readContract } from "wagmi/actions";
+import { toast } from "sonner";
+import type { CoverageContract } from "@/types/contracts";
+import {
+  iEigenServiceManagerAbi,
+  iCoverageProviderAbi,
+} from "@/generated/abis";
+import { iStrategyAbi, ierc20Abi } from "@/generated/eigen-abis";
+import { supportedChains } from "@/lib/wagmi";
+import { useCheckCoverageProviderSupport } from "@/hooks/use-interface-support";
+import {
+  useChainFilteredContracts,
+  getSelectedOperatorProxy,
+  getSelectedCoverageAgent,
+} from "@/hooks/use-chain-filtered-contracts";
+import {
+  OperatorProxySelect,
+  CoverageAgentSelect,
+} from "@/components/ContractSelects";
+import { CopyableAddress } from "@/components/ui/copyable-address";
+import { OperatorProxiesManagement } from "@/components/contract-specific-interactions/OperatorProxiesManagement";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 
-type SupportedChainId = (typeof supportedChains)[number]["id"]
+type SupportedChainId = (typeof supportedChains)[number]["id"];
 
 interface CoverageProviderInfoProps {
-  contract: CoverageContract
+  contract: CoverageContract;
 }
 
 /**
  * Component to display and manage strategy details
  */
-function StrategyDetails({ 
-  strategyAddress, 
-  chainId 
-}: { 
-  strategyAddress: Address
-  chainId: SupportedChainId | undefined 
+function StrategyDetails({
+  strategyAddress,
+  chainId,
+}: {
+  strategyAddress: Address;
+  chainId: SupportedChainId | undefined;
 }) {
   // Get underlying token address
   const { data: underlyingToken, isLoading: isLoadingToken } = useReadContract({
@@ -58,7 +88,7 @@ function StrategyDetails({
     query: {
       enabled: !!strategyAddress && !!chainId,
     },
-  })
+  });
 
   // Get token details
   const { data: tokenName } = useReadContract({
@@ -69,7 +99,7 @@ function StrategyDetails({
     query: {
       enabled: !!underlyingToken && !!chainId,
     },
-  })
+  });
 
   const { data: tokenSymbol } = useReadContract({
     address: underlyingToken as Address,
@@ -79,7 +109,7 @@ function StrategyDetails({
     query: {
       enabled: !!underlyingToken && !!chainId,
     },
-  })
+  });
 
   const { data: tokenDecimals } = useReadContract({
     address: underlyingToken as Address,
@@ -89,7 +119,7 @@ function StrategyDetails({
     query: {
       enabled: !!underlyingToken && !!chainId,
     },
-  })
+  });
 
   if (isLoadingToken) {
     return (
@@ -97,7 +127,7 @@ function StrategyDetails({
         <Loader2 className="size-3 animate-spin" />
         Loading strategy details...
       </div>
-    )
+    );
   }
 
   return (
@@ -117,7 +147,9 @@ function StrategyDetails({
             {tokenName && tokenSymbol && (
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Token</span>
-                <span className="font-medium">{tokenName} ({tokenSymbol})</span>
+                <span className="font-medium">
+                  {tokenName} ({tokenSymbol})
+                </span>
               </div>
             )}
             {tokenDecimals !== undefined && (
@@ -130,7 +162,7 @@ function StrategyDetails({
         </>
       )}
     </div>
-  )
+  );
 }
 
 /**
@@ -142,45 +174,53 @@ function WhitelistedStrategyItem({
   contractAddress,
   onRemoveSuccess,
 }: {
-  strategyAddress: Address
-  chainId: SupportedChainId | undefined
-  contractAddress: Address
-  onRemoveSuccess: () => void
+  strategyAddress: Address;
+  chainId: SupportedChainId | undefined;
+  contractAddress: Address;
+  onRemoveSuccess: () => void;
 }) {
-  const { writeContract, isPending, data: hash } = useWriteContract()
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+  const { writeContract, isPending, data: hash } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+    hash,
+  });
 
-  const prevSuccessRef = useRef(false)
+  const prevSuccessRef = useRef(false);
 
   useEffect(() => {
     if (isSuccess && !prevSuccessRef.current) {
-      onRemoveSuccess()
+      onRemoveSuccess();
     }
-    prevSuccessRef.current = isSuccess
-  }, [isSuccess, onRemoveSuccess])
+    prevSuccessRef.current = isSuccess;
+  }, [isSuccess, onRemoveSuccess]);
 
   const handleRemove = () => {
-    writeContract({
-      address: contractAddress,
-      abi: iEigenServiceManagerAbi,
-      functionName: "setStrategyWhitelist",
-      args: [strategyAddress, false],
-      chainId,
-    }, {
-      onSuccess: (hash) => {
-        toast.success(`Transaction submitted: ${hash.slice(0, 10)}...`)
+    writeContract(
+      {
+        address: contractAddress,
+        abi: iEigenServiceManagerAbi,
+        functionName: "setStrategyWhitelist",
+        args: [strategyAddress, false],
+        chainId,
       },
-      onError: (error) => {
-        toast.error(error.message.slice(0, 100))
-      },
-    })
-  }
+      {
+        onSuccess: (hash) => {
+          toast.success(`Transaction submitted: ${hash.slice(0, 10)}...`);
+        },
+        onError: (error) => {
+          toast.error(error.message.slice(0, 100));
+        },
+      }
+    );
+  };
 
   return (
     <div className="space-y-2">
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1">
-          <StrategyDetails strategyAddress={strategyAddress} chainId={chainId} />
+          <StrategyDetails
+            strategyAddress={strategyAddress}
+            chainId={chainId}
+          />
         </div>
         <Button
           variant="outline"
@@ -197,22 +237,30 @@ function WhitelistedStrategyItem({
         </Button>
       </div>
     </div>
-  )
+  );
 }
 
 // Refundable enum values
 const REFUNDABLE_OPTIONS = [
   { value: "0", label: "None", description: "No reward refund on liquidation" },
-  { value: "1", label: "Time Weighted", description: "Refund based on time position has been open" },
-  { value: "2", label: "Full", description: "Full refund of reward on liquidation" },
-]
+  {
+    value: "1",
+    label: "Time Weighted",
+    description: "Refund based on time position has been open",
+  },
+  {
+    value: "2",
+    label: "Full",
+    description: "Full refund of reward on liquidation",
+  },
+];
 
 interface StrategyAssetInfo {
-  strategyAddress: Address
-  assetAddress: Address | null
-  tokenName: string | null
-  tokenSymbol: string | null
-  isLoading: boolean
+  strategyAddress: Address;
+  assetAddress: Address | null;
+  tokenName: string | null;
+  tokenSymbol: string | null;
+  isLoading: boolean;
 }
 
 /**
@@ -230,7 +278,7 @@ function useStrategyAssetInfo(
     query: {
       enabled: !!strategyAddress && !!chainId,
     },
-  })
+  });
 
   const { data: tokenName, isLoading: isLoadingName } = useReadContract({
     address: underlyingToken as Address,
@@ -240,7 +288,7 @@ function useStrategyAssetInfo(
     query: {
       enabled: !!underlyingToken && !!chainId,
     },
-  })
+  });
 
   const { data: tokenSymbol, isLoading: isLoadingSymbol } = useReadContract({
     address: underlyingToken as Address,
@@ -250,9 +298,9 @@ function useStrategyAssetInfo(
     query: {
       enabled: !!underlyingToken && !!chainId,
     },
-  })
+  });
 
-  if (!strategyAddress) return null
+  if (!strategyAddress) return null;
 
   return {
     strategyAddress,
@@ -260,41 +308,46 @@ function useStrategyAssetInfo(
     tokenName: tokenName as string | null,
     tokenSymbol: tokenSymbol as string | null,
     isLoading: isLoadingToken || isLoadingName || isLoadingSymbol,
-  }
+  };
 }
 
 /**
  * Component to render a single strategy asset option in a select
  */
-function StrategyAssetOption({ strategyAddress, chainId }: { strategyAddress: Address; chainId: SupportedChainId | undefined }) {
-  const info = useStrategyAssetInfo(strategyAddress, chainId)
-  
-  if (!info) return null
-  
+function StrategyAssetOption({
+  strategyAddress,
+  chainId,
+}: {
+  strategyAddress: Address;
+  chainId: SupportedChainId | undefined;
+}) {
+  const info = useStrategyAssetInfo(strategyAddress, chainId);
+
+  if (!info) return null;
+
   if (info.isLoading) {
     return (
       <span className="flex items-center gap-2">
         <Loader2 className="size-3 animate-spin" />
         Loading...
       </span>
-    )
+    );
   }
 
   return (
     <span className="flex flex-col gap-0.5">
       <span className="font-medium">
-        {info.tokenName && info.tokenSymbol 
+        {info.tokenName && info.tokenSymbol
           ? `${info.tokenName} (${info.tokenSymbol})`
-          : info.assetAddress 
+          : info.assetAddress
             ? `${info.assetAddress.slice(0, 10)}...${info.assetAddress.slice(-8)}`
-            : "Unknown Asset"
-        }
+            : "Unknown Asset"}
       </span>
       <span className="text-xs text-muted-foreground">
         Strategy: {strategyAddress.slice(0, 10)}...{strategyAddress.slice(-8)}
       </span>
     </span>
-  )
+  );
 }
 
 /**
@@ -307,11 +360,11 @@ function StrategyAssetSelect({
   chainId,
   disabled,
 }: {
-  value: string
-  onValueChange: (strategyAddress: string) => void
-  strategies: Address[]
-  chainId: SupportedChainId | undefined
-  disabled?: boolean
+  value: string;
+  onValueChange: (strategyAddress: string) => void;
+  strategies: Address[];
+  chainId: SupportedChainId | undefined;
+  disabled?: boolean;
 }) {
   return (
     <div className="space-y-2">
@@ -329,8 +382,15 @@ function StrategyAssetSelect({
             </div>
           ) : (
             strategies.map((strategyAddr) => (
-              <SelectItem key={strategyAddr} value={strategyAddr} className="font-mono">
-                <StrategyAssetOption strategyAddress={strategyAddr} chainId={chainId} />
+              <SelectItem
+                key={strategyAddr}
+                value={strategyAddr}
+                className="font-mono"
+              >
+                <StrategyAssetOption
+                  strategyAddress={strategyAddr}
+                  chainId={chainId}
+                />
               </SelectItem>
             ))
           )}
@@ -340,17 +400,17 @@ function StrategyAssetSelect({
         Select the asset to cover (derived from whitelisted strategies)
       </p>
     </div>
-  )
+  );
 }
 
 interface CoveragePositionData {
-  coverageAgent: Address
-  minRate: number
-  maxDuration: bigint
-  expiryTimestamp: bigint
-  asset: Address
-  refundable: number
-  slashCoordinator: Address
+  coverageAgent: Address;
+  minRate: number;
+  maxDuration: bigint;
+  expiryTimestamp: bigint;
+  asset: Address;
+  refundable: number;
+  slashCoordinator: Address;
 }
 
 /**
@@ -363,11 +423,11 @@ function PositionItem({
   onCloseSuccess,
   onRemove,
 }: {
-  positionId: number
-  providerAddress: Address
-  chainId: SupportedChainId | undefined
-  onCloseSuccess: () => void
-  onRemove: () => void
+  positionId: number;
+  providerAddress: Address;
+  chainId: SupportedChainId | undefined;
+  onCloseSuccess: () => void;
+  onRemove: () => void;
 }) {
   const { data: position, isLoading } = useReadContract({
     address: providerAddress,
@@ -378,50 +438,62 @@ function PositionItem({
     query: {
       enabled: !!chainId,
     },
-  })
+  });
 
-  const { writeContract, isPending, data: hash } = useWriteContract()
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+  const { writeContract, isPending, data: hash } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+    hash,
+  });
 
-  const prevSuccessRef = useRef(false)
+  const prevSuccessRef = useRef(false);
 
   useEffect(() => {
     if (isSuccess && !prevSuccessRef.current) {
-      toast.success("Position closed successfully")
-      onCloseSuccess()
+      toast.success("Position closed successfully");
+      onCloseSuccess();
     }
-    prevSuccessRef.current = isSuccess
-  }, [isSuccess, onCloseSuccess])
+    prevSuccessRef.current = isSuccess;
+  }, [isSuccess, onCloseSuccess]);
 
   const handleClose = () => {
-    writeContract({
-      address: providerAddress,
-      abi: iCoverageProviderAbi,
-      functionName: "closePosition",
-      args: [BigInt(positionId)],
-      chainId,
-    }, {
-      onSuccess: (hash) => {
-        toast.success(`Transaction submitted: ${hash.slice(0, 10)}...`)
+    writeContract(
+      {
+        address: providerAddress,
+        abi: iCoverageProviderAbi,
+        functionName: "closePosition",
+        args: [BigInt(positionId)],
+        chainId,
       },
-      onError: (error) => {
-        toast.error(error.message.slice(0, 100))
-      },
-    })
-  }
+      {
+        onSuccess: (hash) => {
+          toast.success(`Transaction submitted: ${hash.slice(0, 10)}...`);
+        },
+        onError: (error) => {
+          toast.error(error.message.slice(0, 100));
+        },
+      }
+    );
+  };
 
   if (isLoading) {
     return (
       <div className="flex items-center gap-2 p-3 rounded-lg border">
         <Loader2 className="size-4 animate-spin" />
-        <span className="text-sm text-muted-foreground">Loading position #{positionId}...</span>
+        <span className="text-sm text-muted-foreground">
+          Loading position #{positionId}...
+        </span>
       </div>
-    )
+    );
   }
 
-  const positionData = position as CoveragePositionData | undefined
-  const isExpired = positionData && BigInt(positionData.expiryTimestamp) < BigInt(Math.floor(Date.now() / 1000))
-  const expiryDate = positionData ? new Date(Number(positionData.expiryTimestamp) * 1000) : null
+  const positionData = position as CoveragePositionData | undefined;
+  const isExpired =
+    positionData &&
+    BigInt(positionData.expiryTimestamp) <
+      BigInt(Math.floor(Date.now() / 1000));
+  const expiryDate = positionData
+    ? new Date(Number(positionData.expiryTimestamp) * 1000)
+    : null;
 
   return (
     <div className="rounded-lg border p-4 space-y-3">
@@ -454,7 +526,7 @@ function PositionItem({
           </Button>
         </div>
       </div>
-      
+
       {positionData && (
         <div className="grid gap-2 text-sm">
           <div className="flex items-center justify-between">
@@ -471,20 +543,26 @@ function PositionItem({
           </div>
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Max Duration</span>
-            <span className="font-mono">{formatUnits(BigInt(positionData.maxDuration), 0)} seconds</span>
+            <span className="font-mono">
+              {formatUnits(BigInt(positionData.maxDuration), 0)} seconds
+            </span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Expires</span>
-            <span className="font-mono text-xs">{expiryDate?.toLocaleString()}</span>
+            <span className="font-mono text-xs">
+              {expiryDate?.toLocaleString()}
+            </span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Refundable</span>
-            <span>{REFUNDABLE_OPTIONS[positionData.refundable]?.label || "Unknown"}</span>
+            <span>
+              {REFUNDABLE_OPTIONS[positionData.refundable]?.label || "Unknown"}
+            </span>
           </div>
         </div>
       )}
     </div>
-  )
+  );
 }
 
 /**
@@ -494,61 +572,74 @@ function OperatorPositionManagement({
   contract,
   chainId,
 }: {
-  contract: CoverageContract
-  chainId: SupportedChainId | undefined
+  contract: CoverageContract;
+  chainId: SupportedChainId | undefined;
 }) {
   // State for form inputs
-  const [selectedOperatorId, setSelectedOperatorId] = useState("")
-  const [selectedCoverageAgentId, setSelectedCoverageAgentId] = useState("")
-  const [minRate, setMinRate] = useState("500") // 5% default (basis points)
-  const [maxDuration, setMaxDuration] = useState("31536000") // 1 year in seconds
-  const [expiryDays, setExpiryDays] = useState("365")
-  const [selectedStrategyAddress, setSelectedStrategyAddress] = useState("")
-  const [refundable, setRefundable] = useState("0")
-  const [slashCoordinator, setSlashCoordinator] = useState("")
-  const [positionIds, setPositionIds] = useState<number[]>([])
-  const [newPositionId, setNewPositionId] = useState("")
-  const [isCheckingPosition, setIsCheckingPosition] = useState(false)
+  const [selectedOperatorId, setSelectedOperatorId] = useState("");
+  const [selectedCoverageAgentId, setSelectedCoverageAgentId] = useState("");
+  const [minRate, setMinRate] = useState("500"); // 5% default (basis points)
+  const [maxDuration, setMaxDuration] = useState("31536000"); // 1 year in seconds
+  const [expiryDays, setExpiryDays] = useState("365");
+  const [selectedStrategyAddress, setSelectedStrategyAddress] = useState("");
+  const [refundable, setRefundable] = useState("0");
+  const [slashCoordinator, setSlashCoordinator] = useState("");
+  const [positionIds, setPositionIds] = useState<number[]>([]);
+  const [newPositionId, setNewPositionId] = useState("");
+  const [isCheckingPosition, setIsCheckingPosition] = useState(false);
 
   // Get wagmi config for imperative contract reads
-  const config = useConfig()
+  const config = useConfig();
 
   // Get operator proxies and coverage agents from saved contracts
-  const { operatorProxies, coverageAgents } = useChainFilteredContracts(contract.chainId)
-  const selectedOperator = getSelectedOperatorProxy(selectedOperatorId, operatorProxies)
-  const selectedCoverageAgent = getSelectedCoverageAgent(selectedCoverageAgentId, coverageAgents)
+  const { operatorProxies, coverageAgents } = useChainFilteredContracts(
+    contract.chainId
+  );
+  const selectedOperator = getSelectedOperatorProxy(
+    selectedOperatorId,
+    operatorProxies
+  );
+  const selectedCoverageAgent = getSelectedCoverageAgent(
+    selectedCoverageAgentId,
+    coverageAgents
+  );
 
   // Fetch whitelisted strategies from the provider
-  const { data: whitelistedStrategies, isLoading: isLoadingStrategies } = useReadContract({
-    address: contract.address,
-    abi: iEigenServiceManagerAbi,
-    functionName: "whitelistedStrategies",
-    chainId,
-    query: {
-      enabled: !!chainId,
-    },
-  })
+  const { data: whitelistedStrategies, isLoading: isLoadingStrategies } =
+    useReadContract({
+      address: contract.address,
+      abi: iEigenServiceManagerAbi,
+      functionName: "whitelistedStrategies",
+      chainId,
+      query: {
+        enabled: !!chainId,
+      },
+    });
 
   const strategies = useMemo(() => {
-    if (!whitelistedStrategies) return []
-    return [...(whitelistedStrategies as Address[])]
-  }, [whitelistedStrategies])
+    if (!whitelistedStrategies) return [];
+    return [...(whitelistedStrategies as Address[])];
+  }, [whitelistedStrategies]);
 
   // Get the underlying asset for the selected strategy
   const selectedStrategyInfo = useStrategyAssetInfo(
-    selectedStrategyAddress ? selectedStrategyAddress as Address : undefined,
+    selectedStrategyAddress ? (selectedStrategyAddress as Address) : undefined,
     chainId
-  )
+  );
 
   // Derived asset address from the selected strategy
-  const assetAddress = selectedStrategyInfo?.assetAddress || ""
+  const assetAddress = selectedStrategyInfo?.assetAddress || "";
 
   // Write contract hooks
-  const { writeContract, isPending, data: hash } = useWriteContract()
-  const { isLoading: isConfirming, isSuccess, data: receipt } = useWaitForTransactionReceipt({ hash })
+  const { writeContract, isPending, data: hash } = useWriteContract();
+  const {
+    isLoading: isConfirming,
+    isSuccess,
+    data: receipt,
+  } = useWaitForTransactionReceipt({ hash });
 
   // Track previous success to avoid duplicate processing
-  const prevCreateSuccessRef = useRef(false)
+  const prevCreateSuccessRef = useRef(false);
 
   // Parse position ID from transaction logs when position is created successfully
   useEffect(() => {
@@ -561,36 +652,42 @@ function OperatorPositionManagement({
               abi: iCoverageProviderAbi,
               data: log.data,
               topics: log.topics,
-            })
-            
-            if (decoded.eventName === "PositionCreated" && decoded.args && 'positionId' in decoded.args) {
-              const newPositionId = Number(decoded.args.positionId)
+            });
+
+            if (
+              decoded.eventName === "PositionCreated" &&
+              decoded.args &&
+              "positionId" in decoded.args
+            ) {
+              const newPositionId = Number(decoded.args.positionId);
               if (!positionIds.includes(newPositionId)) {
-                setPositionIds(prev => [...prev, newPositionId])
-                toast.success(`Position #${newPositionId} created and added to view`)
+                setPositionIds((prev) => [...prev, newPositionId]);
+                toast.success(
+                  `Position #${newPositionId} created and added to view`
+                );
               }
-              break
+              break;
             }
           } catch {
             // Not the event we're looking for, continue
           }
         }
       } catch (error) {
-        console.error("Error parsing position creation logs:", error)
+        console.error("Error parsing position creation logs:", error);
       }
     }
-    prevCreateSuccessRef.current = isSuccess
-  }, [isSuccess, receipt, positionIds])
+    prevCreateSuccessRef.current = isSuccess;
+  }, [isSuccess, receipt, positionIds]);
 
   // Reset form after successful transaction
   const resetForm = () => {
-    setMinRate("500")
-    setMaxDuration("31536000")
-    setExpiryDays("365")
-    setSelectedStrategyAddress("")
-    setRefundable("0")
-    setSlashCoordinator("")
-  }
+    setMinRate("500");
+    setMaxDuration("31536000");
+    setExpiryDays("365");
+    setSelectedStrategyAddress("");
+    setRefundable("0");
+    setSlashCoordinator("");
+  };
 
   const isValidForm = useMemo(() => {
     return (
@@ -603,17 +700,33 @@ function OperatorPositionManagement({
       maxDuration &&
       expiryDays &&
       (slashCoordinator === "" || isAddress(slashCoordinator))
-    )
-  }, [selectedOperator, selectedCoverageAgent, selectedStrategyAddress, assetAddress, minRate, maxDuration, expiryDays, slashCoordinator])
+    );
+  }, [
+    selectedOperator,
+    selectedCoverageAgent,
+    selectedStrategyAddress,
+    assetAddress,
+    minRate,
+    maxDuration,
+    expiryDays,
+    slashCoordinator,
+  ]);
 
   const handleCreatePosition = () => {
-    if (!isValidForm || !selectedCoverageAgent || !selectedOperator || !assetAddress) {
-      toast.error("Please fill in all required fields")
-      return
+    if (
+      !isValidForm ||
+      !selectedCoverageAgent ||
+      !selectedOperator ||
+      !assetAddress
+    ) {
+      toast.error("Please fill in all required fields");
+      return;
     }
 
     // Calculate expiry timestamp
-    const expiryTimestamp = BigInt(Math.floor(Date.now() / 1000) + Number(expiryDays) * 24 * 60 * 60)
+    const expiryTimestamp = BigInt(
+      Math.floor(Date.now() / 1000) + Number(expiryDays) * 24 * 60 * 60
+    );
 
     // Encode additional data for EigenLayer providers
     // This matches the CreatePositionAddtionalData struct: { address operator; address strategy; }
@@ -621,11 +734,11 @@ function OperatorPositionManagement({
     // The strategy is the selected whitelisted strategy address
     const additionalData = encodeAbiParameters(
       [
-        { type: 'address', name: 'operator' },
-        { type: 'address', name: 'strategy' }
+        { type: "address", name: "operator" },
+        { type: "address", name: "strategy" },
       ],
       [selectedOperator.address, selectedStrategyAddress as Address]
-    )
+    );
 
     // CoveragePosition struct
     const positionData = {
@@ -635,43 +748,47 @@ function OperatorPositionManagement({
       expiryTimestamp,
       asset: assetAddress,
       refundable: Number(refundable),
-      slashCoordinator: (slashCoordinator || "0x0000000000000000000000000000000000000000") as Address,
-    }
+      slashCoordinator: (slashCoordinator ||
+        "0x0000000000000000000000000000000000000000") as Address,
+    };
 
-    console.log("Creating position with data:", [positionData, additionalData])
-    writeContract({
-      address: contract.address,
-      abi: iCoverageProviderAbi,
-      functionName: "createPosition",
-      args: [positionData, additionalData],
-      chainId,
-    }, {
-      onSuccess: (hash) => {
-        toast.success(`Transaction submitted: ${hash.slice(0, 10)}...`)
-        resetForm()
+    console.log("Creating position with data:", [positionData, additionalData]);
+    writeContract(
+      {
+        address: contract.address,
+        abi: iCoverageProviderAbi,
+        functionName: "createPosition",
+        args: [positionData, additionalData],
+        chainId,
       },
-      onError: (error) => {
-        toast.error(error.message.slice(0, 100))
-      },
-    })
-  }
+      {
+        onSuccess: (hash) => {
+          toast.success(`Transaction submitted: ${hash.slice(0, 10)}...`);
+          resetForm();
+        },
+        onError: (error) => {
+          toast.error(error.message.slice(0, 100));
+        },
+      }
+    );
+  };
 
   const handleAddPositionId = async () => {
-    const id = Number(newPositionId)
+    const id = Number(newPositionId);
     if (isNaN(id) || id < 0) {
-      toast.error("Please enter a valid position ID")
-      return
+      toast.error("Please enter a valid position ID");
+      return;
     }
     if (positionIds.includes(id)) {
-      toast.error("Position already loaded")
-      return
+      toast.error("Position already loaded");
+      return;
     }
     if (!chainId) {
-      toast.error("Chain not supported")
-      return
+      toast.error("Chain not supported");
+      return;
     }
 
-    setIsCheckingPosition(true)
+    setIsCheckingPosition(true);
     try {
       // Check if position exists by trying to read it
       const position = await readContract(config, {
@@ -680,28 +797,32 @@ function OperatorPositionManagement({
         functionName: "position",
         args: [BigInt(id)],
         chainId,
-      })
+      });
 
       // Check if the position has a valid coverage agent (non-zero address indicates it exists)
-      const positionData = position as { coverageAgent: Address } | undefined
-      if (!positionData || positionData.coverageAgent === "0x0000000000000000000000000000000000000000") {
-        toast.error(`Position #${id} does not exist`)
-        return
+      const positionData = position as { coverageAgent: Address } | undefined;
+      if (
+        !positionData ||
+        positionData.coverageAgent ===
+          "0x0000000000000000000000000000000000000000"
+      ) {
+        toast.error(`Position #${id} does not exist`);
+        return;
       }
 
-      setPositionIds([...positionIds, id])
-      setNewPositionId("")
-      toast.success(`Position #${id} loaded`)
+      setPositionIds([...positionIds, id]);
+      setNewPositionId("");
+      toast.success(`Position #${id} loaded`);
     } catch {
-      toast.error(`Position #${id} does not exist or could not be fetched`)
+      toast.error(`Position #${id} does not exist or could not be fetched`);
     } finally {
-      setIsCheckingPosition(false)
+      setIsCheckingPosition(false);
     }
-  }
+  };
 
   const handleRemovePositionId = (id: number) => {
-    setPositionIds(positionIds.filter(p => p !== id))
-  }
+    setPositionIds(positionIds.filter((p) => p !== id));
+  };
 
   return (
     <Card>
@@ -724,7 +845,8 @@ function OperatorPositionManagement({
           <div className="rounded-lg bg-muted/50 p-3">
             <h4 className="text-sm font-medium">Create New Position</h4>
             <p className="text-xs text-muted-foreground mt-1">
-              Select an operator agent and configure the coverage position parameters
+              Select an operator agent and configure the coverage position
+              parameters
             </p>
           </div>
 
@@ -764,28 +886,40 @@ function OperatorPositionManagement({
                 disabled={isPending || isConfirming}
               />
             )}
-            
+
             {/* Show derived addresses when strategy is selected */}
-            {selectedStrategyAddress && selectedStrategyInfo && !selectedStrategyInfo.isLoading && (
-              <div className="rounded-lg border bg-muted/30 p-3 space-y-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Strategy</span>
-                  <CopyableAddress address={selectedStrategyAddress as Address} />
+            {selectedStrategyAddress &&
+              selectedStrategyInfo &&
+              !selectedStrategyInfo.isLoading && (
+                <div className="rounded-lg border bg-muted/30 p-3 space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Strategy</span>
+                    <CopyableAddress
+                      address={selectedStrategyAddress as Address}
+                    />
+                  </div>
+                  {selectedStrategyInfo.assetAddress && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">
+                        Underlying Asset
+                      </span>
+                      <CopyableAddress
+                        address={selectedStrategyInfo.assetAddress}
+                      />
+                    </div>
+                  )}
+                  {selectedStrategyInfo.tokenName &&
+                    selectedStrategyInfo.tokenSymbol && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Token</span>
+                        <span className="font-medium">
+                          {selectedStrategyInfo.tokenName} (
+                          {selectedStrategyInfo.tokenSymbol})
+                        </span>
+                      </div>
+                    )}
                 </div>
-                {selectedStrategyInfo.assetAddress && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Underlying Asset</span>
-                    <CopyableAddress address={selectedStrategyInfo.assetAddress} />
-                  </div>
-                )}
-                {selectedStrategyInfo.tokenName && selectedStrategyInfo.tokenSymbol && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Token</span>
-                    <span className="font-medium">{selectedStrategyInfo.tokenName} ({selectedStrategyInfo.tokenSymbol})</span>
-                  </div>
-                )}
-              </div>
-            )}
+              )}
           </div>
 
           <div className="grid gap-4 md:grid-cols-3">
@@ -801,7 +935,9 @@ function OperatorPositionManagement({
                 className="font-mono"
                 disabled={isPending || isConfirming}
               />
-              <p className="text-xs text-muted-foreground">{Number(minRate) / 100}% per annum</p>
+              <p className="text-xs text-muted-foreground">
+                {Number(minRate) / 100}% per annum
+              </p>
             </div>
 
             {/* Max Duration */}
@@ -816,7 +952,9 @@ function OperatorPositionManagement({
                 className="font-mono"
                 disabled={isPending || isConfirming}
               />
-              <p className="text-xs text-muted-foreground">{Math.round(Number(maxDuration) / 86400)} days</p>
+              <p className="text-xs text-muted-foreground">
+                {Math.round(Number(maxDuration) / 86400)} days
+              </p>
             </div>
 
             {/* Expiry Days */}
@@ -838,7 +976,11 @@ function OperatorPositionManagement({
             {/* Refundable */}
             <div className="space-y-2">
               <Label>Refund Policy</Label>
-              <Select value={refundable} onValueChange={setRefundable} disabled={isPending || isConfirming}>
+              <Select
+                value={refundable}
+                onValueChange={setRefundable}
+                disabled={isPending || isConfirming}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select refund policy..." />
                 </SelectTrigger>
@@ -847,7 +989,9 @@ function OperatorPositionManagement({
                     <SelectItem key={option.value} value={option.value}>
                       <span className="flex flex-col gap-0.5">
                         <span className="font-medium">{option.label}</span>
-                        <span className="text-xs text-muted-foreground">{option.description}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {option.description}
+                        </span>
                       </span>
                     </SelectItem>
                   ))}
@@ -857,7 +1001,9 @@ function OperatorPositionManagement({
 
             {/* Slash Coordinator */}
             <div className="space-y-2">
-              <Label htmlFor="slashCoordinator">Slash Coordinator (optional)</Label>
+              <Label htmlFor="slashCoordinator">
+                Slash Coordinator (optional)
+              </Label>
               <Input
                 id="slashCoordinator"
                 placeholder="0x... (leave empty for instant slash)"
@@ -882,7 +1028,11 @@ function OperatorPositionManagement({
             ) : (
               <Plus className="mr-2 size-4" />
             )}
-            {isPending ? "Confirm in wallet..." : isConfirming ? "Creating..." : "Create Position"}
+            {isPending
+              ? "Confirm in wallet..."
+              : isConfirming
+                ? "Creating..."
+                : "Create Position"}
           </Button>
 
           {isSuccess && (
@@ -913,7 +1063,11 @@ function OperatorPositionManagement({
             <Button
               variant="outline"
               onClick={handleAddPositionId}
-              disabled={!newPositionId || isNaN(Number(newPositionId)) || isCheckingPosition}
+              disabled={
+                !newPositionId ||
+                isNaN(Number(newPositionId)) ||
+                isCheckingPosition
+              }
             >
               {isCheckingPosition ? (
                 <Loader2 className="mr-2 size-4 animate-spin" />
@@ -929,8 +1083,8 @@ function OperatorPositionManagement({
               Enter a position ID to view its details
             </div>
           ) : (
-            <ScrollArea className="h-fit max-h-[400px]">
-              <div className="space-y-3">
+            <ScrollArea className="h-fit">
+              <div className="space-y-3 max-h-[400px]">
                 {positionIds.map((positionId) => (
                   <PositionItem
                     key={positionId}
@@ -947,25 +1101,26 @@ function OperatorPositionManagement({
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }
 
 export function CoverageProviderInfo({ contract }: CoverageProviderInfoProps) {
-  const [newStrategyAddress, setNewStrategyAddress] = useState("")
+  const [newStrategyAddress, setNewStrategyAddress] = useState("");
 
   // Check if chainId is supported
   const isChainSupported = supportedChains.some(
     (chain) => chain.id === contract.chainId
-  )
-  const supportedChainId = isChainSupported ? (contract.chainId as SupportedChainId) : undefined
+  );
+  const supportedChainId = isChainSupported
+    ? (contract.chainId as SupportedChainId)
+    : undefined;
 
   // Check for IEigenServiceManager interface support via ERC-165
-  const { isLoading: isCheckingInterface, supports } = useCheckCoverageProviderSupport(
-    contract.address,
-    contract.chainId,
-    ["IEigenServiceManager"]
-  )
-  const isEigenProvider = supports.IEigenServiceManager
+  const { isLoading: isCheckingInterface, supports } =
+    useCheckCoverageProviderSupport(contract.address, contract.chainId, [
+      "IEigenServiceManager",
+    ]);
+  const isEigenProvider = supports.IEigenServiceManager;
 
   // Get whitelisted strategies
   const {
@@ -981,77 +1136,255 @@ export function CoverageProviderInfo({ contract }: CoverageProviderInfoProps) {
     query: {
       enabled: isChainSupported && isEigenProvider,
     },
-  })
+  });
 
   // Write contract hook for adding strategies
-  const { writeContract, isPending, data: hash } = useWriteContract()
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+  const { writeContract, isPending, data: hash } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+    hash,
+  });
 
   // Track previous success state
-  const prevSuccessRef = useRef(false)
+  const prevSuccessRef = useRef(false);
 
   // Refetch after successful add
   useEffect(() => {
     if (isSuccess && !prevSuccessRef.current) {
-      refetch()
+      refetch();
       const timeoutId = setTimeout(() => {
-        setNewStrategyAddress("")
-      }, 0)
-      return () => clearTimeout(timeoutId)
+        setNewStrategyAddress("");
+      }, 0);
+      return () => clearTimeout(timeoutId);
     }
-    prevSuccessRef.current = isSuccess
-  }, [isSuccess, refetch])
+    prevSuccessRef.current = isSuccess;
+  }, [isSuccess, refetch]);
 
   // Derive preview strategy from address input (no state needed)
   const previewStrategy = useMemo(() => {
     if (newStrategyAddress && isAddress(newStrategyAddress)) {
-      return newStrategyAddress as Address
+      return newStrategyAddress as Address;
     }
-    return null
-  }, [newStrategyAddress])
+    return null;
+  }, [newStrategyAddress]);
 
   const strategies = useMemo(() => {
-    if (!whitelistedStrategies) return []
-    return [...(whitelistedStrategies as Address[])]
-  }, [whitelistedStrategies])
+    if (!whitelistedStrategies) return [];
+    return [...(whitelistedStrategies as Address[])];
+  }, [whitelistedStrategies]);
 
   const isValidAddress = useMemo(() => {
-    return newStrategyAddress && isAddress(newStrategyAddress)
-  }, [newStrategyAddress])
+    return newStrategyAddress && isAddress(newStrategyAddress);
+  }, [newStrategyAddress]);
 
   const isAlreadyWhitelisted = useMemo(() => {
-    if (!isValidAddress || !strategies.length) return false
+    if (!isValidAddress || !strategies.length) return false;
     return strategies.some(
       (s) => s.toLowerCase() === newStrategyAddress.toLowerCase()
-    )
-  }, [newStrategyAddress, strategies, isValidAddress])
+    );
+  }, [newStrategyAddress, strategies, isValidAddress]);
 
-  const handleAddStrategy = () => {
+  const handleAddStrategy = useCallback(() => {
     if (!isValidAddress) {
-      toast.error("Please enter a valid strategy address")
-      return
+      toast.error("Please enter a valid strategy address");
+      return;
     }
 
     if (isAlreadyWhitelisted) {
-      toast.error("Strategy is already whitelisted")
-      return
+      toast.error("Strategy is already whitelisted");
+      return;
     }
 
-    writeContract({
-      address: contract.address,
-      abi: iEigenServiceManagerAbi,
-      functionName: "setStrategyWhitelist",
-      args: [newStrategyAddress as `0x${string}`, true],
-      chainId: supportedChainId,
-    }, {
-      onSuccess: (hash) => {
-        toast.success(`Transaction submitted: ${hash.slice(0, 10)}...`)
+    writeContract(
+      {
+        address: contract.address,
+        abi: iEigenServiceManagerAbi,
+        functionName: "setStrategyWhitelist",
+        args: [newStrategyAddress as `0x${string}`, true],
+        chainId: supportedChainId,
       },
-      onError: (error) => {
-        toast.error(error.message.slice(0, 100))
-      },
-    })
-  }
+      {
+        onSuccess: (hash) => {
+          toast.success(`Transaction submitted: ${hash.slice(0, 10)}...`);
+        },
+        onError: (error) => {
+          toast.error(error.message.slice(0, 100));
+        },
+      }
+    );
+  }, [isValidAddress, isAlreadyWhitelisted, writeContract, contract.address, supportedChainId, newStrategyAddress]);
+
+  const eigenProvider = useMemo(() => {
+    return isEigenProvider ? (
+      <>
+        <Separator />
+
+        <h2 className="text-lg font-semibold">Eigen Service Manager Functionality</h2>
+
+        {/* Operator Proxies Management - Deploy and manage EigenOperatorProxy contracts */}
+        <OperatorProxiesManagement contract={contract} />
+
+        {/* Strategy Whitelist Management Card - EigenLayer specific */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Strategy Whitelist</CardTitle>
+                <CardDescription>
+                  Manage which EigenLayer strategies are whitelisted for this
+                  provider
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetch()}
+                disabled={isLoadingStrategies}
+              >
+                {isLoadingStrategies ? (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 size-4" />
+                )}
+                Refresh
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Add Strategy Section */}
+            <div className="space-y-4">
+              <div className="rounded-lg bg-muted/50 p-3">
+                <h4 className="text-sm font-medium">
+                  Add Strategy to Whitelist
+                </h4>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Enter an EigenLayer strategy address to whitelist. Strategy
+                  details will be shown below.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="strategy-address">Strategy Address</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="strategy-address"
+                    placeholder="0x..."
+                    value={newStrategyAddress}
+                    onChange={(e) => setNewStrategyAddress(e.target.value)}
+                    className="font-mono"
+                    disabled={isPending || isConfirming}
+                  />
+                  <Button
+                    onClick={handleAddStrategy}
+                    disabled={
+                      !isValidAddress ||
+                      isAlreadyWhitelisted ||
+                      isPending ||
+                      isConfirming
+                    }
+                  >
+                    {isPending || isConfirming ? (
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                    ) : (
+                      <Plus className="mr-2 size-4" />
+                    )}
+                    {isPending
+                      ? "Confirm..."
+                      : isConfirming
+                        ? "Adding..."
+                        : "Add"}
+                  </Button>
+                </div>
+                {newStrategyAddress && !isValidAddress && (
+                  <p className="text-xs text-destructive">
+                    Please enter a valid Ethereum address
+                  </p>
+                )}
+                {isAlreadyWhitelisted && (
+                  <p className="text-xs text-amber-600">
+                    This strategy is already whitelisted
+                  </p>
+                )}
+              </div>
+
+              {/* Strategy Preview */}
+              {previewStrategy && !isAlreadyWhitelisted && (
+                <div className="space-y-2">
+                  <Label>Strategy Preview</Label>
+                  <StrategyDetails
+                    strategyAddress={previewStrategy}
+                    chainId={supportedChainId}
+                  />
+                </div>
+              )}
+
+              {isSuccess && (
+                <p className="flex items-center gap-2 text-sm text-green-600">
+                  <CheckCircle2 className="size-4" />
+                  Strategy added to whitelist successfully!
+                </p>
+              )}
+            </div>
+
+            <Separator />
+
+            {/* Whitelisted Strategies List */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium">Whitelisted Strategies</h4>
+                <Badge variant="secondary">
+                  {strategies.length} strategies
+                </Badge>
+              </div>
+
+              {isLoadingStrategies && strategies.length === 0 ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : isError ? (
+                <div className="py-8 text-center text-sm text-destructive">
+                  Failed to fetch whitelisted strategies
+                </div>
+              ) : strategies.length === 0 ? (
+                <div className="py-8 text-center text-sm text-muted-foreground">
+                  No strategies whitelisted yet
+                </div>
+              ) : (
+                <ScrollArea className="h-fit max-h-[500px]">
+                  <div className="space-y-4">
+                    {strategies.map((strategyAddress) => (
+                      <WhitelistedStrategyItem
+                        key={strategyAddress}
+                        strategyAddress={strategyAddress}
+                        chainId={supportedChainId}
+                        contractAddress={contract.address}
+                        onRemoveSuccess={() => refetch()}
+                      />
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </>
+    ) : null;
+  }, [
+    isEigenProvider,
+    contract,
+    supportedChainId,
+    isLoadingStrategies,
+    newStrategyAddress,
+    isPending,
+    isConfirming,
+    handleAddStrategy,
+    isValidAddress,
+    isAlreadyWhitelisted,
+    previewStrategy,
+    isSuccess,
+    strategies,
+    isError,
+    refetch,
+  ]);
 
   // Show loading state while checking interface support
   if (isCheckingInterface) {
@@ -1059,9 +1392,7 @@ export function CoverageProviderInfo({ contract }: CoverageProviderInfoProps) {
       <Card>
         <CardHeader>
           <CardTitle>Coverage Provider</CardTitle>
-          <CardDescription>
-            Checking provider capabilities...
-          </CardDescription>
+          <CardDescription>Checking provider capabilities...</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center py-8">
@@ -1069,146 +1400,17 @@ export function CoverageProviderInfo({ contract }: CoverageProviderInfoProps) {
           </div>
         </CardContent>
       </Card>
-    )
-  }
-
-  // If not an EigenLayer provider, show position management only
-  if (!isEigenProvider) {
-    return (
-      <div className="space-y-6">
-        {/* Operator Position Management - Available for all providers */}
-        <OperatorPositionManagement contract={contract} chainId={supportedChainId} />
-      </div>
-    )
+    );
   }
 
   return (
     <div className="space-y-6">
       {/* Operator Position Management - Available for all providers */}
-      <OperatorPositionManagement contract={contract} chainId={supportedChainId} />
-
-      {/* Strategy Whitelist Management Card - EigenLayer specific */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Strategy Whitelist</CardTitle>
-              <CardDescription>
-                Manage which EigenLayer strategies are whitelisted for this provider
-              </CardDescription>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => refetch()}
-              disabled={isLoadingStrategies}
-            >
-              {isLoadingStrategies ? (
-                <Loader2 className="mr-2 size-4 animate-spin" />
-              ) : (
-                <RefreshCw className="mr-2 size-4" />
-              )}
-              Refresh
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Add Strategy Section */}
-          <div className="space-y-4">
-            <div className="rounded-lg bg-muted/50 p-3">
-              <h4 className="text-sm font-medium">Add Strategy to Whitelist</h4>
-              <p className="text-xs text-muted-foreground mt-1">
-                Enter an EigenLayer strategy address to whitelist. Strategy details will be shown below.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="strategy-address">Strategy Address</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="strategy-address"
-                  placeholder="0x..."
-                  value={newStrategyAddress}
-                  onChange={(e) => setNewStrategyAddress(e.target.value)}
-                  className="font-mono"
-                  disabled={isPending || isConfirming}
-                />
-                <Button
-                  onClick={handleAddStrategy}
-                  disabled={!isValidAddress || isAlreadyWhitelisted || isPending || isConfirming}
-                >
-                  {isPending || isConfirming ? (
-                    <Loader2 className="mr-2 size-4 animate-spin" />
-                  ) : (
-                    <Plus className="mr-2 size-4" />
-                  )}
-                  {isPending ? "Confirm..." : isConfirming ? "Adding..." : "Add"}
-                </Button>
-              </div>
-              {newStrategyAddress && !isValidAddress && (
-                <p className="text-xs text-destructive">Please enter a valid Ethereum address</p>
-              )}
-              {isAlreadyWhitelisted && (
-                <p className="text-xs text-amber-600">This strategy is already whitelisted</p>
-              )}
-            </div>
-
-            {/* Strategy Preview */}
-            {previewStrategy && !isAlreadyWhitelisted && (
-              <div className="space-y-2">
-                <Label>Strategy Preview</Label>
-                <StrategyDetails strategyAddress={previewStrategy} chainId={supportedChainId} />
-              </div>
-            )}
-
-            {isSuccess && (
-              <p className="flex items-center gap-2 text-sm text-green-600">
-                <CheckCircle2 className="size-4" />
-                Strategy added to whitelist successfully!
-              </p>
-            )}
-          </div>
-
-          <Separator />
-
-          {/* Whitelisted Strategies List */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium">Whitelisted Strategies</h4>
-              <Badge variant="secondary">{strategies.length} strategies</Badge>
-            </div>
-
-            {isLoadingStrategies && strategies.length === 0 ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="size-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : isError ? (
-              <div className="py-8 text-center text-sm text-destructive">
-                Failed to fetch whitelisted strategies
-              </div>
-            ) : strategies.length === 0 ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">
-                No strategies whitelisted yet
-              </div>
-            ) : (
-              <ScrollArea className="h-fit max-h-[500px]">
-                <div className="space-y-4">
-                  {strategies.map((strategyAddress) => (
-                    <WhitelistedStrategyItem
-                      key={strategyAddress}
-                      strategyAddress={strategyAddress}
-                      chainId={supportedChainId}
-                      contractAddress={contract.address}
-                      onRemoveSuccess={() => refetch()}
-                    />
-                  ))}
-                </div>
-              </ScrollArea>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      <OperatorPositionManagement
+        contract={contract}
+        chainId={supportedChainId}
+      />
+      {eigenProvider}
     </div>
-  )
+  );
 }
-
