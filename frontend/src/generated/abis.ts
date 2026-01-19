@@ -1001,6 +1001,15 @@ export const iEigenServiceManagerAbi = [
     stateMutability: 'nonpayable',
   },
   {
+    type: 'function',
+    inputs: [],
+    name: 'whitelistedStrategies',
+    outputs: [
+      { name: 'strategies', internalType: 'address[]', type: 'address[]' },
+    ],
+    stateMutability: 'view',
+  },
+  {
     type: 'error',
     inputs: [{ name: 'asset', internalType: 'address', type: 'address' }],
     name: 'StrategyAssetAlreadyRegistered',

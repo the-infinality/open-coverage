@@ -316,6 +316,93 @@ contract EigenTest is EigenTestDeployer {
         assertEq(strategies[0], address(_getTestStrategy()));
     }
 
+    function test_whitelistedStrategies() public {
+        // Initially should have 1 strategy (set in setUp)
+        address[] memory strategies = eigenServiceManager.whitelistedStrategies();
+        assertEq(strategies.length, 1);
+        assertEq(strategies[0], address(_getTestStrategy()));
+        assertTrue(eigenServiceManager.isStrategyWhitelisted(address(_getTestStrategy())));
+    }
+
+    function test_whitelistedStrategies_afterRemoval() public {
+        // Remove the strategy from whitelist
+        eigenServiceManager.setStrategyWhitelist(address(_getTestStrategy()), false);
+
+        // Should be empty now
+        address[] memory strategies = eigenServiceManager.whitelistedStrategies();
+        assertEq(strategies.length, 0);
+        assertFalse(eigenServiceManager.isStrategyWhitelisted(address(_getTestStrategy())));
+    }
+
+    function test_whitelistedStrategies_addAndRemove() public {
+        // Start with 1 strategy from setUp
+        address[] memory strategies = eigenServiceManager.whitelistedStrategies();
+        assertEq(strategies.length, 1);
+
+        // Remove the strategy
+        eigenServiceManager.setStrategyWhitelist(address(_getTestStrategy()), false);
+        strategies = eigenServiceManager.whitelistedStrategies();
+        assertEq(strategies.length, 0);
+
+        // Re-add the strategy
+        eigenServiceManager.setStrategyWhitelist(address(_getTestStrategy()), true);
+        strategies = eigenServiceManager.whitelistedStrategies();
+        assertEq(strategies.length, 1);
+        assertEq(strategies[0], address(_getTestStrategy()));
+    }
+
+    function test_RevertWhen_whitelistStrategy_alreadyWhitelisted() public {
+        // Strategy is already whitelisted in setUp
+        assertTrue(eigenServiceManager.isStrategyWhitelisted(address(_getTestStrategy())));
+
+        // Trying to whitelist the same strategy again should fail
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IEigenServiceManager.StrategyAssetAlreadyRegistered.selector,
+                address(_getTestStrategy().underlyingToken())
+            )
+        );
+        eigenServiceManager.setStrategyWhitelist(address(_getTestStrategy()), true);
+    }
+
+    function test_RevertWhen_whitelistStrategy_sameAssetDifferentStrategy() public {
+        // Strategy is already whitelisted in setUp
+        assertTrue(eigenServiceManager.isStrategyWhitelisted(address(_getTestStrategy())));
+
+        // Create a mock strategy with the same underlying token
+        MockStrategy mockStrategy = new MockStrategy(address(_getTestStrategy().underlyingToken()));
+
+        // Trying to whitelist a different strategy with the same asset should fail
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IEigenServiceManager.StrategyAssetAlreadyRegistered.selector,
+                address(_getTestStrategy().underlyingToken())
+            )
+        );
+        eigenServiceManager.setStrategyWhitelist(address(mockStrategy), true);
+    }
+
+    function test_whitelistStrategy_sameAssetAfterRemoval() public {
+        // Strategy is already whitelisted in setUp
+        assertTrue(eigenServiceManager.isStrategyWhitelisted(address(_getTestStrategy())));
+
+        // Create a mock strategy with the same underlying token
+        MockStrategy mockStrategy = new MockStrategy(address(_getTestStrategy().underlyingToken()));
+
+        // First remove the existing strategy
+        eigenServiceManager.setStrategyWhitelist(address(_getTestStrategy()), false);
+        assertFalse(eigenServiceManager.isStrategyWhitelisted(address(_getTestStrategy())));
+
+        // Now we can whitelist the new strategy with the same asset
+        eigenServiceManager.setStrategyWhitelist(address(mockStrategy), true);
+        assertTrue(eigenServiceManager.isStrategyWhitelisted(address(mockStrategy)));
+
+        // Verify the asset is now mapped to the new strategy
+        address[] memory strategies = eigenServiceManager.whitelistedStrategies();
+        assertEq(strategies.length, 1);
+        assertEq(strategies[0], address(mockStrategy));
+    }
+
     function test_RevertWhen_claimPosition_insufficientCoverageOnClaim() public {
         _setupwithAllocations();
 
@@ -1250,5 +1337,20 @@ contract MockSlashCoordinator is ISlashCoordinator {
         } else if (_status == SlashStatus.Failed) {
             emit SlashFailed(claimId);
         }
+    }
+}
+
+// ============ Mock Strategy ============
+
+/// @notice Mock strategy for testing whitelist behavior with same underlying asset
+contract MockStrategy {
+    IERC20 private _underlyingToken;
+
+    constructor(address underlyingToken_) {
+        _underlyingToken = IERC20(underlyingToken_);
+    }
+
+    function underlyingToken() external view returns (IERC20) {
+        return _underlyingToken;
     }
 }

@@ -42,20 +42,32 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
     function setStrategyWhitelist(address strategyAddress, bool whitelisted) external {
         LibDiamond.enforceIsContractOwner();
 
-        if (assetToStrategy[address(IStrategy(strategyAddress).underlyingToken())] != address(0)) {
-            revert StrategyAssetAlreadyRegistered(address(IStrategy(strategyAddress).underlyingToken()));
-        }
+        address underlyingToken = address(IStrategy(strategyAddress).underlyingToken());
+
         if (whitelisted) {
-            assetToStrategy[address(IStrategy(strategyAddress).underlyingToken())] = strategyAddress;
+            if (assetToStrategy[underlyingToken] != address(0)) {
+                revert StrategyAssetAlreadyRegistered(underlyingToken);
+            }
+            assetToStrategy[underlyingToken] = strategyAddress;
+            _strategyWhitelist.set(strategyAddress, 1);
         } else {
-            delete assetToStrategy[address(IStrategy(strategyAddress).underlyingToken())];
+            delete assetToStrategy[underlyingToken];
+            _strategyWhitelist.remove(strategyAddress);
         }
-        strategyWhitelist[strategyAddress] = whitelisted;
     }
 
     /// @inheritdoc IEigenServiceManager
     function isStrategyWhitelisted(address strategy) external view returns (bool) {
-        return strategyWhitelist[strategy];
+        return _strategyWhitelist.contains(strategy);
+    }
+
+    /// @inheritdoc IEigenServiceManager
+    function whitelistedStrategies() external view returns (address[] memory strategies) {
+        uint256 length = _strategyWhitelist.length();
+        strategies = new address[](length);
+        for (uint256 i = 0; i < length; i++) {
+            (strategies[i],) = _strategyWhitelist.at(i);
+        }
     }
 
     /// @inheritdoc IEigenServiceManager

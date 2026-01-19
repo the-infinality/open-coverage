@@ -111,4 +111,8 @@ interface IEigenServiceManager {
     /// @param coverageAgent The coverage agent to get the allocated strategies for
     /// @return strategies The strategy addresses allocated to
     function getAllocationedStrategies(address operator, address coverageAgent) external view returns (address[] memory);
+
+    /// @notice Returns the whitelisted strategies
+    /// @return strategies The whitelisted strategies
+    function whitelistedStrategies() external view returns (address[] memory strategies);
 }

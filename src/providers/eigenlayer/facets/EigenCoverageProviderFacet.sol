@@ -73,7 +73,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
                 IAllocationManager.modifyAllocations.selector
             )) revert NotOperatorAuthorized(createPositionAddtionalData.operator, msg.sender);
 
-        if (!strategyWhitelist[createPositionAddtionalData.strategy]) {
+        if (!_strategyWhitelist.contains(createPositionAddtionalData.strategy)) {
             revert IEigenServiceManager.StrategyNotWhitelisted(createPositionAddtionalData.strategy);
         }
 
