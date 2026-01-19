@@ -12,6 +12,7 @@ import { useCheckCoverageProviderSupport } from "@/hooks/use-interface-support"
 import { useChainFilteredContracts, getSelectedOperatorProxy, getSelectedCoverageAgent } from "@/hooks/use-chain-filtered-contracts"
 import { OperatorProxySelect, CoverageAgentSelect } from "@/components/ContractSelects"
 import { CopyableAddress } from "@/components/ui/copyable-address"
+import { OperatorProxiesManagement } from "@/components/contract-specific-interactions/OperatorProxiesManagement"
 import {
   Card,
   CardContent,
@@ -929,8 +930,8 @@ function OperatorPositionManagement({
               Enter a position ID to view its details
             </div>
           ) : (
-            <ScrollArea className="h-fit max-h-[400px]">
-              <div className="space-y-3">
+            <ScrollArea className="h-fit">
+              <div className="space-y-3 max-h-[400px]">
                 {positionIds.map((positionId) => (
                   <PositionItem
                     key={positionId}
@@ -1082,8 +1083,13 @@ export function CoverageProviderInfo({ contract }: CoverageProviderInfoProps) {
     )
   }
 
+  // EigenLayer provider - show full management interface
+
   return (
     <div className="space-y-6">
+      {/* Operator Proxies Management - Deploy and manage EigenOperatorProxy contracts */}
+      <OperatorProxiesManagement contract={contract} />
+
       {/* Operator Position Management - Available for all providers */}
       <OperatorPositionManagement contract={contract} chainId={supportedChainId} />
 
