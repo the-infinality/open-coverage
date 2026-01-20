@@ -391,7 +391,7 @@ export function OperatorProxiesManagement({ contract }: OperatorProxiesManagemen
                     </div>
                     <Dialog open={isDeployDialogOpen} onOpenChange={setIsDeployDialogOpen}>
                         <DialogTrigger asChild>
-                            <Button size="sm">
+                            <Button size="lg">
                                 <Plus className="mr-2 size-4" />
                                 Deploy New
                             </Button>

@@ -1156,19 +1156,6 @@ export function AssetPriceOracleAndSwapperInteraction({
                             Query price quotes and manage asset pair configurations for swapping
                         </CardDescription>
                     </div>
-                    {/* Swap Slippage Badge - prominently displayed */}
-                    <div className="flex items-center gap-2">
-                        {isLoadingSlippage ? (
-                            <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                            <Badge variant="default" className="text-sm">
-                                Slippage:{" "}
-                                {swapSlippage !== undefined
-                                    ? `${((swapSlippage as number) / 100).toFixed(2)}%`
-                                    : "N/A"}
-                            </Badge>
-                        )}
-                    </div>
                 </div>
             </CardHeader>
             <CardContent>
