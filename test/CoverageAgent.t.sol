@@ -61,7 +61,8 @@ contract MockCoverageProvider is ICoverageProvider {
 
         CoveragePosition memory _position = _positions[positionId];
 
-        bool success = IERC20(ICoverageAgent(_position.coverageAgent).asset()).transferFrom(msg.sender, address(this), reward);
+        bool success =
+            IERC20(ICoverageAgent(_position.coverageAgent).asset()).transferFrom(msg.sender, address(this), reward);
         if (!success) revert RewardTransferFailed();
         emit ClaimIssued(positionId, claimId, amount, duration);
     }
@@ -613,7 +614,7 @@ contract CoverageAgentTest is TestDeployer {
         deal(USDC, coordinator, 10e6);
         vm.prank(coordinator);
         IERC20(USDC).approve(address(coverageAgent), 10e6);
-        
+
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Try to slash as non-coordinator

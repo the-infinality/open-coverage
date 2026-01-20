@@ -17,6 +17,7 @@ import {
 import { OperatorProxySelect, CoverageAgentSelect } from "@/components/ContractSelects"
 import { CopyableAddress } from "@/components/ui/copyable-address"
 import { OperatorProxiesManagement } from "@/components/contract-specific-interactions/OperatorProxiesManagement"
+import { AssetPriceOracleAndSwapperInteraction } from "@/components/contract-specific-interactions/AssetPriceOracleAndSwapperInteraction"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -1056,13 +1057,14 @@ export function CoverageProviderInfo({ contract }: CoverageProviderInfoProps) {
     const isChainSupported = supportedChains.some((chain) => chain.id === contract.chainId)
     const supportedChainId = isChainSupported ? (contract.chainId as SupportedChainId) : undefined
 
-    // Check for IEigenServiceManager interface support via ERC-165
+    // Check for IEigenServiceManager and IAssetPriceOracleAndSwapper interface support via ERC-165
     const { isLoading: isCheckingInterface, supports } = useCheckCoverageProviderSupport(
         contract.address,
         contract.chainId,
-        ["IEigenServiceManager"]
+        ["IEigenServiceManager", "IAssetPriceOracleAndSwapper"]
     )
     const isEigenProvider = supports.IEigenServiceManager
+    const supportsOracleAndSwapper = supports.IAssetPriceOracleAndSwapper
 
     // Get whitelisted strategies
     const {
@@ -1329,6 +1331,12 @@ export function CoverageProviderInfo({ contract }: CoverageProviderInfoProps) {
         refetch,
     ])
 
+    // Memoize strategies for the oracle and swapper component
+    const strategiesForOracleSwapper = useMemo(() => {
+        if (!whitelistedStrategies) return []
+        return [...(whitelistedStrategies as Address[])]
+    }, [whitelistedStrategies])
+
     // Show loading state while checking interface support
     if (isCheckingInterface) {
         return (
@@ -1350,6 +1358,21 @@ export function CoverageProviderInfo({ contract }: CoverageProviderInfoProps) {
         <div className="space-y-6">
             {/* Operator Position Management - Available for all providers */}
             <OperatorPositionManagement contract={contract} chainId={supportedChainId} />
+
+            {/* Asset Price Oracle & Swapper - shown if provider supports the interface */}
+            {supportsOracleAndSwapper && (
+                <>
+                    <Separator />
+                    <h2 className="text-lg font-semibold">Asset Price Oracle & Swapper</h2>
+                    <AssetPriceOracleAndSwapperInteraction
+                        contract={contract}
+                        chainId={supportedChainId}
+                        strategies={strategiesForOracleSwapper}
+                        isLoadingStrategies={isLoadingStrategies}
+                    />
+                </>
+            )}
+
             {eigenProvider}
         </div>
     )

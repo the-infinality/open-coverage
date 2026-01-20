@@ -37,7 +37,7 @@ export function ChainBadge({ chainId, size = "md", showIcon = true, className }:
         <div
             className={cn(
                 "flex items-center rounded-lg border-2 transition-all",
-                "border-border bg-background w-fit mt-2 mb-2",
+                "border-border bg-background w-fit mt-2 mb-2 text-foreground",
                 sizeClasses[size].container,
                 sizeClasses[size].text,
                 className

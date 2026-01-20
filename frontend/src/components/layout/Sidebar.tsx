@@ -89,14 +89,18 @@ export function AppSidebar() {
             <SidebarContent>
                 <SidebarGroup>
                     <SidebarGroupContent>
-                        <SidebarMenu>
+                        <SidebarMenu className="space-y-1">
                             {navItems.map((item) => {
                                 const isActive =
                                     location.pathname === item.href ||
                                     (item.href !== "/" && location.pathname.startsWith(item.href))
                                 return (
                                     <SidebarMenuItem key={item.href}>
-                                        <SidebarMenuButton asChild isActive={isActive}>
+                                        <SidebarMenuButton
+                                            asChild
+                                            isActive={isActive}
+                                            className="h-12 hover:bg-sidebar-accent/60"
+                                        >
                                             <NavLink to={item.href}>
                                                 <item.icon className="size-4" />
                                                 <span>{item.title}</span>

@@ -8,7 +8,7 @@ import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/Enumerable
 import {NotCoverageAgentCoordinator, CoverageProviderNotActive} from "./Errors.sol";
 import {ICoverageAgent, ClaimCoverageRequest, Coverage, Claim} from "./interfaces/ICoverageAgent.sol";
 import {ICoverageProvider, CoverageClaim, CoverageClaimStatus} from "./interfaces/ICoverageProvider.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {SafeERC20} from "@openzeppelin-v5/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @notice An example implementation of a coverage agent.
 /// @dev This is a reference implementation that can be varied for each coordinator.

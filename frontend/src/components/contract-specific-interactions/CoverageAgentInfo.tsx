@@ -1197,7 +1197,7 @@ export function CoverageAgentInfo({ contract }: CoverageAgentInfoProps) {
                         </div>
                         <Button
                             variant="outline"
-                            size="sm"
+                            size="lg"
                             onClick={() => refetch()}
                             disabled={isLoading}
                         >
@@ -1229,6 +1229,7 @@ export function CoverageAgentInfo({ contract }: CoverageAgentInfoProps) {
                                 isConfirming ||
                                 availableProviders.length === 0
                             }
+                            size="lg"
                         >
                             {isPending || isConfirming ? (
                                 <Loader2 className="mr-2 size-4 animate-spin" />
