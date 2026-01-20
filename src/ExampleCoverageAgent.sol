@@ -6,6 +6,7 @@ import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/Enumerable
 import {NotCoverageAgentCoordinator, CoverageProviderNotActive} from "./Errors.sol";
 import {ICoverageAgent, ClaimCoverageRequest, Coverage, Claim} from "./interfaces/ICoverageAgent.sol";
 import {ICoverageProvider, CoverageClaim, CoverageClaimStatus} from "./interfaces/ICoverageProvider.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @notice An example implementation of a coverage agent.
 /// @dev This is a reference implementation that can be varied for each coordinator.
@@ -48,8 +49,7 @@ contract ExampleCoverageAgent is ICoverageAgent {
         if (!_coverageProviders.contains(msg.sender)) {
             revert CoverageProviderNotActive();
         }
-        // TODO: Move out funds to the coverage agent coordinator
-        IERC20(_ASSET).transfer(_COORDINATOR, slashAmount);
+        SafeERC20.safeTransfer(IERC20(_ASSET), _COORDINATOR, slashAmount);
     }
 
     /// @notice Purchase coverage from coverage providers.
@@ -76,7 +76,7 @@ contract ExampleCoverageAgent is ICoverageAgent {
             }
 
             // Approve tokens for the reward
-            IERC20(_ASSET).approve(request.coverageProvider, request.reward);
+            SafeERC20.forceApprove(IERC20(_ASSET), request.coverageProvider, request.reward);
 
             // Call claimCoverage on the coverage provider
             uint256 claimId = ICoverageProvider(request.coverageProvider)

@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react"
-import { type Address, encodeDeployData } from "viem"
+import { useState, useEffect, useRef } from "react"
+import { type Address, encodeDeployData, getContractAddress } from "viem"
 import {
     useAccount,
     useSendTransaction,
@@ -81,14 +81,7 @@ function DeployOperatorProxyForm({
     const [handlerAddress, setHandlerAddress] = useState(connectedAddress)
     const [metadataUri, setMetadataUri] = useState("https://coverage.example.com/operator.json")
 
-    // Set default handler to connected address on mount
-    //   const handlerInitializedRef = useRef(false)
-    //   useEffect(() => {
-    //     if (connectedAddress && !handlerInitializedRef.current) {
-    //       handlerInitializedRef.current = true
-    //       setHandlerAddress(connectedAddress)
-    //     }
-    //   }, [connectedAddress])
+    const successHandledRef = useRef(false)
 
     const { mutate, isPending, data: hash } = useSendTransaction()
     const {
@@ -97,20 +90,51 @@ function DeployOperatorProxyForm({
         data: receipt,
     } = useWaitForTransactionReceipt({ hash })
 
-    // Track deployment success and handle receipt
-    const deployedAddress = useMemo(() => {
-        if (isSuccess && receipt) {
-            const contractAddress = receipt.contractAddress
-            if (contractAddress) {
-                toast.success(`EigenOperatorProxy deployed at ${contractAddress.slice(0, 10)}...`)
-                onSuccess(
-                    contractAddress,
-                    operatorName || `Operator Proxy ${contractAddress.slice(0, 8)}`
-                )
-                return contractAddress
+    // Compute the deployed address from the receipt
+    const deployedAddress = (() => {
+        if (!isSuccess || !receipt) return null
+
+        // Try to get contract address from receipt
+        if (receipt.contractAddress) {
+            return receipt.contractAddress
+        }
+
+        // If contractAddress is null, try to compute it from sender and nonce
+        // This can happen with some RPC providers
+        if (receipt.from) {
+            try {
+                // For contract creation, we need the nonce at time of deployment
+                // The receipt doesn't directly give us this, but we can try to compute
+                return getContractAddress({
+                    from: receipt.from,
+                    nonce: BigInt(receipt.transactionIndex),
+                })
+            } catch {
+                return null
             }
         }
-    }, [isSuccess, receipt, onSuccess, operatorName])
+
+        return null
+    })()
+
+    // Handle side effects (toast, callback) when deployment succeeds
+    useEffect(() => {
+        if (isSuccess && receipt && !successHandledRef.current) {
+            successHandledRef.current = true
+
+            if (deployedAddress) {
+                toast.success(`EigenOperatorProxy deployed at ${deployedAddress.slice(0, 10)}...`)
+                onSuccess(
+                    deployedAddress,
+                    operatorName || `Operator Proxy ${deployedAddress.slice(0, 8)}`
+                )
+            } else {
+                toast.error(
+                    "Deployment succeeded but couldn't extract contract address from receipt"
+                )
+            }
+        }
+    }, [isSuccess, receipt, deployedAddress, onSuccess, operatorName])
 
     const handleDeploy = () => {
         if (!handlerAddress) {
