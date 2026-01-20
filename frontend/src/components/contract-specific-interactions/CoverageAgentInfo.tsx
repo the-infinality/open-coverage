@@ -10,12 +10,7 @@ import {
     Trash2,
     AlertTriangle,
 } from "lucide-react"
-import {
-    useReadContract,
-    useWriteContract,
-    useWaitForTransactionReceipt,
-    useConfig,
-} from "wagmi"
+import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useConfig } from "wagmi"
 import { readContract } from "wagmi/actions"
 import { toast } from "sonner"
 import type { CoverageContract } from "@/types/contracts"
@@ -61,7 +56,10 @@ interface CoverageAgentInfoProps {
 }
 
 // Claim status enum matching the contract
-const CLAIM_STATUS_LABELS: Record<number, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+const CLAIM_STATUS_LABELS: Record<
+    number,
+    { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
+> = {
     0: { label: "Issued", variant: "default" },
     1: { label: "Liquidated", variant: "destructive" },
     2: { label: "Completed", variant: "secondary" },
@@ -169,7 +167,10 @@ function ClaimItem({
     tokenSymbol: string
 }) {
     const { claim, claimId, providerAddress, backing, totalSlashAmount } = claimData
-    const statusInfo = CLAIM_STATUS_LABELS[claim.status] || { label: "Unknown", variant: "outline" as const }
+    const statusInfo = CLAIM_STATUS_LABELS[claim.status] || {
+        label: "Unknown",
+        variant: "outline" as const,
+    }
     const isExpired =
         BigInt(claim.createdAt) + BigInt(claim.duration) < BigInt(Math.floor(Date.now() / 1000))
     const expiryDate = new Date(Number(claim.createdAt + claim.duration) * 1000)
@@ -236,7 +237,9 @@ function ClaimItem({
                 <Separator />
                 <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Backing</span>
-                    <span className={`font-mono ${backing < 0n ? "text-destructive" : "text-green-600"}`}>
+                    <span
+                        className={`font-mono ${backing < 0n ? "text-destructive" : "text-green-600"}`}
+                    >
                         {formatUnits(backing, tokenDecimals)} {tokenSymbol}
                     </span>
                 </div>
@@ -312,9 +315,7 @@ function SlashClaimsDialog({
             }
             const amount = BigInt(Math.floor(parseFloat(amountStr) * 10 ** tokenDecimals))
             if (amount > claim.claim.amount) {
-                toast.error(
-                    `Slash amount for claim #${claim.claimId} exceeds claim amount`
-                )
+                toast.error(`Slash amount for claim #${claim.claimId} exceeds claim amount`)
                 return
             }
             claimIds.push(BigInt(claim.claimId))
@@ -353,8 +354,8 @@ function SlashClaimsDialog({
                         Slash Claims
                     </DialogTitle>
                     <DialogDescription>
-                        Configure slash amounts for each selected claim. The slash will be
-                        executed on the coverage provider contract.
+                        Configure slash amounts for each selected claim. The slash will be executed
+                        on the coverage provider contract.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -378,9 +379,7 @@ function SlashClaimsDialog({
                                         </span>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground">
-                                            Claim Amount
-                                        </span>
+                                        <span className="text-muted-foreground">Claim Amount</span>
                                         <span className="font-mono">
                                             {formatUnits(claimData.claim.amount, tokenDecimals)}{" "}
                                             {tokenSymbol}
@@ -410,10 +409,7 @@ function SlashClaimsDialog({
                                         placeholder={`Max: ${formatUnits(claimData.claim.amount, tokenDecimals)}`}
                                         value={slashAmounts[claimData.claimId] || ""}
                                         onChange={(e) =>
-                                            updateSlashAmount(
-                                                claimData.claimId,
-                                                e.target.value
-                                            )
+                                            updateSlashAmount(claimData.claimId, e.target.value)
                                         }
                                         className="font-mono"
                                         disabled={isPending || isConfirming}
@@ -559,66 +555,73 @@ function CoverageClaimsManagement({
     const prevCreateSuccessRef = useRef(false)
 
     // Load claim function wrapped in useCallback for use in effects
-    const loadClaim = useCallback(async (claimId: number, providerAddress: string) => {
-        if (!chainId) return
+    const loadClaim = useCallback(
+        async (claimId: number, providerAddress: string) => {
+            if (!chainId) return
 
-        setIsLoadingClaim(true)
-        try {
-            const [claim, backing, totalSlashAmount] = await Promise.all([
-                readContract(config, {
-                    address: providerAddress as Address,
-                    abi: iCoverageProviderAbi,
-                    functionName: "claim",
-                    args: [BigInt(claimId)],
-                    chainId,
-                }),
-                readContract(config, {
-                    address: providerAddress as Address,
-                    abi: iCoverageProviderAbi,
-                    functionName: "claimBacking",
-                    args: [BigInt(claimId)],
-                    chainId,
-                }),
-                readContract(config, {
-                    address: providerAddress as Address,
-                    abi: iCoverageProviderAbi,
-                    functionName: "claimTotalSlashAmount",
-                    args: [BigInt(claimId)],
-                    chainId,
-                }),
-            ])
+            setIsLoadingClaim(true)
+            try {
+                const [claim, backing, totalSlashAmount] = await Promise.all([
+                    readContract(config, {
+                        address: providerAddress as Address,
+                        abi: iCoverageProviderAbi,
+                        functionName: "claim",
+                        args: [BigInt(claimId)],
+                        chainId,
+                    }),
+                    readContract(config, {
+                        address: providerAddress as Address,
+                        abi: iCoverageProviderAbi,
+                        functionName: "claimBacking",
+                        args: [BigInt(claimId)],
+                        chainId,
+                    }),
+                    readContract(config, {
+                        address: providerAddress as Address,
+                        abi: iCoverageProviderAbi,
+                        functionName: "claimTotalSlashAmount",
+                        args: [BigInt(claimId)],
+                        chainId,
+                    }),
+                ])
 
-            const claimData = claim as CoverageClaimData
+                const claimData = claim as CoverageClaimData
 
-            // Check if claim exists (has non-zero amount or duration)
-            if (claimData.amount === 0n && claimData.duration === 0n) {
-                toast.error(`Claim #${claimId} does not exist`)
-                return
-            }
-
-            setLoadedClaims((prev) => {
-                // Check if claim already loaded
-                if (prev.some((c) => c.claimId === claimId && c.providerAddress === providerAddress)) {
-                    return prev
+                // Check if claim exists (has non-zero amount or duration)
+                if (claimData.amount === 0n && claimData.duration === 0n) {
+                    toast.error(`Claim #${claimId} does not exist`)
+                    return
                 }
-                return [
-                    ...prev,
-                    {
-                        claimId,
-                        providerAddress: providerAddress as Address,
-                        claim: claimData,
-                        backing: backing as bigint,
-                        totalSlashAmount: totalSlashAmount as bigint,
-                    },
-                ]
-            })
-            toast.success(`Claim #${claimId} loaded`)
-        } catch {
-            toast.error(`Failed to fetch claim #${claimId}`)
-        } finally {
-            setIsLoadingClaim(false)
-        }
-    }, [chainId, config])
+
+                setLoadedClaims((prev) => {
+                    // Check if claim already loaded
+                    if (
+                        prev.some(
+                            (c) => c.claimId === claimId && c.providerAddress === providerAddress
+                        )
+                    ) {
+                        return prev
+                    }
+                    return [
+                        ...prev,
+                        {
+                            claimId,
+                            providerAddress: providerAddress as Address,
+                            claim: claimData,
+                            backing: backing as bigint,
+                            totalSlashAmount: totalSlashAmount as bigint,
+                        },
+                    ]
+                })
+                toast.success(`Claim #${claimId} loaded`)
+            } catch {
+                toast.error(`Failed to fetch claim #${claimId}`)
+            } finally {
+                setIsLoadingClaim(false)
+            }
+        },
+        [chainId, config]
+    )
 
     // Fetch max amount when provider and position are selected
     useEffect(() => {
@@ -690,10 +693,7 @@ function CoverageClaimsManagement({
                                             }>
                                         }
                                         for (const claim of coverage.claims) {
-                                            loadClaim(
-                                                Number(claim.claimId),
-                                                claim.coverageProvider
-                                            )
+                                            loadClaim(Number(claim.claimId), claim.coverageProvider)
                                         }
                                     } catch (error) {
                                         console.error("Error fetching coverage:", error)
@@ -758,7 +758,13 @@ function CoverageClaimsManagement({
     }
 
     const handleCreateClaim = () => {
-        if (!selectedProviderAddress || !positionId || !claimAmount || !claimDuration || !claimReward) {
+        if (
+            !selectedProviderAddress ||
+            !positionId ||
+            !claimAmount ||
+            !claimDuration ||
+            !claimReward
+        ) {
             toast.error("Please fill in all required fields")
             return
         }
@@ -991,9 +997,7 @@ function CoverageClaimsManagement({
                         <div className="flex items-center gap-2">
                             <Badge variant="secondary">{loadedClaims.length} loaded</Badge>
                             {selectedClaimIds.size > 0 && (
-                                <Badge variant="outline">
-                                    {selectedClaimIds.size} selected
-                                </Badge>
+                                <Badge variant="outline">{selectedClaimIds.size} selected</Badge>
                             )}
                         </div>
                     </div>
@@ -1009,7 +1013,7 @@ function CoverageClaimsManagement({
                                 disabled={isLoadingClaim}
                             />
                         </div>
-                        <div className="flex gap-2 sm:items-end">
+                        <div className="flex gap-2 items-center">
                             <Input
                                 placeholder="Claim ID..."
                                 value={newClaimId}
@@ -1091,7 +1095,9 @@ function CoverageClaimsManagement({
                     open={slashDialogOpen}
                     onOpenChange={setSlashDialogOpen}
                     selectedClaims={selectedClaimsForSlash}
-                    providerAddress={selectedClaimsForSlash[0]?.providerAddress || ("0x" as Address)}
+                    providerAddress={
+                        selectedClaimsForSlash[0]?.providerAddress || ("0x" as Address)
+                    }
                     chainId={chainId}
                     tokenDecimals={tokenDecimals}
                     tokenSymbol={tokenSymbol}
@@ -1264,7 +1270,11 @@ export function CoverageAgentInfo({ contract }: CoverageAgentInfoProps) {
                             ) : (
                                 <Plus className="mr-2 size-4" />
                             )}
-                            {isPending ? "Confirming..." : isConfirming ? "Registering..." : "Register"}
+                            {isPending
+                                ? "Confirming..."
+                                : isConfirming
+                                  ? "Registering..."
+                                  : "Register"}
                         </Button>
                     </div>
 
