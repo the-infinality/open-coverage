@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin-v5/contracts/token/ERC20/utils/SafeERC20.sol";
+
+import {IERC20} from "@openzeppelin-v5/contracts/token/ERC20/IERC20.sol";
 import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/EnumerableMap.sol";
 import {NotCoverageAgentCoordinator, CoverageProviderNotActive} from "./Errors.sol";
 import {ICoverageAgent, ClaimCoverageRequest, Coverage, Claim} from "./interfaces/ICoverageAgent.sol";
@@ -66,6 +68,14 @@ contract ExampleCoverageAgent is ICoverageAgent {
         // Initialize coverage storage
         Coverage storage coverageData = _coverages.push();
         Claim[] storage claims = coverageData.claims;
+
+        uint256 totalReward = 0;
+        for (uint256 i = 0; i < requests.length; i++) {
+            totalReward += requests[i].reward;
+        }
+
+        // Transfer rewards from coordinator to the coverage agent for all claims
+        SafeERC20.safeTransferFrom(IERC20(_ASSET), msg.sender, address(this), totalReward);
 
         for (uint256 i = 0; i < requests.length; i++) {
             ClaimCoverageRequest memory request = requests[i];

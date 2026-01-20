@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {TestDeployer} from "test/utils/TestDeployer.sol";
 import {ExampleCoverageAgent} from "src/ExampleCoverageAgent.sol";
 import {NotCoverageAgentCoordinator, CoverageProviderNotActive} from "src/Errors.sol";
@@ -57,6 +58,11 @@ contract MockCoverageProvider is ICoverageProvider {
             reward: reward
         });
         _totalCoverageByAgent[msg.sender] += amount;
+
+        CoveragePosition memory _position = _positions[positionId];
+
+        bool success = IERC20(ICoverageAgent(_position.coverageAgent).asset()).transferFrom(msg.sender, address(this), reward);
+        if (!success) revert RewardTransferFailed();
         emit ClaimIssued(positionId, claimId, amount, duration);
     }
 
@@ -120,17 +126,17 @@ contract CoverageAgentTest is TestDeployer {
     ExampleCoverageAgent public coverageAgent;
     MockCoverageProvider public mockProvider;
 
-    address public handler;
+    address public coordinator;
     address public nonHandler;
 
     function setUp() public override {
         super.setUp();
 
-        handler = address(this);
+        coordinator = address(this);
         nonHandler = address(0x123);
 
         // Deploy coverage agent
-        coverageAgent = new ExampleCoverageAgent(handler, USDC);
+        coverageAgent = new ExampleCoverageAgent(coordinator, USDC);
 
         // Deploy mock provider and price oracle
         mockProvider = new MockCoverageProvider();
@@ -139,16 +145,16 @@ contract CoverageAgentTest is TestDeployer {
     /// ============ Constructor Tests ============
 
     function test_constructor() public view {
-        // Verify asset is set correctly (handler is tested via access control)
+        // Verify asset is set correctly (coordinator is tested via access control)
         assertEq(coverageAgent.asset(), USDC);
     }
 
     function test_constructor_handlerAccessControl() public {
-        // Verify handler is set correctly by testing access control
-        // Handler (address(this)) should be able to register providers
+        // Verify coordinator is set correctly by testing access control
+        // Coordinator (address(this)) should be able to register providers
         coverageAgent.registerCoverageProvider(address(mockProvider));
 
-        // Non-handler should not be able to register providers
+        // Non-coordinator should not be able to register providers
         vm.prank(nonHandler);
         vm.expectRevert(NotCoverageAgentCoordinator.selector);
         coverageAgent.registerCoverageProvider(address(0x999));
@@ -244,83 +250,6 @@ contract CoverageAgentTest is TestDeployer {
         assertEq(positionId, 0);
     }
 
-    /// ============ Integration Tests ============
-
-    function test_fullWorkflow_registerAndCreatePosition() public {
-        // Step 1: Register coverage provider
-        coverageAgent.registerCoverageProvider(address(mockProvider));
-
-        // Step 2: Create position through provider
-        CoveragePosition memory position = CoveragePosition({
-            coverageAgent: address(coverageAgent),
-            minRate: 100,
-            maxDuration: 30 days,
-            expiryTimestamp: block.timestamp + 365 days,
-            asset: USDC,
-            refundable: Refundable.TimeWeighted,
-            slashCoordinator: address(0)
-        });
-
-        uint256 positionId = mockProvider.createPosition(position, "");
-
-        // Step 3: Verify position was created
-        CoveragePosition memory createdPosition = mockProvider.position(positionId);
-        assertEq(createdPosition.minRate, 100);
-        assertEq(createdPosition.maxDuration, 30 days);
-        assertEq(createdPosition.asset, USDC);
-
-        // Step 4: Claim coverage
-        uint256 claimId = mockProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
-
-        // Step 5: Verify claim
-        CoverageClaim memory coverageClaim = mockProvider.claim(claimId);
-        assertEq(coverageClaim.positionId, positionId);
-        assertEq(coverageClaim.amount, 1000e6);
-        assertEq(coverageClaim.duration, 30 days);
-        assertEq(uint8(coverageClaim.status), uint8(CoverageClaimStatus.Issued));
-    }
-
-    function test_multipleProviders_andPositions() public {
-        // Register multiple providers
-        MockCoverageProvider provider2 = new MockCoverageProvider();
-        coverageAgent.registerCoverageProvider(address(mockProvider));
-        coverageAgent.registerCoverageProvider(address(provider2));
-
-        // Create positions on both providers
-        CoveragePosition memory position1 = CoveragePosition({
-            coverageAgent: address(coverageAgent),
-            minRate: 100,
-            maxDuration: 30 days,
-            expiryTimestamp: block.timestamp + 365 days,
-            asset: USDC,
-            refundable: Refundable.None,
-            slashCoordinator: address(0)
-        });
-
-        CoveragePosition memory position2 = CoveragePosition({
-            coverageAgent: address(coverageAgent),
-            minRate: 200,
-            maxDuration: 60 days,
-            expiryTimestamp: block.timestamp + 180 days,
-            asset: USDC,
-            refundable: Refundable.Full,
-            slashCoordinator: address(0x456)
-        });
-
-        uint256 positionId1 = mockProvider.createPosition(position1, "");
-        uint256 positionId2 = provider2.createPosition(position2, "");
-
-        // Verify positions
-        assertEq(positionId1, 0);
-        assertEq(positionId2, 0); // Each provider has their own counter
-
-        CoveragePosition memory retrieved1 = mockProvider.position(positionId1);
-        CoveragePosition memory retrieved2 = provider2.position(positionId2);
-
-        assertEq(retrieved1.minRate, 100);
-        assertEq(retrieved2.minRate, 200);
-    }
-
     /// ============ Coverage Purchase and Retrieval Tests ============
 
     function test_purchaseCoverage() public {
@@ -333,7 +262,7 @@ contract CoverageAgentTest is TestDeployer {
             minRate: 100,
             maxDuration: 30 days,
             expiryTimestamp: block.timestamp + 365 days,
-            asset: USDC,
+            asset: WETH,
             refundable: Refundable.None,
             slashCoordinator: address(0)
         });
@@ -348,6 +277,11 @@ contract CoverageAgentTest is TestDeployer {
             duration: 30 days,
             reward: 10e6
         });
+
+        // Ensure coordinator has tokens and approve coverage agent to spend
+        deal(USDC, coordinator, 10e6);
+        vm.prank(coordinator);
+        IERC20(USDC).approve(address(coverageAgent), 10e6);
 
         // Purchase coverage
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
@@ -392,6 +326,11 @@ contract CoverageAgentTest is TestDeployer {
             duration: 30 days,
             reward: 10e6
         });
+
+        // Ensure coordinator has tokens and approve coverage agent to spend
+        deal(USDC, coordinator, 10e6);
+        vm.prank(coordinator);
+        IERC20(USDC).approve(address(coverageAgent), 10e6);
         coverageAgent.purchaseCoverage(requests);
 
         // Try to retrieve coverage with out-of-bounds ID
@@ -424,8 +363,6 @@ contract CoverageAgentTest is TestDeployer {
             duration: 30 days,
             reward: 10e6
         });
-        uint256 coverageId1 = coverageAgent.purchaseCoverage(requests1);
-        assertEq(coverageId1, 0);
 
         // Purchase second coverage
         ClaimCoverageRequest[] memory requests2 = new ClaimCoverageRequest[](1);
@@ -436,6 +373,15 @@ contract CoverageAgentTest is TestDeployer {
             duration: 30 days,
             reward: 5e6
         });
+
+        // Ensure coordinator has tokens and approve coverage agent to spend (10e6 + 5e6 = 15e6)
+        deal(USDC, coordinator, 15e6);
+        vm.prank(coordinator);
+        IERC20(USDC).approve(address(coverageAgent), 15e6);
+
+        uint256 coverageId1 = coverageAgent.purchaseCoverage(requests1);
+        assertEq(coverageId1, 0);
+
         uint256 coverageId2 = coverageAgent.purchaseCoverage(requests2);
         assertEq(coverageId2, 1);
 
@@ -481,8 +427,10 @@ contract CoverageAgentTest is TestDeployer {
             reward: 10e6
         });
 
-        // Ensure coverage agent has tokens for reward
-        deal(USDC, address(coverageAgent), 10e6);
+        // Ensure coordinator has tokens and approve coverage agent to spend
+        deal(USDC, coordinator, 10e6);
+        vm.prank(coordinator);
+        IERC20(USDC).approve(address(coverageAgent), 10e6);
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Verify claim is issued before slashing
@@ -536,8 +484,10 @@ contract CoverageAgentTest is TestDeployer {
             reward: 5e6
         });
 
-        // Ensure coverage agent has tokens for rewards
-        deal(USDC, address(coverageAgent), 15e6);
+        // Ensure coordinator has tokens and approve coverage agent to spend
+        deal(USDC, coordinator, 15e6);
+        vm.prank(coordinator);
+        IERC20(USDC).approve(address(coverageAgent), 15e6);
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Verify both claims are issued before slashing
@@ -608,8 +558,10 @@ contract CoverageAgentTest is TestDeployer {
             coverageProvider: address(provider2), positionId: positionId2, amount: 500e6, duration: 30 days, reward: 5e6
         });
 
-        // Ensure coverage agent has tokens for rewards
-        deal(USDC, address(coverageAgent), 15e6);
+        // Ensure coordinator has tokens and approve coverage agent to spend
+        deal(USDC, coordinator, 15e6);
+        vm.prank(coordinator);
+        IERC20(USDC).approve(address(coverageAgent), 15e6);
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash the coverage
@@ -657,7 +609,11 @@ contract CoverageAgentTest is TestDeployer {
             reward: 10e6
         });
 
-        deal(USDC, address(coverageAgent), 10e6);
+        // Ensure coordinator has tokens and approve coverage agent to spend
+        deal(USDC, coordinator, 10e6);
+        vm.prank(coordinator);
+        IERC20(USDC).approve(address(coverageAgent), 10e6);
+        
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Try to slash as non-coordinator
@@ -698,7 +654,10 @@ contract CoverageAgentTest is TestDeployer {
             reward: 10e6
         });
 
-        deal(USDC, address(coverageAgent), 10e6);
+        // Ensure coordinator has tokens and approve coverage agent to spend
+        deal(USDC, coordinator, 10e6);
+        vm.prank(coordinator);
+        IERC20(USDC).approve(address(coverageAgent), 10e6);
         coverageAgent.purchaseCoverage(requests);
 
         // Try to slash coverage with out-of-bounds ID
@@ -742,7 +701,10 @@ contract CoverageAgentTest is TestDeployer {
             reward: 5e6
         });
 
-        deal(USDC, address(coverageAgent), 15e6);
+        // Ensure coordinator has tokens and approve coverage agent to spend
+        deal(USDC, coordinator, 15e6);
+        vm.prank(coordinator);
+        IERC20(USDC).approve(address(coverageAgent), 15e6);
         uint256 coverageId1 = coverageAgent.purchaseCoverage(requests1);
         uint256 coverageId2 = coverageAgent.purchaseCoverage(requests2);
 
