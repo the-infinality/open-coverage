@@ -137,10 +137,11 @@ function StrategyAssetOption({
         strategyAddress,
         chainId
     )
-    const { tokenName, tokenSymbol, isLoading: isLoadingInfo } = useTokenInfo(
-        underlyingToken,
-        chainId
-    )
+    const {
+        tokenName,
+        tokenSymbol,
+        isLoading: isLoadingInfo,
+    } = useTokenInfo(underlyingToken, chainId)
 
     if (isLoadingToken || isLoadingInfo) {
         return (
@@ -198,7 +199,8 @@ function QuoteResults({
                         <span className="text-muted-foreground">Quote</span>
                         <div className="flex items-center gap-2">
                             <span className="font-mono">
-                                {formatUnits(quote, assetADecimals || 18)} {assetASymbol || "tokens"}
+                                {formatUnits(quote, assetADecimals || 18)}{" "}
+                                {assetASymbol || "tokens"}
                             </span>
                             {verified !== undefined && (
                                 <Badge variant={verified ? "default" : "secondary"}>
@@ -212,7 +214,8 @@ function QuoteResults({
                     <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">Min Amount Out (swap input)</span>
                         <span className="font-mono">
-                            {formatUnits(minAmountOut, assetADecimals || 18)} {assetASymbol || "tokens"}
+                            {formatUnits(minAmountOut, assetADecimals || 18)}{" "}
+                            {assetASymbol || "tokens"}
                         </span>
                     </div>
                 )}
@@ -220,7 +223,8 @@ function QuoteResults({
                     <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">Max Amount In (swap output)</span>
                         <span className="font-mono">
-                            {formatUnits(maxAmountIn, assetBDecimals || 18)} {assetBSymbol || "tokens"}
+                            {formatUnits(maxAmountIn, assetBDecimals || 18)}{" "}
+                            {assetBSymbol || "tokens"}
                         </span>
                     </div>
                 )}
@@ -367,11 +371,7 @@ function ReadSection({
         chainId,
         query: {
             enabled:
-                quoteType === "getQuote" &&
-                !!parsedAmount &&
-                !!assetA &&
-                !!assetB &&
-                !!chainId,
+                quoteType === "getQuote" && !!parsedAmount && !!assetA && !!assetB && !!chainId,
         },
     })
 
@@ -388,11 +388,7 @@ function ReadSection({
         chainId,
         query: {
             enabled:
-                quoteType === "swapForInput" &&
-                !!parsedAmount &&
-                !!assetA &&
-                !!assetB &&
-                !!chainId,
+                quoteType === "swapForInput" && !!parsedAmount && !!assetA && !!assetB && !!chainId,
         },
     })
 
@@ -788,8 +784,7 @@ function WriteSection({
             poolInfo: (poolInfo || "0x") as `0x${string}`,
             priceStrategy: Number(priceStrategy),
             swapperAccuracy: Number(swapperAccuracy),
-            priceOracle: (priceOracle ||
-                "0x0000000000000000000000000000000000000000") as Address,
+            priceOracle: (priceOracle || "0x0000000000000000000000000000000000000000") as Address,
         }
 
         writeRegister(
@@ -821,7 +816,15 @@ function WriteSection({
             (priceStrategy === "1" || // Swapper Only doesn't need oracle
                 (priceOracle && isAddress(priceOracle))) // Other strategies need oracle
         )
-    }, [assetA, assetB, isValidSwapEngine, isValidPoolInfo, isValidPriceOracle, priceStrategy, priceOracle])
+    }, [
+        assetA,
+        assetB,
+        isValidSwapEngine,
+        isValidPoolInfo,
+        isValidPriceOracle,
+        priceStrategy,
+        priceOracle,
+    ])
 
     return (
         <div className="space-y-6">
@@ -996,7 +999,8 @@ function WriteSection({
                         <p className="text-xs text-destructive">Invalid address</p>
                     )}
                     <p className="text-xs text-muted-foreground">
-                        The swap engine contract that handles token swaps (e.g., UniswapV3SwapperEngine)
+                        The swap engine contract that handles token swaps (e.g.,
+                        UniswapV3SwapperEngine)
                     </p>
                 </div>
 
@@ -1014,7 +1018,8 @@ function WriteSection({
                         <p className="text-xs text-destructive">Must start with 0x</p>
                     )}
                     <p className="text-xs text-muted-foreground">
-                        Pool-specific information for the swap engine (e.g., encoded pool fee for Uniswap)
+                        Pool-specific information for the swap engine (e.g., encoded pool fee for
+                        Uniswap)
                     </p>
                 </div>
 
@@ -1033,12 +1038,12 @@ function WriteSection({
                             <SelectContent>
                                 {PRICE_STRATEGY_OPTIONS.map((option) => (
                                     <SelectItem key={option.value} value={option.value}>
-                                        <span className="flex flex-col gap-0.5">
-                                            <span className="font-medium">{option.label}</span>
-                                            <span className="text-xs text-muted-foreground">
+                                        <div className="flex flex-col gap-0.5 items-start">
+                                            <div className="font-medium">{option.label}</div>
+                                            <div className="text-xs text-muted-foreground">
                                                 {option.description}
-                                            </span>
-                                        </span>
+                                            </div>
+                                        </div>
                                     </SelectItem>
                                 ))}
                             </SelectContent>
@@ -1066,9 +1071,7 @@ function WriteSection({
                 <div className="space-y-2">
                     <Label>
                         Price Oracle Address
-                        {priceStrategy !== "1" && (
-                            <span className="text-destructive ml-1">*</span>
-                        )}
+                        {priceStrategy !== "1" && <span className="text-destructive ml-1">*</span>}
                     </Label>
                     <Input
                         placeholder="0x... (required for oracle-based strategies)"
@@ -1082,7 +1085,8 @@ function WriteSection({
                     )}
                     {priceStrategy !== "1" && !priceOracle && (
                         <p className="text-xs text-amber-600">
-                            Price oracle is required for {PRICE_STRATEGY_OPTIONS[Number(priceStrategy)]?.label} strategy
+                            Price oracle is required for{" "}
+                            {PRICE_STRATEGY_OPTIONS[Number(priceStrategy)]?.label} strategy
                         </p>
                     )}
                 </div>

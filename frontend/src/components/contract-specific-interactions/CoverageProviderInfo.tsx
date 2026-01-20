@@ -1331,6 +1331,12 @@ export function CoverageProviderInfo({ contract }: CoverageProviderInfoProps) {
         refetch,
     ])
 
+    // Memoize strategies for the oracle and swapper component
+    const strategiesForOracleSwapper = useMemo(() => {
+        if (!whitelistedStrategies) return []
+        return [...(whitelistedStrategies as Address[])]
+    }, [whitelistedStrategies])
+
     // Show loading state while checking interface support
     if (isCheckingInterface) {
         return (
@@ -1348,17 +1354,11 @@ export function CoverageProviderInfo({ contract }: CoverageProviderInfoProps) {
         )
     }
 
-    // Memoize strategies for the oracle and swapper component
-    const strategiesForOracleSwapper = useMemo(() => {
-        if (!whitelistedStrategies) return []
-        return [...(whitelistedStrategies as Address[])]
-    }, [whitelistedStrategies])
-
     return (
         <div className="space-y-6">
             {/* Operator Position Management - Available for all providers */}
             <OperatorPositionManagement contract={contract} chainId={supportedChainId} />
-            
+
             {/* Asset Price Oracle & Swapper - shown if provider supports the interface */}
             {supportsOracleAndSwapper && (
                 <>
@@ -1372,7 +1372,7 @@ export function CoverageProviderInfo({ contract }: CoverageProviderInfoProps) {
                     />
                 </>
             )}
-            
+
             {eigenProvider}
         </div>
     )
