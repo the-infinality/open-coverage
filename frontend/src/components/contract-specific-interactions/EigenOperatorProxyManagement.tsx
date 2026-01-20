@@ -347,22 +347,6 @@ function OperatorStrategiesCard({
         },
     })
 
-    // Get allocated sets
-    const {
-        data: allocatedSets,
-        isLoading: isLoadingAllocated,
-        refetch: refetchAllocated,
-    } = useReadContract({
-        address: eigenAddresses?.allocationManager,
-        abi: iAllocationManagerAbi,
-        functionName: "getAllocatedSets",
-        args: [contract.address],
-        chainId,
-        query: {
-            enabled: !!eigenAddresses && !!chainId,
-        },
-    })
-
     // Get allocation delay
     const {
         data: allocationDelay,
@@ -379,11 +363,10 @@ function OperatorStrategiesCard({
         },
     })
 
-    const isLoading = isLoadingSets || isLoadingAllocated || isLoadingDelay
+    const isLoading = isLoadingSets || isLoadingDelay
 
     const refetch = () => {
         refetchSets()
-        refetchAllocated()
         refetchDelay()
     }
 
@@ -435,13 +418,13 @@ function OperatorStrategiesCard({
                         )}
 
                         {/* Registered Operator Sets */}
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                             <Label className="text-sm font-medium flex items-center gap-2">
                                 <Shield className="size-4 text-blue-500" />
                                 Registered Operator Sets ({registeredSets?.length ?? 0})
                             </Label>
                             {registeredSets && registeredSets.length > 0 ? (
-                                <div className="space-y-2">
+                                <div className="grid gap-4">
                                     {registeredSets.map((set) => (
                                         <OperatorSetCard
                                             key={`${set.avs}-${set.id}`}
@@ -456,46 +439,6 @@ function OperatorStrategiesCard({
                                 <p className="text-sm text-muted-foreground p-3 rounded-lg border border-dashed">
                                     No registered operator sets. Register with a coverage agent to
                                     start receiving allocations.
-                                </p>
-                            )}
-                        </div>
-
-                        <Separator />
-
-                        {/* Allocated Sets Summary */}
-                        <div className="space-y-2">
-                            <Label className="text-sm font-medium flex items-center gap-2">
-                                <Coins className="size-4 text-green-500" />
-                                Allocated Sets ({allocatedSets?.length ?? 0})
-                            </Label>
-                            {allocatedSets && allocatedSets.length > 0 ? (
-                                <div className="grid gap-2">
-                                    {allocatedSets.map((set) => (
-                                        <div
-                                            key={`${set.avs}-${set.id}`}
-                                            className="flex items-center justify-between p-2 rounded-lg border bg-green-500/5 border-green-500/20"
-                                        >
-                                            <div className="flex items-center gap-2">
-                                                <div className="size-8 rounded-full bg-green-500/10 flex items-center justify-center">
-                                                    <Layers className="size-4 text-green-500" />
-                                                </div>
-                                                <div>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        AVS
-                                                    </p>
-                                                    <p className="font-mono text-xs">
-                                                        {set.avs.slice(0, 10)}...{set.avs.slice(-8)}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <Badge variant="outline">Set #{set.id}</Badge>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <p className="text-sm text-muted-foreground p-3 rounded-lg border border-dashed">
-                                    No allocations yet. Use the Allocate tab to allocate to
-                                    strategies.
                                 </p>
                             )}
                         </div>
@@ -543,7 +486,7 @@ function OperatorSetCard({
     })
 
     return (
-        <div className="rounded-lg border p-3 space-y-3">
+        <div className="rounded-lg border p-4 space-y-3">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <div className="size-8 rounded-full bg-blue-500/10 flex items-center justify-center">
@@ -551,22 +494,28 @@ function OperatorSetCard({
                     </div>
                     <div>
                         <p className="text-sm font-medium">Operator Set #{operatorSet.id}</p>
-                        <p className="text-xs text-muted-foreground font-mono">
-                            {operatorSet.avs.slice(0, 10)}...{operatorSet.avs.slice(-8)}
-                        </p>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <span>AVS:</span>
+                            <CopyableAddress
+                                address={operatorSet.avs}
+                                truncateChars={6}
+                                variant="inline"
+                                size="sm"
+                            />
+                        </div>
                     </div>
                 </div>
                 <Badge variant="secondary" className="text-xs">
-                    {strategies?.length ?? 0} strategies
+                    {allocatedStrategies?.length ?? 0} / {strategies?.length ?? 0} allocated
                 </Badge>
             </div>
 
             {allocatedStrategies && allocatedStrategies.length > 0 && (
-                <div className="space-y-2 pt-2 border-t">
+                <div className="space-y-2 pt-3 border-t">
                     <p className="text-xs font-medium text-muted-foreground">
                         Allocated Strategies
                     </p>
-                    <div className="grid gap-1">
+                    <div className="grid gap-2">
                         {allocatedStrategies.map((strategy) => (
                             <StrategyAllocationRow
                                 key={strategy}
@@ -584,7 +533,7 @@ function OperatorSetCard({
     )
 }
 
-// Strategy allocation row with magnitude
+// Strategy allocation row with magnitude, token info
 function StrategyAllocationRow({
     strategy,
     operatorAddress,
@@ -609,19 +558,70 @@ function StrategyAllocationRow({
         },
     })
 
+    // Get strategy underlying token
+    const { data: underlyingToken } = useReadContract({
+        address: strategy,
+        abi: iStrategyAbi,
+        functionName: "underlyingToken",
+        chainId,
+        query: {
+            enabled: !!chainId,
+        },
+    })
+
+    // Get token symbol
+    const { data: tokenSymbol } = useReadContract({
+        address: underlyingToken as `0x${string}`,
+        abi: ierc20Abi,
+        functionName: "symbol",
+        chainId,
+        query: {
+            enabled: !!underlyingToken && !!chainId,
+        },
+    })
+
     const formatMagnitude = (magnitude: bigint) => {
         const percentage = Number(magnitude) / 1e16
         return percentage.toFixed(2) + "%"
     }
 
     return (
-        <div className="flex items-center justify-between py-1 px-2 rounded bg-muted/30 text-xs">
-            <span className="font-mono text-muted-foreground">
-                {strategy.slice(0, 8)}...{strategy.slice(-6)}
-            </span>
-            {allocation && (
-                <span className="font-medium">{formatMagnitude(allocation.currentMagnitude)}</span>
-            )}
+        <div className="rounded-lg border bg-card p-3 space-y-2">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <Coins className="size-4 text-primary" />
+                    <span className="font-medium">{tokenSymbol || "Loading..."}</span>
+                </div>
+                {allocation && (
+                    <Badge variant="secondary" className="font-mono">
+                        {formatMagnitude(allocation.currentMagnitude)}
+                    </Badge>
+                )}
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                    <p className="text-muted-foreground mb-0.5">Strategy</p>
+                    <CopyableAddress
+                        address={strategy}
+                        truncateChars={6}
+                        variant="inline"
+                        size="sm"
+                    />
+                </div>
+                <div>
+                    <p className="text-muted-foreground mb-0.5">Underlying Token</p>
+                    {underlyingToken ? (
+                        <CopyableAddress
+                            address={underlyingToken}
+                            truncateChars={6}
+                            variant="inline"
+                            size="sm"
+                        />
+                    ) : (
+                        <span className="text-muted-foreground">Loading...</span>
+                    )}
+                </div>
+            </div>
         </div>
     )
 }
