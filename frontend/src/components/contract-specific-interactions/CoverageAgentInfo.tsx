@@ -649,46 +649,76 @@ function CoverageClaimsManagement({
         fetchMaxAmount()
     }, [selectedProviderAddress, positionId, chainId, config])
 
-    // Parse claim ID from transaction logs when claim is created successfully
+    // Parse coverage ID from transaction logs when coverage is purchased successfully
     useEffect(() => {
         if (isSuccess && receipt && !prevCreateSuccessRef.current) {
-            try {
-                // Find the ClaimIssued event in the logs
-                for (const log of receipt.logs) {
-                    try {
-                        const decoded = decodeEventLog({
-                            abi: iCoverageProviderAbi,
-                            data: log.data,
-                            topics: log.topics,
-                        })
+            const loadCoverageClaimsAsync = async () => {
+                try {
+                    // Find the CoverageClaimed event in the logs
+                    for (const log of receipt.logs) {
+                        try {
+                            const decoded = decodeEventLog({
+                                abi: iCoverageAgentAbi,
+                                data: log.data,
+                                topics: log.topics,
+                            })
 
-                        if (
-                            decoded.eventName === "ClaimIssued" &&
-                            decoded.args &&
-                            "claimId" in decoded.args
-                        ) {
-                            const newClaimId = Number(decoded.args.claimId)
-                            toast.success(`Claim #${newClaimId} created successfully!`)
-                            // Optionally auto-load the claim
-                            loadClaim(newClaimId, selectedProviderAddress)
-                            break
+                            if (
+                                decoded.eventName === "CoverageClaimed" &&
+                                decoded.args &&
+                                "coverageId" in decoded.args
+                            ) {
+                                const coverageId = Number(decoded.args.coverageId)
+                                toast.success(`Coverage #${coverageId} purchased successfully!`)
+
+                                // Fetch the coverage to get the claims
+                                if (chainId) {
+                                    try {
+                                        const coverageData = await readContract(config, {
+                                            address: contract.address,
+                                            abi: iCoverageAgentAbi,
+                                            functionName: "coverage",
+                                            args: [BigInt(coverageId)],
+                                            chainId,
+                                        })
+
+                                        // Load each claim from the coverage
+                                        const coverage = coverageData as {
+                                            claims: Array<{
+                                                coverageProvider: Address
+                                                claimId: bigint
+                                            }>
+                                        }
+                                        for (const claim of coverage.claims) {
+                                            loadClaim(
+                                                Number(claim.claimId),
+                                                claim.coverageProvider
+                                            )
+                                        }
+                                    } catch (error) {
+                                        console.error("Error fetching coverage:", error)
+                                    }
+                                }
+                                break
+                            }
+                        } catch {
+                            // Not the event we're looking for, continue
                         }
-                    } catch {
-                        // Not the event we're looking for, continue
                     }
+                } catch (error) {
+                    console.error("Error parsing coverage creation logs:", error)
                 }
-            } catch (error) {
-                console.error("Error parsing claim creation logs:", error)
+                // Reset form
+                setPositionId("")
+                setClaimAmount("")
+                setClaimDuration("30")
+                setClaimReward("")
+                setPositionMaxAmount(null)
             }
-            // Reset form
-            setPositionId("")
-            setClaimAmount("")
-            setClaimDuration("30")
-            setClaimReward("")
-            setPositionMaxAmount(null)
+            loadCoverageClaimsAsync()
         }
         prevCreateSuccessRef.current = isSuccess
-    }, [isSuccess, receipt, selectedProviderAddress, loadClaim])
+    }, [isSuccess, receipt, loadClaim, chainId, config, contract.address])
 
     const handleAddClaim = async () => {
         const id = Number(newClaimId)
@@ -737,12 +767,21 @@ function CoverageClaimsManagement({
         const duration = BigInt(Number(claimDuration) * 24 * 60 * 60) // days to seconds
         const reward = BigInt(Math.floor(parseFloat(claimReward) * 10 ** tokenDecimals))
 
+        // Create the ClaimCoverageRequest struct for purchaseCoverage
+        const request = {
+            coverageProvider: selectedProviderAddress as Address,
+            positionId: BigInt(positionId),
+            amount,
+            reward,
+            duration,
+        }
+
         writeContract(
             {
-                address: selectedProviderAddress as Address,
-                abi: iCoverageProviderAbi,
-                functionName: "claimCoverage",
-                args: [BigInt(positionId), amount, duration, reward],
+                address: contract.address,
+                abi: iCoverageAgentAbi,
+                functionName: "purchaseCoverage",
+                args: [[request]],
                 chainId,
             },
             {
