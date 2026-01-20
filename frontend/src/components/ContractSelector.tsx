@@ -68,10 +68,10 @@ export function ContractSelector({
                         {allContracts.map((contract) => (
                             <SelectItem key={contract.id} value={contract.id}>
                                 <div className="flex items-center gap-2">
-                                    <span>{contract.name}</span>
-                                    <span className="text-muted-foreground">
+                                    <div>{contract.name}</div>
+                                    <div className="text-muted-foreground">
                                         ({truncateAddress(contract.address)})
-                                    </span>
+                                    </div>
                                     <ChainBadge
                                         chainId={contract.chainId}
                                         size="sm"

@@ -680,12 +680,12 @@ function StrategySelectItem({
 
     return (
         <SelectItem value={address} className="font-mono">
-            <span className="flex flex-col gap-0.5">
-                <span className="font-sans font-medium">{tokenSymbol || "Loading..."}</span>
-                <span className="text-xs text-muted-foreground">
+            <div className="flex flex-col gap-0.5 items-start">
+                <div className="font-sans font-medium">{tokenSymbol || "Loading..."}</div>
+                <div className="text-xs text-muted-foreground">
                     {address.slice(0, 10)}...{address.slice(-8)}
-                </span>
-            </span>
+                </div>
+            </div>
         </SelectItem>
     )
 }

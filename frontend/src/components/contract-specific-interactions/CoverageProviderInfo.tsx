@@ -936,12 +936,12 @@ function OperatorPositionManagement({
                                 <SelectContent>
                                     {REFUNDABLE_OPTIONS.map((option) => (
                                         <SelectItem key={option.value} value={option.value}>
-                                            <span className="flex flex-col gap-0.5">
-                                                <span className="font-medium">{option.label}</span>
-                                                <span className="text-xs text-muted-foreground">
+                                            <div className="flex flex-col gap-0.5 items-start">
+                                                <div className="font-medium">{option.label}</div>
+                                                <div className="text-xs text-muted-foreground">
                                                     {option.description}
-                                                </span>
-                                            </span>
+                                                </div>
+                                            </div>
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
