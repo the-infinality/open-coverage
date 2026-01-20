@@ -301,18 +301,18 @@ function StrategyAssetOption({
     }
 
     return (
-        <span className="flex flex-col gap-0.5">
-            <span className="font-medium">
+        <div className="flex flex-col gap-0.5 items-start">
+            <div className="font-medium">
                 {info.tokenName && info.tokenSymbol
                     ? `${info.tokenName} (${info.tokenSymbol})`
                     : info.assetAddress
                       ? `${info.assetAddress.slice(0, 10)}...${info.assetAddress.slice(-8)}`
                       : "Unknown Asset"}
-            </span>
-            <span className="text-xs text-muted-foreground">
+            </div>
+            <div className="text-xs text-muted-foreground">
                 Strategy: {strategyAddress.slice(0, 10)}...{strategyAddress.slice(-8)}
-            </span>
-        </span>
+            </div>
+        </div>
     )
 }
 
@@ -791,22 +791,32 @@ function OperatorPositionManagement({
 
                     <div className="grid gap-4 md:grid-cols-2">
                         {/* Operator Agent Selection */}
-                        <OperatorProxySelect
-                            value={selectedOperatorId}
-                            onValueChange={setSelectedOperatorId}
-                            chainId={contract.chainId}
-                            description="The operator agent that will provide coverage"
-                            disabled={isPending || isConfirming}
-                        />
+                        <div className="space-y-2">
+                            <Label>Operator Agent</Label>
+                            <OperatorProxySelect
+                                selectedContractId={selectedOperatorId}
+                                onSelectedContractIdChange={setSelectedOperatorId}
+                                contracts={operatorProxies}
+                                disabled={isPending || isConfirming}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                The operator agent that will provide coverage
+                            </p>
+                        </div>
 
                         {/* Coverage Agent Selection */}
-                        <CoverageAgentSelect
-                            value={selectedCoverageAgentId}
-                            onValueChange={setSelectedCoverageAgentId}
-                            chainId={contract.chainId}
-                            description="The coverage agent that will receive protection"
-                            disabled={isPending || isConfirming}
-                        />
+                        <div className="space-y-2">
+                            <Label>Coverage Agent</Label>
+                            <CoverageAgentSelect
+                                selectedContractId={selectedCoverageAgentId}
+                                onSelectedContractIdChange={setSelectedCoverageAgentId}
+                                contracts={coverageAgents}
+                                disabled={isPending || isConfirming}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                The coverage agent that will receive protection
+                            </p>
+                        </div>
                     </div>
 
                     {/* Strategy/Asset Selection */}

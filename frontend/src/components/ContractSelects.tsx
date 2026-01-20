@@ -1,191 +1,125 @@
 import {
-    useChainFilteredContracts,
-    useAvailableCoverageProviders,
-} from "@/hooks/use-chain-filtered-contracts"
-import { Label } from "@/components/ui/label"
-import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import type { CoverageContract } from "@/types/contracts"
 
-export interface OperatorProxySelectProps {
+/**
+ * Props for the base ContractSelect component
+ */
+export interface ContractSelectProps {
     /** The selected contract ID */
-    value: string
+    selectedContractId?: string
     /** Called with the contract ID when selection changes */
-    onValueChange: (contractId: string) => void
-    chainId: number
-    label?: string
+    onSelectedContractIdChange: (contractId: string) => void
+    /** The contracts to display in the select */
+    contracts: CoverageContract[]
+    /** The placeholder to display for the select */
     placeholder?: string
-    description?: string
+    /** Message to display when no contracts are available */
+    emptyMessage?: React.ReactNode
+    /** Whether the select is disabled */
     disabled?: boolean
 }
 
 /**
- * Dropdown select for choosing an EigenOperatorProxy from saved contracts
- * Returns the contract ID as the value (use getSelectedOperatorProxy to get the full contract)
+ * Base component for selecting a contract from a list
+ * Renders just the select dropdown with contract name and truncated address
+ */
+export function ContractSelect({
+    selectedContractId,
+    onSelectedContractIdChange,
+    contracts,
+    placeholder = "Select contract...",
+    emptyMessage = "No contracts available",
+    disabled,
+}: ContractSelectProps) {
+    return (
+        <Select
+            value={selectedContractId}
+            onValueChange={onSelectedContractIdChange}
+            disabled={disabled}
+        >
+            <SelectTrigger className="font-mono">
+                <SelectValue placeholder={placeholder} />
+            </SelectTrigger>
+            <SelectContent>
+                {contracts.length === 0 ? (
+                    <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+                        {emptyMessage}
+                    </div>
+                ) : (
+                    contracts.map((c) => (
+                        <SelectItem key={c.id} value={c.id} className="font-mono">
+                            <div className="flex flex-col gap-0.5 items-start">
+                                <div className="font-sans font-medium">{c.name}</div>
+                                <div className="text-xs text-muted-foreground">
+                                    {c.address.slice(0, 10)}...{c.address.slice(-8)}
+                                </div>
+                            </div>
+                        </SelectItem>
+                    ))
+                )}
+            </SelectContent>
+        </Select>
+    )
+}
+
+/**
+ * Props for specialized select components
+ */
+type SpecializedSelectProps = Omit<ContractSelectProps, "placeholder" | "emptyMessage"> & {
+    placeholder?: string
+    emptyMessage?: React.ReactNode
+}
+
+/**
+ * Dropdown select for choosing an EigenOperatorProxy from a list of contracts
+ * Provides sensible defaults for placeholder and empty message
  */
 export function OperatorProxySelect({
-    value,
-    onValueChange,
-    chainId,
-    label = "Operator Agent",
     placeholder = "Select operator agent...",
-    description,
-    disabled,
-}: OperatorProxySelectProps) {
-    const { operatorProxies } = useChainFilteredContracts(chainId)
-
-    return (
-        <div className="space-y-2">
-            <Label>{label}</Label>
-            <Select value={value} onValueChange={onValueChange} disabled={disabled}>
-                <SelectTrigger className="font-mono">
-                    <SelectValue placeholder={placeholder} />
-                </SelectTrigger>
-                <SelectContent>
-                    {operatorProxies.length === 0 ? (
-                        <div className="px-2 py-4 text-center text-sm text-muted-foreground">
-                            No operator agents saved on this chain.
-                            <br />
-                            Add an EigenOperatorProxy contract first.
-                        </div>
-                    ) : (
-                        operatorProxies.map((op) => (
-                            <SelectItem key={op.id} value={op.id} className="font-mono">
-                                <span className="flex flex-col gap-0.5">
-                                    <span className="font-sans font-medium">{op.name}</span>
-                                    <span className="text-xs text-muted-foreground">
-                                        {op.address.slice(0, 10)}...{op.address.slice(-8)}
-                                    </span>
-                                </span>
-                            </SelectItem>
-                        ))
-                    )}
-                </SelectContent>
-            </Select>
-            {description && <p className="text-xs text-muted-foreground">{description}</p>}
-        </div>
-    )
-}
-
-export interface CoverageAgentSelectProps {
-    /** The selected contract ID */
-    value: string
-    /** Called with the contract ID when selection changes */
-    onValueChange: (contractId: string) => void
-    chainId: number
-    description?: string
-    disabled?: boolean
+    emptyMessage = (
+        <>
+            No operator agents saved on this chain.
+            <br />
+            Add an EigenOperatorProxy contract first.
+        </>
+    ),
+    ...props
+}: SpecializedSelectProps) {
+    return <ContractSelect placeholder={placeholder} emptyMessage={emptyMessage} {...props} />
 }
 
 /**
- * Dropdown select for choosing a CoverageAgent from saved contracts
- * Returns the contract ID as the value (use getSelectedCoverageAgent to get the full contract)
+ * Dropdown select for choosing a CoverageAgent from a list of contracts
+ * Provides sensible defaults for placeholder and empty message
  */
 export function CoverageAgentSelect({
-    value,
-    onValueChange,
-    chainId,
-    description,
-    disabled,
-}: CoverageAgentSelectProps) {
-    const { coverageAgents } = useChainFilteredContracts(chainId)
-
-    return (
-        <div className="space-y-2">
-            <Label>Coverage Agent</Label>
-            <Select value={value} onValueChange={onValueChange} disabled={disabled}>
-                <SelectTrigger className="font-mono">
-                    <SelectValue placeholder="Select coverage agent..." />
-                </SelectTrigger>
-                <SelectContent>
-                    {coverageAgents.length === 0 ? (
-                        <div className="px-2 py-4 text-center text-sm text-muted-foreground">
-                            No coverage agents saved on this chain
-                        </div>
-                    ) : (
-                        coverageAgents.map((ca) => (
-                            <SelectItem key={ca.id} value={ca.id} className="font-mono">
-                                <span className="flex flex-col gap-0.5">
-                                    <span className="font-sans font-medium">{ca.name}</span>
-                                    <span className="text-xs text-muted-foreground">
-                                        {ca.address.slice(0, 10)}...{ca.address.slice(-8)}
-                                    </span>
-                                </span>
-                            </SelectItem>
-                        ))
-                    )}
-                </SelectContent>
-            </Select>
-            {description && <p className="text-xs text-muted-foreground">{description}</p>}
-        </div>
-    )
-}
-
-export interface CoverageProviderSelectProps {
-    /** The selected contract ID */
-    value: string
-    /** Called with the contract ID when selection changes */
-    onValueChange: (contractId: string) => void
-    chainId: number
-    /** Contract IDs to exclude from the list (e.g., already registered providers) */
-    excludeIds?: string[]
-    label?: string
-    placeholder?: string
-    description?: string
-    disabled?: boolean
+    placeholder = "Select coverage agent...",
+    emptyMessage = "No coverage agents saved on this chain",
+    ...props
+}: SpecializedSelectProps) {
+    return <ContractSelect placeholder={placeholder} emptyMessage={emptyMessage} {...props} />
 }
 
 /**
- * Dropdown select for choosing a CoverageProvider from saved contracts
- * Optionally filters out specified contract IDs (e.g., already registered providers)
- * Returns the contract ID as the value (use getSelectedProvider to get the full contract)
+ * Dropdown select for choosing a CoverageProvider from a list of contracts
+ * Provides sensible defaults for placeholder and empty message
  */
 export function CoverageProviderSelect({
-    value,
-    onValueChange,
-    chainId,
-    excludeIds = [],
-    label = "Coverage Provider",
     placeholder = "Select coverage provider...",
-    description,
-    disabled,
-}: CoverageProviderSelectProps) {
-    const { availableProviders } = useAvailableCoverageProviders(chainId, excludeIds)
-
-    return (
-        <div className="space-y-2">
-            <Label>{label}</Label>
-            <Select value={value} onValueChange={onValueChange} disabled={disabled}>
-                <SelectTrigger className="font-mono">
-                    <SelectValue placeholder={placeholder} />
-                </SelectTrigger>
-                <SelectContent>
-                    {availableProviders.length === 0 ? (
-                        <div className="px-2 py-4 text-center text-sm text-muted-foreground">
-                            No coverage providers available.
-                            <br />
-                            Add a CoverageProvider contract on the same chain first.
-                        </div>
-                    ) : (
-                        availableProviders.map((provider) => (
-                            <SelectItem key={provider.id} value={provider.id} className="font-mono">
-                                <span className="flex flex-col gap-0.5">
-                                    <span className="font-sans font-medium">{provider.name}</span>
-                                    <span className="text-xs text-muted-foreground">
-                                        {provider.address.slice(0, 10)}...
-                                        {provider.address.slice(-8)}
-                                    </span>
-                                </span>
-                            </SelectItem>
-                        ))
-                    )}
-                </SelectContent>
-            </Select>
-            {description && <p className="text-xs text-muted-foreground">{description}</p>}
-        </div>
-    )
+    emptyMessage = (
+        <>
+            No coverage providers available.
+            <br />
+            Add a CoverageProvider contract on the same chain first.
+        </>
+    ),
+    ...props
+}: SpecializedSelectProps) {
+    return <ContractSelect placeholder={placeholder} emptyMessage={emptyMessage} {...props} />
 }

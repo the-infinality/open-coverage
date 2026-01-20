@@ -41,13 +41,6 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
 
 type SupportedChainId = (typeof supportedChains)[number]["id"]
 
@@ -82,70 +75,6 @@ interface LoadedClaimData {
     claim: CoverageClaimData
     backing: bigint
     totalSlashAmount: bigint
-}
-
-/**
- * Registered Provider Select - select from providers registered with this coverage agent
- */
-function RegisteredProviderSelect({
-    value,
-    onValueChange,
-    registeredProviders,
-    savedContractsMap,
-    chainId,
-    disabled,
-}: {
-    value: string
-    onValueChange: (address: string) => void
-    registeredProviders: Address[]
-    savedContractsMap: Map<string, CoverageContract>
-    chainId: number
-    disabled?: boolean
-}) {
-    return (
-        <div className="space-y-2">
-            <Label>Coverage Provider</Label>
-            <Select value={value} onValueChange={onValueChange} disabled={disabled}>
-                <SelectTrigger className="font-mono">
-                    <SelectValue placeholder="Select registered coverage provider..." />
-                </SelectTrigger>
-                <SelectContent>
-                    {registeredProviders.length === 0 ? (
-                        <div className="px-2 py-4 text-center text-sm text-muted-foreground">
-                            No coverage providers registered yet.
-                            <br />
-                            Register a coverage provider first.
-                        </div>
-                    ) : (
-                        registeredProviders.map((providerAddr) => {
-                            const key = `${chainId}-${providerAddr.toLowerCase()}`
-                            const savedContract = savedContractsMap.get(key)
-                            return (
-                                <SelectItem
-                                    key={providerAddr}
-                                    value={providerAddr}
-                                    className="font-mono"
-                                >
-                                    <span className="flex flex-col gap-0.5">
-                                        <span className="font-sans font-medium">
-                                            {savedContract?.name || "Unknown Provider"}
-                                        </span>
-                                        <span className="text-xs text-muted-foreground">
-                                            {providerAddr.slice(0, 10)}...
-                                            {providerAddr.slice(-8)}
-                                        </span>
-                                    </span>
-                                </SelectItem>
-                            )
-                        })
-                    )}
-                </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-                Select a coverage provider registered with this agent
-            </p>
-        </div>
-    )
 }
 
 /**
@@ -483,8 +412,18 @@ function CoverageClaimsManagement({
 }) {
     const config = useConfig()
 
-    // Form state for creating claims
-    const [selectedProviderAddress, setSelectedProviderAddress] = useState("")
+    // Convert registered provider addresses to contracts for the select
+    const registeredProviderContracts = useMemo(() => {
+        return registeredProviders
+            .map((addr) => {
+                const key = `${contract.chainId}-${addr.toLowerCase()}`
+                return savedContractsMap.get(key)
+            })
+            .filter((c): c is CoverageContract => c !== undefined)
+    }, [registeredProviders, savedContractsMap, contract.chainId])
+
+    // Form state for creating claims (store contract IDs)
+    const [selectedProviderId, setSelectedProviderId] = useState("")
     const [positionId, setPositionId] = useState("")
     const [claimAmount, setClaimAmount] = useState("")
     const [claimDuration, setClaimDuration] = useState("30") // days
@@ -495,8 +434,17 @@ function CoverageClaimsManagement({
     // Claims viewing state
     const [loadedClaims, setLoadedClaims] = useState<LoadedClaimData[]>([])
     const [newClaimId, setNewClaimId] = useState("")
-    const [loadClaimProvider, setLoadClaimProvider] = useState("")
+    const [loadClaimProviderId, setLoadClaimProviderId] = useState("")
     const [isLoadingClaim, setIsLoadingClaim] = useState(false)
+
+    // Get selected provider addresses from contract IDs
+    const selectedProvider = getSelectedProvider(selectedProviderId, registeredProviderContracts)
+    const selectedProviderAddress = selectedProvider?.address ?? ""
+    const loadClaimProviderContract = getSelectedProvider(
+        loadClaimProviderId,
+        registeredProviderContracts
+    )
+    const loadClaimProviderAddress = loadClaimProviderContract?.address ?? ""
 
     // Slashing state
     const [selectedClaimIds, setSelectedClaimIds] = useState<Set<number>>(new Set())
@@ -726,11 +674,11 @@ function CoverageClaimsManagement({
             toast.error("Please enter a valid claim ID")
             return
         }
-        if (!loadClaimProvider) {
+        if (!loadClaimProviderAddress) {
             toast.error("Please select a coverage provider")
             return
         }
-        await loadClaim(id, loadClaimProvider)
+        await loadClaim(id, loadClaimProviderAddress)
         setNewClaimId("")
     }
 
@@ -875,14 +823,26 @@ function CoverageClaimsManagement({
                         </p>
                     </div>
 
-                    <RegisteredProviderSelect
-                        value={selectedProviderAddress}
-                        onValueChange={setSelectedProviderAddress}
-                        registeredProviders={registeredProviders}
-                        savedContractsMap={savedContractsMap}
-                        chainId={contract.chainId}
-                        disabled={isPending || isConfirming}
-                    />
+                    <div className="space-y-2">
+                        <Label>Coverage Provider</Label>
+                        <CoverageProviderSelect
+                            selectedContractId={selectedProviderId}
+                            onSelectedContractIdChange={setSelectedProviderId}
+                            contracts={registeredProviderContracts}
+                            disabled={isPending || isConfirming}
+                            placeholder="Select registered coverage provider..."
+                            emptyMessage={
+                                <>
+                                    No coverage providers registered yet.
+                                    <br />
+                                    Register a coverage provider first.
+                                </>
+                            }
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            Select a coverage provider registered with this agent
+                        </p>
+                    </div>
 
                     <div className="space-y-2">
                         <Label htmlFor="positionId">Position ID</Label>
@@ -1004,13 +964,19 @@ function CoverageClaimsManagement({
 
                     <div className="flex flex-col gap-2 sm:flex-row">
                         <div className="flex-1">
-                            <RegisteredProviderSelect
-                                value={loadClaimProvider}
-                                onValueChange={setLoadClaimProvider}
-                                registeredProviders={registeredProviders}
-                                savedContractsMap={savedContractsMap}
-                                chainId={contract.chainId}
+                            <CoverageProviderSelect
+                                selectedContractId={loadClaimProviderId}
+                                onSelectedContractIdChange={setLoadClaimProviderId}
+                                contracts={registeredProviderContracts}
                                 disabled={isLoadingClaim}
+                                placeholder="Select registered coverage provider..."
+                                emptyMessage={
+                                    <>
+                                        No coverage providers registered yet.
+                                        <br />
+                                        Register a coverage provider first.
+                                    </>
+                                }
                             />
                         </div>
                         <div className="flex gap-2 items-center">
@@ -1026,7 +992,7 @@ function CoverageClaimsManagement({
                                 onClick={handleAddClaim}
                                 disabled={
                                     !newClaimId ||
-                                    !loadClaimProvider ||
+                                    !loadClaimProviderId ||
                                     isNaN(Number(newClaimId)) ||
                                     isLoadingClaim
                                 }
@@ -1249,10 +1215,9 @@ export function CoverageAgentInfo({ contract }: CoverageAgentInfoProps) {
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
                         <div className="flex-1">
                             <CoverageProviderSelect
-                                value={selectedProviderId}
-                                onValueChange={setSelectedProviderId}
-                                chainId={contract.chainId}
-                                excludeIds={registeredProviderIds}
+                                selectedContractId={selectedProviderId}
+                                onSelectedContractIdChange={setSelectedProviderId}
+                                contracts={availableProviders}
                                 disabled={isPending || isConfirming}
                             />
                         </div>

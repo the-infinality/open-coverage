@@ -1180,16 +1180,20 @@ function StakingCard({
                             </p>
                         </div>
 
-                        <CoverageProviderSelect
-                            value={selectedServiceManagerId}
-                            onValueChange={(value) => {
-                                setSelectedServiceManagerId(value)
-                                setSelectedStrategy("") // Reset strategy when service manager changes
-                            }}
-                            chainId={contract.chainId}
-                            label="Service Manager"
-                            description="Select a service manager to see available strategies"
-                        />
+                        <div className="space-y-2">
+                            <Label>Service Manager</Label>
+                            <CoverageProviderSelect
+                                selectedContractId={selectedServiceManagerId}
+                                onSelectedContractIdChange={(value) => {
+                                    setSelectedServiceManagerId(value)
+                                    setSelectedStrategy("") // Reset strategy when service manager changes
+                                }}
+                                contracts={availableProviders}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Select a service manager to see available strategies
+                            </p>
+                        </div>
 
                         {/* Coverage Provider Quick Actions */}
                         {selectedServiceManager && (
@@ -1381,20 +1385,29 @@ function RegisterCoverageAgentForm({
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
-            <CoverageProviderSelect
-                value={serviceManagerId}
-                onValueChange={setServiceManagerId}
-                chainId={contract.chainId}
-                label="Service Manager"
-                description="The EigenLayer service manager contract address"
-            />
+            <div className="space-y-2">
+                <Label>Service Manager</Label>
+                <CoverageProviderSelect
+                    selectedContractId={serviceManagerId}
+                    onSelectedContractIdChange={setServiceManagerId}
+                    contracts={availableProviders}
+                />
+                <p className="text-xs text-muted-foreground">
+                    The EigenLayer service manager contract address
+                </p>
+            </div>
 
-            <CoverageAgentSelect
-                value={coverageAgentId}
-                onValueChange={setCoverageAgentId}
-                chainId={contract.chainId}
-                description="The coverage agent contract to register with"
-            />
+            <div className="space-y-2">
+                <Label>Coverage Agent</Label>
+                <CoverageAgentSelect
+                    selectedContractId={coverageAgentId}
+                    onSelectedContractIdChange={setCoverageAgentId}
+                    contracts={coverageAgents}
+                />
+                <p className="text-xs text-muted-foreground">
+                    The coverage agent contract to register with
+                </p>
+            </div>
 
             <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -1536,18 +1549,23 @@ function AllocateForm({
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
-            <CoverageProviderSelect
-                value={serviceManagerId}
-                onValueChange={setServiceManagerId}
-                chainId={contract.chainId}
-                label="Service Manager"
-            />
+            <div className="space-y-2">
+                <Label>Service Manager</Label>
+                <CoverageProviderSelect
+                    selectedContractId={serviceManagerId}
+                    onSelectedContractIdChange={setServiceManagerId}
+                    contracts={availableProviders}
+                />
+            </div>
 
-            <CoverageAgentSelect
-                value={coverageAgentId}
-                onValueChange={setCoverageAgentId}
-                chainId={contract.chainId}
-            />
+            <div className="space-y-2">
+                <Label>Coverage Agent</Label>
+                <CoverageAgentSelect
+                    selectedContractId={coverageAgentId}
+                    onSelectedContractIdChange={setCoverageAgentId}
+                    contracts={coverageAgents}
+                />
+            </div>
 
             <Separator />
 
