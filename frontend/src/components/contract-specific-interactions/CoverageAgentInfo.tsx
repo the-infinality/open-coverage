@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from "react"
+import { useMemo, useState, useEffect, useRef, useCallback } from "react"
 import { type Address, formatUnits, decodeEventLog } from "viem"
 import {
     RefreshCw,
@@ -558,6 +558,68 @@ function CoverageClaimsManagement({
 
     const prevCreateSuccessRef = useRef(false)
 
+    // Load claim function wrapped in useCallback for use in effects
+    const loadClaim = useCallback(async (claimId: number, providerAddress: string) => {
+        if (!chainId) return
+
+        setIsLoadingClaim(true)
+        try {
+            const [claim, backing, totalSlashAmount] = await Promise.all([
+                readContract(config, {
+                    address: providerAddress as Address,
+                    abi: iCoverageProviderAbi,
+                    functionName: "claim",
+                    args: [BigInt(claimId)],
+                    chainId,
+                }),
+                readContract(config, {
+                    address: providerAddress as Address,
+                    abi: iCoverageProviderAbi,
+                    functionName: "claimBacking",
+                    args: [BigInt(claimId)],
+                    chainId,
+                }),
+                readContract(config, {
+                    address: providerAddress as Address,
+                    abi: iCoverageProviderAbi,
+                    functionName: "claimTotalSlashAmount",
+                    args: [BigInt(claimId)],
+                    chainId,
+                }),
+            ])
+
+            const claimData = claim as CoverageClaimData
+
+            // Check if claim exists (has non-zero amount or duration)
+            if (claimData.amount === 0n && claimData.duration === 0n) {
+                toast.error(`Claim #${claimId} does not exist`)
+                return
+            }
+
+            setLoadedClaims((prev) => {
+                // Check if claim already loaded
+                if (prev.some((c) => c.claimId === claimId && c.providerAddress === providerAddress)) {
+                    return prev
+                }
+                return [
+                    ...prev,
+                    {
+                        claimId,
+                        providerAddress: providerAddress as Address,
+                        claim: claimData,
+                        backing: backing as bigint,
+                        totalSlashAmount: totalSlashAmount as bigint,
+                    },
+                ]
+            })
+            toast.success(`Claim #${claimId} loaded`)
+        } catch {
+            toast.error(`Failed to fetch claim #${claimId}`)
+        } finally {
+            setIsLoadingClaim(false)
+        }
+    }, [chainId, config])
+
     // Fetch max amount when provider and position are selected
     useEffect(() => {
         const fetchMaxAmount = async () => {
@@ -626,68 +688,7 @@ function CoverageClaimsManagement({
             setPositionMaxAmount(null)
         }
         prevCreateSuccessRef.current = isSuccess
-    }, [isSuccess, receipt, selectedProviderAddress])
-
-    const loadClaim = async (claimId: number, providerAddress: string) => {
-        if (!chainId) return
-
-        // Check if claim already loaded
-        if (loadedClaims.some((c) => c.claimId === claimId && c.providerAddress === providerAddress)) {
-            toast.error("Claim already loaded")
-            return
-        }
-
-        setIsLoadingClaim(true)
-        try {
-            const [claim, backing, totalSlashAmount] = await Promise.all([
-                readContract(config, {
-                    address: providerAddress as Address,
-                    abi: iCoverageProviderAbi,
-                    functionName: "claim",
-                    args: [BigInt(claimId)],
-                    chainId,
-                }),
-                readContract(config, {
-                    address: providerAddress as Address,
-                    abi: iCoverageProviderAbi,
-                    functionName: "claimBacking",
-                    args: [BigInt(claimId)],
-                    chainId,
-                }),
-                readContract(config, {
-                    address: providerAddress as Address,
-                    abi: iCoverageProviderAbi,
-                    functionName: "claimTotalSlashAmount",
-                    args: [BigInt(claimId)],
-                    chainId,
-                }),
-            ])
-
-            const claimData = claim as CoverageClaimData
-
-            // Check if claim exists (has non-zero amount or duration)
-            if (claimData.amount === 0n && claimData.duration === 0n) {
-                toast.error(`Claim #${claimId} does not exist`)
-                return
-            }
-
-            setLoadedClaims((prev) => [
-                ...prev,
-                {
-                    claimId,
-                    providerAddress: providerAddress as Address,
-                    claim: claimData,
-                    backing: backing as bigint,
-                    totalSlashAmount: totalSlashAmount as bigint,
-                },
-            ])
-            toast.success(`Claim #${claimId} loaded`)
-        } catch {
-            toast.error(`Failed to fetch claim #${claimId}`)
-        } finally {
-            setIsLoadingClaim(false)
-        }
-    }
+    }, [isSuccess, receipt, selectedProviderAddress, loadClaim])
 
     const handleAddClaim = async () => {
         const id = Number(newClaimId)
