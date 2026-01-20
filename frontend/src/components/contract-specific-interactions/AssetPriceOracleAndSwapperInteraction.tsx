@@ -700,6 +700,7 @@ function WriteSection({
     // Update slippage when contract value changes
     useEffect(() => {
         if (swapSlippage !== undefined) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setSlippageValue(swapSlippage)
             setSlippageInput((swapSlippage / 100).toFixed(2))
         }
