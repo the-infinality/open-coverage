@@ -735,9 +735,9 @@ function WriteSection({
     }, [isSlippageSuccess, refetchSlippage])
 
     // Handle slider change
-    const handleSliderChange = useCallback((value: number) => {
-        setSlippageValue(value)
-        setSlippageInput((value / 100).toFixed(2))
+    const handleSliderChange = useCallback((values: number[]) => {
+        setSlippageValue(values[0])
+        setSlippageInput((values[0] / 100).toFixed(2))
     }, [])
 
     // Handle input change
@@ -845,11 +845,10 @@ function WriteSection({
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
                             <Label>Slippage Tolerance</Label>
-                            <Badge variant="outline">{(slippageValue / 100).toFixed(2)}%</Badge>
                         </div>
                         <Slider
-                            value={slippageValue}
-                            onChange={handleSliderChange}
+                            value={[slippageValue]}
+                            onValueChange={handleSliderChange}
                             min={1}
                             max={2000}
                             step={1}
@@ -860,9 +859,8 @@ function WriteSection({
                         </div>
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="flex items-center justify-center gap-2">
                         <div className="flex-1 space-y-2">
-                            <Label htmlFor="slippage-input">Manual Input (%)</Label>
                             <Input
                                 id="slippage-input"
                                 type="number"
@@ -883,6 +881,7 @@ function WriteSection({
                                     isSlippageConfirming ||
                                     slippageValue === swapSlippage
                                 }
+                                size={"lg"}
                             >
                                 {isSlippagePending || isSlippageConfirming ? (
                                     <Loader2 className="mr-2 size-4 animate-spin" />

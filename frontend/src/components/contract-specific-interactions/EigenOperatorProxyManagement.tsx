@@ -1415,8 +1415,8 @@ function RegisterCoverageAgentForm({
                     <span className="text-sm font-medium tabular-nums">{rewardsSplit}%</span>
                 </div>
                 <Slider
-                    value={rewardsSplit}
-                    onChange={setRewardsSplit}
+                    value={[rewardsSplit]}
+                    onValueChange={(values) => setRewardsSplit(values[0])}
                     min={0}
                     max={100}
                     step={1}
@@ -1606,8 +1606,10 @@ function AllocateForm({
                                         </span>
                                     </div>
                                     <Slider
-                                        value={strategy.magnitude}
-                                        onChange={(value) => updateStrategyMagnitude(index, value)}
+                                        value={[strategy.magnitude]}
+                                        onValueChange={(values) =>
+                                            updateStrategyMagnitude(index, values[0])
+                                        }
                                         min={0}
                                         max={100}
                                         step={1}

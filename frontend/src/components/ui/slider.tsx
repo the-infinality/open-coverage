@@ -1,61 +1,59 @@
+"use client"
+
 import * as React from "react"
+import { Slider as SliderPrimitive } from "radix-ui"
+
 import { cn } from "@/lib/utils"
 
-interface SliderProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange"> {
-    value: number
-    onChange: (value: number) => void
-    min?: number
-    max?: number
-    step?: number
+function Slider({
+  className,
+  defaultValue,
+  value,
+  min = 0,
+  max = 100,
+  ...props
+}: React.ComponentProps<typeof SliderPrimitive.Root>) {
+  const _values = React.useMemo(
+    () =>
+      Array.isArray(value)
+        ? value
+        : Array.isArray(defaultValue)
+          ? defaultValue
+          : [min, max],
+    [value, defaultValue, min, max]
+  )
+
+  return (
+    <SliderPrimitive.Root
+      data-slot="slider"
+      defaultValue={defaultValue}
+      value={value}
+      min={min}
+      max={max}
+      className={cn(
+        "data-vertical:min-h-40 relative flex w-full touch-none items-center select-none data-disabled:opacity-50 data-vertical:h-full data-vertical:w-auto data-vertical:flex-col",
+        className
+      )}
+      {...props}
+    >
+      <SliderPrimitive.Track
+        data-slot="slider-track"
+        className="bg-muted rounded-none data-horizontal:h-1 data-horizontal:w-full data-vertical:h-full data-vertical:w-1 bg-muted relative grow overflow-hidden data-horizontal:w-full data-vertical:h-full"
+      >
+        <SliderPrimitive.Range
+          data-slot="slider-range"
+          className="bg-primary absolute select-none data-horizontal:h-full data-vertical:w-full"
+        />
+      </SliderPrimitive.Track>
+      {Array.from({ length: _values.length }, (_, index) => (
+        <SliderPrimitive.Thumb
+          data-slot="slider-thumb"
+          key={index}
+          className="border-ring ring-ring/50 relative size-3 rounded-none border bg-white transition-[color,box-shadow] after:absolute after:-inset-2 hover:ring-1 focus-visible:ring-1 focus-visible:outline-hidden active:ring-1 block shrink-0 select-none disabled:pointer-events-none disabled:opacity-50"
+        />
+      ))}
+    </SliderPrimitive.Root>
+  )
 }
-
-const Slider = React.forwardRef<HTMLInputElement, SliderProps>(
-    ({ className, value, onChange, min = 0, max = 100, step = 1, ...props }, ref) => {
-        const percentage = ((value - min) / (max - min)) * 100
-
-        return (
-            <div className="relative w-full">
-                <input
-                    type="range"
-                    ref={ref}
-                    value={value}
-                    min={min}
-                    max={max}
-                    step={step}
-                    onChange={(e) => onChange(Number(e.target.value))}
-                    className={cn(
-                        "w-full h-2 rounded-full appearance-none cursor-pointer",
-                        "bg-secondary",
-                        "[&::-webkit-slider-thumb]:appearance-none",
-                        "[&::-webkit-slider-thumb]:h-5",
-                        "[&::-webkit-slider-thumb]:w-5",
-                        "[&::-webkit-slider-thumb]:rounded-full",
-                        "[&::-webkit-slider-thumb]:bg-primary",
-                        "[&::-webkit-slider-thumb]:border-2",
-                        "[&::-webkit-slider-thumb]:border-background",
-                        "[&::-webkit-slider-thumb]:shadow-md",
-                        "[&::-webkit-slider-thumb]:transition-transform",
-                        "[&::-webkit-slider-thumb]:hover:scale-110",
-                        "[&::-moz-range-thumb]:h-5",
-                        "[&::-moz-range-thumb]:w-5",
-                        "[&::-moz-range-thumb]:rounded-full",
-                        "[&::-moz-range-thumb]:bg-primary",
-                        "[&::-moz-range-thumb]:border-2",
-                        "[&::-moz-range-thumb]:border-background",
-                        "[&::-moz-range-thumb]:shadow-md",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                        className
-                    )}
-                    style={{
-                        background: `linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) ${percentage}%, hsl(var(--secondary)) ${percentage}%, hsl(var(--secondary)) 100%)`,
-                    }}
-                    {...props}
-                />
-            </div>
-        )
-    }
-)
-
-Slider.displayName = "Slider"
 
 export { Slider }
