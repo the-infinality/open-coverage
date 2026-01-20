@@ -475,6 +475,7 @@ export function AddContractPage() {
                                 type="submit"
                                 className="w-full"
                                 disabled={!validation.hasCode || validation.isValidating}
+                                size="lg"
                             >
                                 {validation.isValidating ? (
                                     <>
