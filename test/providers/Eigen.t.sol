@@ -177,6 +177,11 @@ contract EigenTest is EigenTestDeployer {
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
+
+        // Expect PositionCreated event
+        vm.expectEmit(true, false, false, false);
+        emit ICoverageProvider.PositionCreated(0);
+
         uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
         assertEq(positionId, 0);
     }
@@ -197,6 +202,11 @@ contract EigenTest is EigenTestDeployer {
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
         );
         uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
+
+        // Expect PositionClosed event
+        vm.expectEmit(true, false, false, false);
+        emit ICoverageProvider.PositionClosed(positionId);
+
         eigenCoverageProvider.closePosition(positionId);
         assertEq(eigenCoverageProvider.position(positionId).expiryTimestamp, block.timestamp);
     }
@@ -273,6 +283,11 @@ contract EigenTest is EigenTestDeployer {
 
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+
+        // Expect ClaimIssued event
+        vm.expectEmit(true, true, false, true);
+        emit ICoverageProvider.ClaimIssued(positionId, 0, 1000e6, 30 days);
+
         uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
         vm.stopPrank();
 
@@ -1160,6 +1175,11 @@ contract EigenTest is EigenTestDeployer {
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 30 days, 10e6, 31 days);
 
         vm.startPrank(address(coverageAgent));
+
+        // Expect ClaimCompleted event
+        vm.expectEmit(true, false, false, false);
+        emit ICoverageProvider.ClaimCompleted(claimId);
+
         eigenCoverageProvider.completeClaims(claimId);
         vm.stopPrank();
 
@@ -1324,7 +1344,16 @@ contract EigenTest is EigenTestDeployer {
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
 
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1000e6);
-        CoverageClaimStatus[] memory statuses = _executeSlash(claimIds, amounts, 15 days);
+
+        // Warp time and expect ClaimSlashPending event (coordinator is set)
+        vm.warp(block.timestamp + 15 days);
+
+        vm.expectEmit(true, false, false, true);
+        emit ICoverageProvider.ClaimSlashPending(claimId, address(coordinator));
+
+        vm.startPrank(address(coverageAgent));
+        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts);
+        vm.stopPrank();
 
         assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.PendingSlash));
         assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.PendingSlash));
@@ -1332,6 +1361,11 @@ contract EigenTest is EigenTestDeployer {
 
         // Complete the slash through coordinator
         coordinator.setStatus(claimId, SlashStatus.Completed);
+
+        // Expect ClaimSlashed event when completing the slash
+        vm.expectEmit(true, false, false, true);
+        emit ICoverageProvider.ClaimSlashed(claimId, 1000e6);
+
         eigenCoverageProvider.completeSlash(claimId);
 
         assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));

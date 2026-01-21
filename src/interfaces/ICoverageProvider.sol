@@ -66,7 +66,6 @@ struct CoverageClaim {
 interface ICoverageProvider {
     event PositionCreated(uint256 indexed positionId);
     event PositionClosed(uint256 indexed positionId);
-    event CoverageIssued(uint256 indexed positionId, uint256 indexed claimId, uint256 amount, uint256 duration);
     event ClaimIssued(uint256 indexed positionId, uint256 indexed claimId, uint256 amount, uint256 duration);
     event Liquidated(uint256 indexed claimId);
     event ClaimCompleted(uint256 indexed claimId);
