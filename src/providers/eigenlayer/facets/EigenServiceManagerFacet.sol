@@ -170,7 +170,11 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         // Calculate duration if not provided (0 means use calculation interval)
         // Also align duration to calculation interval boundaries
         resolvedDuration = duration;
+
+        // Dividing before multiplying to avoid overflow since we are using it to as a floor division
+        // forge-lint: disable-next-line(divide-before-multiply)
         resolvedDuration = uint32((duration / calculationInterval) * calculationInterval);
+
         // Ensure minimum duration is at least one interval
         if (resolvedDuration == 0) {
             resolvedDuration = calculationInterval;
@@ -184,6 +188,8 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
             resolvedDistributionStartTime = uint32(block.timestamp - resolvedDuration);
         }
 
+        // Dividing before multiplying to avoid overflow since we are using it to as a floor division
+        // forge-lint: disable-next-line(divide-before-multiply)
         resolvedDistributionStartTime = (resolvedDistributionStartTime / calculationInterval) * calculationInterval;
 
         if ((resolvedDistributionStartTime + resolvedDuration) > block.timestamp) {
