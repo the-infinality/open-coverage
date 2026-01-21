@@ -55,20 +55,11 @@ contract EigenCoverageDiamond is Diamond, EigenCoverageStorage, AssetPriceOracle
         // Initialize app-specific storage
         _eigenAddresses = _args.eigenAddresses;
 
+        // Update AVS metadata URI (required for AVS registration)
+        IAllocationManager(_args.eigenAddresses.allocationManager)
+            .updateAVSMetadataURI(address(this), _args.metadataURI);
+
         // Initialize default swap slippage (1%)
         _initializeSwapSlippage();
-
-        // Update AVS metadata URI (required for AVS registration)
-        // Note: This is called directly during construction; post-deployment updates should use
-        // IEigenServiceManager.updateAVSMetadataURI() via the facet
-        _initializeAVSMetadataURI(_args.metadataURI);
-    }
-
-    /// @notice Updates the metadata URI for the AVS during initialization
-    /// @dev This is only used during construction before facets are callable
-    /// @param _metadataUri is the metadata URI for the AVS
-    function _initializeAVSMetadataURI(string memory _metadataUri) private {
-        IAllocationManager(_eigenAddresses.allocationManager).updateAVSMetadataURI(address(this), _metadataUri);
     }
 }
-

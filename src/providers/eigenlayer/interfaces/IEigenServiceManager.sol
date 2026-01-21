@@ -120,4 +120,9 @@ interface IEigenServiceManager {
     /// @notice Returns the whitelisted strategies
     /// @return strategies The whitelisted strategies
     function whitelistedStrategies() external view returns (address[] memory strategies);
+
+    /// @notice Updates the metadata URI for this AVS
+    /// @dev Should only be callable by the contract owner
+    /// @param metadataURI The new metadata URI
+    function updateMetadataURI(string calldata metadataURI) external;
 }

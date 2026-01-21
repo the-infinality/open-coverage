@@ -8,8 +8,11 @@ import {
     CreatePositionAddtionalData,
     IEigenServiceManager
 } from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
-import {IAllocationManager} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
-import {IAllocationManagerTypes} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
+import {
+    IAllocationManager,
+    IAllocationManagerTypes,
+    IAllocationManagerEvents
+} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermissionController.sol";
 import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
 import {IEigenOperatorProxy} from "src/providers/eigenlayer/interfaces/IEigenOperatorProxy.sol";
@@ -1398,6 +1401,63 @@ contract EigenTest is EigenTestDeployer {
         address newOwner = makeAddr("newOwner");
         IDiamondOwner(address(eigenCoverageDiamond)).setOwner(newOwner);
         assertEq(IDiamondOwner(address(eigenCoverageDiamond)).owner(), newOwner);
+    }
+
+    // ============ updateMetadataURI Tests ============
+
+    /// @notice Test that updateMetadataURI successfully updates the metadata and emits the correct event
+    function test_updateMetadataURI() public {
+        string memory newMetadataURI = "https://new-coverage.example.com/metadata.json";
+
+        // Expect the AVSMetadataURIUpdated event from AllocationManager
+        vm.expectEmit(true, false, false, true, eigenServiceManager.eigenAddresses().allocationManager);
+        emit IAllocationManagerEvents.AVSMetadataURIUpdated(address(eigenCoverageDiamond), newMetadataURI);
+
+        eigenServiceManager.updateMetadataURI(newMetadataURI);
+    }
+
+    /// @notice Test that updateMetadataURI can be called multiple times with different URIs
+    function test_updateMetadataURI_multipleTimes() public {
+        string memory uri1 = "https://first-uri.example.com/metadata.json";
+        string memory uri2 = "https://second-uri.example.com/metadata.json";
+
+        // First update
+        vm.expectEmit(true, false, false, true, eigenServiceManager.eigenAddresses().allocationManager);
+        emit IAllocationManagerEvents.AVSMetadataURIUpdated(address(eigenCoverageDiamond), uri1);
+        eigenServiceManager.updateMetadataURI(uri1);
+
+        // Second update
+        vm.expectEmit(true, false, false, true, eigenServiceManager.eigenAddresses().allocationManager);
+        emit IAllocationManagerEvents.AVSMetadataURIUpdated(address(eigenCoverageDiamond), uri2);
+        eigenServiceManager.updateMetadataURI(uri2);
+    }
+
+    /// @notice Test that updateMetadataURI works with an empty string
+    function test_updateMetadataURI_emptyString() public {
+        string memory emptyURI = "";
+
+        vm.expectEmit(true, false, false, true, eigenServiceManager.eigenAddresses().allocationManager);
+        emit IAllocationManagerEvents.AVSMetadataURIUpdated(address(eigenCoverageDiamond), emptyURI);
+
+        eigenServiceManager.updateMetadataURI(emptyURI);
+    }
+
+    /// @notice Test that updateMetadataURI reverts when called by non-owner
+    function test_RevertWhen_updateMetadataURI_notOwner() public {
+        address nonOwner = makeAddr("nonOwner");
+        string memory newMetadataURI = "https://new-coverage.example.com/metadata.json";
+
+        vm.prank(nonOwner);
+        vm.expectRevert(abi.encodeWithSelector(LibDiamond.NotContractOwner.selector, nonOwner, address(this)));
+        eigenServiceManager.updateMetadataURI(newMetadataURI);
+    }
+
+    /// @notice Fuzz test for updateMetadataURI with various URI strings
+    function testFuzz_updateMetadataURI(string calldata metadataURI) public {
+        vm.expectEmit(true, false, false, true, eigenServiceManager.eigenAddresses().allocationManager);
+        emit IAllocationManagerEvents.AVSMetadataURIUpdated(address(eigenCoverageDiamond), metadataURI);
+
+        eigenServiceManager.updateMetadataURI(metadataURI);
     }
 }
 
