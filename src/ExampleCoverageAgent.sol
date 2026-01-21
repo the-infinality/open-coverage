@@ -5,7 +5,6 @@ import {SafeERC20} from "@openzeppelin-v5/contracts/token/ERC20/utils/SafeERC20.
 
 import {IERC20} from "@openzeppelin-v5/contracts/token/ERC20/IERC20.sol";
 import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/EnumerableMap.sol";
-import {NotCoverageAgentCoordinator, CoverageProviderNotActive} from "./Errors.sol";
 import {ICoverageAgent, ClaimCoverageRequest, Coverage, Claim} from "./interfaces/ICoverageAgent.sol";
 import {ICoverageProvider, CoverageClaim, CoverageClaimStatus} from "./interfaces/ICoverageProvider.sol";
 import {SafeERC20} from "@openzeppelin-v5/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -16,6 +15,8 @@ import {SafeERC20} from "@openzeppelin-v5/contracts/token/ERC20/utils/SafeERC20.
 /// Delegators are whitelisted by the operators to ensure they are trusted.
 contract ExampleCoverageAgent is ICoverageAgent {
     using EnumerableMap for EnumerableMap.AddressToUintMap;
+
+    error NotCoverageAgentCoordinator();
 
     address private immutable _COORDINATOR;
     address private immutable _ASSET;
@@ -41,7 +42,7 @@ contract ExampleCoverageAgent is ICoverageAgent {
     /// @inheritdoc ICoverageAgent
     function onRegisterPosition(uint256 positionId) external {
         if (!_coverageProviders.contains(msg.sender)) {
-            revert CoverageProviderNotActive();
+            revert ICoverageAgent.CoverageProviderNotRegistered();
         }
         emit PositionRegistered(msg.sender, positionId);
     }
@@ -49,7 +50,7 @@ contract ExampleCoverageAgent is ICoverageAgent {
     /// @inheritdoc ICoverageAgent
     function onSlashCompleted(uint256, uint256 slashAmount) external {
         if (!_coverageProviders.contains(msg.sender)) {
-            revert CoverageProviderNotActive();
+            revert ICoverageAgent.CoverageProviderNotRegistered();
         }
         SafeERC20.safeTransfer(IERC20(_ASSET), _COORDINATOR, slashAmount);
     }
@@ -80,9 +81,9 @@ contract ExampleCoverageAgent is ICoverageAgent {
         for (uint256 i = 0; i < requests.length; i++) {
             ClaimCoverageRequest memory request = requests[i];
 
-            // Verify coverage provider is active
+            // Verify coverage provider is registered
             if (!_coverageProviders.contains(request.coverageProvider)) {
-                revert CoverageProviderNotActive();
+                revert ICoverageAgent.CoverageProviderNotRegistered();
             }
 
             // Approve tokens for the reward

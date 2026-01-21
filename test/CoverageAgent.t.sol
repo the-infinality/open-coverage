@@ -4,7 +4,6 @@ pragma solidity ^0.8.24;
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {TestDeployer} from "test/utils/TestDeployer.sol";
 import {ExampleCoverageAgent} from "src/ExampleCoverageAgent.sol";
-import {NotCoverageAgentCoordinator, CoverageProviderNotActive} from "src/Errors.sol";
 import {ICoverageAgent, ClaimCoverageRequest, Coverage} from "src/interfaces/ICoverageAgent.sol";
 import {
     ICoverageProvider,
@@ -157,12 +156,12 @@ contract CoverageAgentTest is TestDeployer {
 
         // Non-coordinator should not be able to register providers
         vm.prank(nonHandler);
-        vm.expectRevert(NotCoverageAgentCoordinator.selector);
+        vm.expectRevert(ExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
         coverageAgent.registerCoverageProvider(address(0x999));
     }
 
     function test_RevertWhen_constructor_zeroHandler() public {
-        vm.expectRevert(NotCoverageAgentCoordinator.selector);
+        vm.expectRevert(ExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
         new ExampleCoverageAgent(address(0), USDC);
     }
 
@@ -188,7 +187,7 @@ contract CoverageAgentTest is TestDeployer {
 
     function test_RevertWhen_registerCoverageProvider_notHandler() public {
         vm.prank(nonHandler);
-        vm.expectRevert(NotCoverageAgentCoordinator.selector);
+        vm.expectRevert(ExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
         coverageAgent.registerCoverageProvider(address(mockProvider));
     }
 
@@ -226,7 +225,7 @@ contract CoverageAgentTest is TestDeployer {
         uint256 positionId = 123;
 
         vm.prank(address(mockProvider));
-        vm.expectRevert(CoverageProviderNotActive.selector);
+        vm.expectRevert(ICoverageAgent.CoverageProviderNotRegistered.selector);
         coverageAgent.onRegisterPosition(positionId);
     }
 
@@ -619,7 +618,7 @@ contract CoverageAgentTest is TestDeployer {
 
         // Try to slash as non-coordinator
         vm.prank(nonHandler);
-        vm.expectRevert(NotCoverageAgentCoordinator.selector);
+        vm.expectRevert(ExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
         coverageAgent.slashCoverage(coverageId);
     }
 

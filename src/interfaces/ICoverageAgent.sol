@@ -35,6 +35,7 @@ interface ICoverageAgent {
     event CoverageClaimed(uint256 indexed coverageId);
 
     error InvalidCoverage(uint256 coverageId);
+    error CoverageProviderNotRegistered();
 
     /// ============ Coverage Providers ============
 
