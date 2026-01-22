@@ -155,12 +155,11 @@ contract EigenTest is EigenTestDeployer {
     function test_allocate() public {
         _setupwithAllocations();
         OperatorSet memory operatorSet = OperatorSet({
-            avs: address(eigenCoverageDiamond),
-            id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
+            avs: address(eigenCoverageDiamond), id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
         });
         IAllocationManagerTypes.Allocation memory allocation = IAllocationManager(
-            eigenServiceManager.eigenAddresses().allocationManager
-        ).getAllocation(address(operator), operatorSet, _getTestStrategy());
+                eigenServiceManager.eigenAddresses().allocationManager
+            ).getAllocation(address(operator), operatorSet, _getTestStrategy());
         assertEq(allocation.currentMagnitude, 1e18);
     }
 

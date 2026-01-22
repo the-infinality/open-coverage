@@ -15,7 +15,6 @@ interface IDiamond {
         Add, // Add new functions
         Replace, // Replace existing functions
         Remove // Remove existing functions
-
     }
 
     /// @notice A facet cut describes changes to make to a facet

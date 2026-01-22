@@ -29,9 +29,8 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
         storedPair.priceOracle = _assetPair.priceOracle;
 
         // delegatecall to onInit instead of direct call
-        (bool success,) = _assetPair.swapEngine.delegatecall(
-            abi.encodeWithSelector(ISwapperEngine.onInit.selector, _assetPair.poolInfo)
-        );
+        (bool success,) = _assetPair.swapEngine
+            .delegatecall(abi.encodeWithSelector(ISwapperEngine.onInit.selector, _assetPair.poolInfo));
 
         if (!success) revert InvalidPoolInfo();
 
@@ -45,16 +44,17 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
         uint256 maxAmountIn = swapForOutputQuote(amountOut, assetB, assetA);
 
         // Delegatecall version of swapForOutput
-        (bool success,) = _assetPair.swapEngine.delegatecall(
-            abi.encodeWithSignature(
-                "swapForOutput(bytes,uint256,uint256,address,address)",
-                _assetPair.poolInfo,
-                amountOut,
-                maxAmountIn,
-                assetA,
-                assetB
-            )
-        );
+        (bool success,) = _assetPair.swapEngine
+            .delegatecall(
+                abi.encodeWithSignature(
+                    "swapForOutput(bytes,uint256,uint256,address,address)",
+                    _assetPair.poolInfo,
+                    amountOut,
+                    maxAmountIn,
+                    assetA,
+                    assetB
+                )
+            );
         if (!success) revert SwapFailed();
     }
 
@@ -65,16 +65,17 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
         uint256 minAmountOut = swapForInputQuote(amountIn, assetB, assetA);
 
         // Delegatecall version of swapForInput
-        (bool success,) = _assetPair.swapEngine.delegatecall(
-            abi.encodeWithSignature(
-                "swapForInput(bytes,uint256,uint256,address,address)",
-                _assetPair.poolInfo,
-                amountIn,
-                minAmountOut,
-                assetA,
-                assetB
-            )
-        );
+        (bool success,) = _assetPair.swapEngine
+            .delegatecall(
+                abi.encodeWithSignature(
+                    "swapForInput(bytes,uint256,uint256,address,address)",
+                    _assetPair.poolInfo,
+                    amountIn,
+                    minAmountOut,
+                    assetA,
+                    assetB
+                )
+            );
         if (!success) revert SwapFailed();
     }
 

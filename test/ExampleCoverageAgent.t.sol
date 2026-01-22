@@ -84,10 +84,7 @@ contract MockCoverageProvider is ICoverageProvider {
         emit ClaimReserved(positionId, claimId, amount, duration);
     }
 
-    function convertReservedClaim(uint256 claimId, uint256 amount, uint256 duration, uint256 reward)
-        external
-        override
-    {
+    function convertReservedClaim(uint256 claimId, uint256 amount, uint256 duration, uint256 reward) external override {
         CoverageClaim storage coverageClaim = _claims[claimId];
         CoveragePosition memory _position = _positions[coverageClaim.positionId];
 
@@ -621,11 +618,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
             reward: 10e6
         });
         requests[1] = ClaimCoverageRequest({
-            coverageProvider: address(provider2),
-            positionId: positionId2,
-            amount: 500e6,
-            duration: 30 days,
-            reward: 5e6
+            coverageProvider: address(provider2), positionId: positionId2, amount: 500e6, duration: 30 days, reward: 5e6
         });
 
         // Ensure coordinator has tokens and approve coverage agent to spend
