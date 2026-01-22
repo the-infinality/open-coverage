@@ -125,6 +125,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         if (!success) revert RewardTransferFailed();
 
         address strategy = assetToStrategy[positionData.data.asset];
+        // casting to 'int256' is safe because amount won't exceed max int256 for practical coverage amounts
+        // forge-lint: disable-next-line(unsafe-typecast)
         _modifyCoverageForAgent(positionData.operator, strategy, positionData.data.coverageAgent, int256(amount));
         _checkCoverageForAgent(positionData.operator, strategy, positionData.data.coverageAgent);
 
@@ -170,6 +172,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
 
         // Reserve coverage in the coverage map (without transferring rewards yet)
         address strategy = assetToStrategy[positionData.data.asset];
+        // casting to 'int256' is safe because amount won't exceed max int256 for practical coverage amounts
+        // forge-lint: disable-next-line(unsafe-typecast)
         _modifyCoverageForAgent(positionData.operator, strategy, positionData.data.coverageAgent, int256(amount));
         _checkCoverageForAgent(positionData.operator, strategy, positionData.data.coverageAgent);
 
@@ -222,6 +226,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         // If amount is less than reserved, update coverage tracking
         if (amount < _claim.amount) {
             address strategy = assetToStrategy[positionData.data.asset];
+            // casting to 'int256' is safe because difference won't exceed max int256 for practical coverage amounts
+            // forge-lint: disable-next-line(unsafe-typecast)
             int256 releasedAmount = int256(_claim.amount - amount);
             _modifyCoverageForAgent(positionData.operator, strategy, positionData.data.coverageAgent, -releasedAmount);
         }
@@ -407,8 +413,12 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
 
         uint256 newValue;
         if (amount >= 0) {
+            // casting to 'uint256' is safe because we've checked amount >= 0
+            // forge-lint: disable-next-line(unsafe-typecast)
             newValue = current + uint256(amount);
         } else {
+            // casting to 'uint256' is safe because we've checked amount < 0, so -amount is positive
+            // forge-lint: disable-next-line(unsafe-typecast)
             uint256 decrease = uint256(-amount);
             newValue = current >= decrease ? current - decrease : 0;
         }
@@ -507,6 +517,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         ICoverageAgent(_position.coverageAgent).onSlashCompleted(claimId, amount);
         emit ClaimSlashed(claimId, amount);
 
+        // casting to 'int256' is safe because amount won't exceed max int256 for practical slash amounts
+        // forge-lint: disable-next-line(unsafe-typecast)
         _modifyCoverageForAgent(eigenPosition.operator, eigenPosition.strategy, _position.coverageAgent, -int256(amount));
 
         // Calculate the difference in strategy asset balance
