@@ -44,6 +44,50 @@ import {
 
 type SupportedChainId = (typeof supportedChains)[number]["id"]
 
+// ABI for ExampleCoverageAgent-specific functions (not part of ICoverageAgent interface)
+const exampleCoverageAgentAbi = [
+    {
+        type: "function",
+        inputs: [
+            {
+                name: "requests",
+                internalType: "struct ClaimCoverageRequest[]",
+                type: "tuple[]",
+                components: [
+                    { name: "coverageProvider", internalType: "address", type: "address" },
+                    { name: "positionId", internalType: "uint256", type: "uint256" },
+                    { name: "amount", internalType: "uint256", type: "uint256" },
+                    { name: "reward", internalType: "uint256", type: "uint256" },
+                    { name: "duration", internalType: "uint256", type: "uint256" },
+                ],
+            },
+        ],
+        name: "purchaseCoverage",
+        outputs: [{ name: "coverageId", internalType: "uint256", type: "uint256" }],
+        stateMutability: "nonpayable",
+    },
+    {
+        type: "function",
+        inputs: [
+            {
+                name: "requests",
+                internalType: "struct ClaimCoverageRequest[]",
+                type: "tuple[]",
+                components: [
+                    { name: "coverageProvider", internalType: "address", type: "address" },
+                    { name: "positionId", internalType: "uint256", type: "uint256" },
+                    { name: "amount", internalType: "uint256", type: "uint256" },
+                    { name: "reward", internalType: "uint256", type: "uint256" },
+                    { name: "duration", internalType: "uint256", type: "uint256" },
+                ],
+            },
+        ],
+        name: "reserveCoverage",
+        outputs: [{ name: "coverageId", internalType: "uint256", type: "uint256" }],
+        stateMutability: "nonpayable",
+    },
+] as const
+
 interface CoverageAgentInfoProps {
     contract: CoverageContract
 }
@@ -640,7 +684,8 @@ function CoverageClaimsManagement({
                                             claims: Array<{
                                                 coverageProvider: Address
                                                 claimId: bigint
-                                            }>
+                                            }>,
+                                            reservation: boolean
                                         }
                                         for (const claim of coverage.claims) {
                                             loadClaim(Number(claim.claimId), claim.coverageProvider)
@@ -733,7 +778,6 @@ function CoverageClaimsManagement({
         }
 
         // Use reserveCoverage if isReservation is true, otherwise use purchaseCoverage
-        const functionName = isReservation ? "reserveCoverage" : "purchaseCoverage"
         const successMessage = isReservation
             ? "Coverage reservation submitted"
             : "Coverage purchase submitted"
@@ -741,8 +785,8 @@ function CoverageClaimsManagement({
         writeContract(
             {
                 address: contract.address,
-                abi: iCoverageAgentAbi,
-                functionName,
+                abi: exampleCoverageAgentAbi,
+                functionName: isReservation ? "reserveCoverage" : "purchaseCoverage",
                 args: [[request]],
                 chainId,
             },
@@ -838,7 +882,7 @@ function CoverageClaimsManagement({
                         <Checkbox
                             id="reservationMode"
                             checked={isReservation}
-                            onCheckedChange={(checked) => setIsReservation(checked === true)}
+                            onChange={(e) => setIsReservation(e.target.checked)}
                             disabled={isPending || isConfirming}
                         />
                         <Label

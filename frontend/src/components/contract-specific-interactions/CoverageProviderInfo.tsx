@@ -378,6 +378,7 @@ interface CoveragePositionData {
     asset: Address
     refundable: number
     slashCoordinator: Address
+    maxReservationTime: bigint
 }
 
 /**
@@ -692,6 +693,7 @@ function OperatorPositionManagement({
             refundable: Number(refundable),
             slashCoordinator: (slashCoordinator ||
                 "0x0000000000000000000000000000000000000000") as Address,
+            maxReservationTime: 0n, // No reservation time limit by default
         }
 
         console.log("Creating position with data:", [positionData, additionalData])

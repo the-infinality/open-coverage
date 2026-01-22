@@ -10,7 +10,7 @@
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "preview": "vite preview",
-        "generate": "yarn generate-abi && yarn generate-operator-bytecode",
+        "generate": "yarn generate-abi && yarn generate-operator-bytecode && yarn prettier --write src/generated/**/*.ts",
         "generate-abi": "wagmi generate",
         "generate-operator-bytecode": "node scripts/generate-operator-bytecode.js"
     },
