@@ -13,4 +13,3 @@ interface IDiamondOwner {
     /// @notice Sets the diamond owner
     function setOwner(address newOwner) external;
 }
-

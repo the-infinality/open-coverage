@@ -9,8 +9,9 @@ import {AssetPair} from "../interfaces/IAssetPriceOracleAndSwapper.sol";
 /// @notice Diamond storage for the AssetPriceOracleAndSwapper facet
 /// @dev Uses EIP-2535 diamond storage pattern via LibAssetPriceOracleAndSwapperStorage
 abstract contract AssetPriceOracleAndSwapperStorage {
-    using LibAssetPriceOracleAndSwapperStorage for LibAssetPriceOracleAndSwapperStorage
-        .AssetPriceOracleAndSwapperStorage;
+    using
+    LibAssetPriceOracleAndSwapperStorage
+    for LibAssetPriceOracleAndSwapperStorage.AssetPriceOracleAndSwapperStorage;
 
     /// @notice Get the asset pairs mapping
     /// @return The asset pairs mapping
@@ -42,4 +43,3 @@ abstract contract AssetPriceOracleAndSwapperStorage {
         ds.swapSlippage = 100; // Default 1%
     }
 }
-

@@ -155,11 +155,12 @@ contract EigenTest is EigenTestDeployer {
     function test_allocate() public {
         _setupwithAllocations();
         OperatorSet memory operatorSet = OperatorSet({
-            avs: address(eigenCoverageDiamond), id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
+            avs: address(eigenCoverageDiamond),
+            id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
         });
         IAllocationManagerTypes.Allocation memory allocation = IAllocationManager(
-                eigenServiceManager.eigenAddresses().allocationManager
-            ).getAllocation(address(operator), operatorSet, _getTestStrategy());
+            eigenServiceManager.eigenAddresses().allocationManager
+        ).getAllocation(address(operator), operatorSet, _getTestStrategy());
         assertEq(allocation.currentMagnitude, 1e18);
     }
 
@@ -1631,7 +1632,11 @@ contract EigenTest is EigenTestDeployer {
 
         // Verify backing after conversion (should remain the same since amount didn't change)
         int256 backingAfterConversion = eigenCoverageProvider.claimBacking(claimId);
-        assertEq(backingAfterConversion, backingAfterReservation, "Backing should remain same after conversion with same amount");
+        assertEq(
+            backingAfterConversion,
+            backingAfterReservation,
+            "Backing should remain same after conversion with same amount"
+        );
     }
 
     /// @notice Test converting a reserved claim with smaller amount and duration
@@ -1793,7 +1798,11 @@ contract EigenTest is EigenTestDeployer {
 
         // Verify backing after conversion
         int256 backingAfterConversion = eigenCoverageProvider.claimBacking(claimId);
-        assertEq(backingAfterConversion, backingAfterReservation, "Backing should remain same after conversion with same amount");
+        assertEq(
+            backingAfterConversion,
+            backingAfterReservation,
+            "Backing should remain same after conversion with same amount"
+        );
 
         // Coverage agent can close their own issued claim
         vm.expectEmit(true, false, false, false);

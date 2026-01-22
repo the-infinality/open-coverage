@@ -34,4 +34,3 @@ contract DiamondCutFacet is IDiamondCut {
         LibDiamond.setContractOwner(newOwner);
     }
 }
-

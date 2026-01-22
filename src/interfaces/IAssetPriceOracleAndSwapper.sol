@@ -18,19 +18,15 @@ struct AssetPair {
     address assetA;
     /// @notice The second asset in the pair
     address assetB;
-
     /// @notice The swap engine to use for swapping
     address swapEngine;
     /// @notice The pool information to use for swapping
     bytes poolInfo;
-
     /// @notice The price strategy to use for the asset pair
     PriceStrategy priceStrategy;
-
     /// @notice The accuracy of the swapper
     /// @dev This is the accuracy of the swapper in basis points i.e. 1 = 0.01%
     uint16 swapperAccuracy;
-
     /// @notice Optional price oracle implementing the IPriceOracle
     /// @dev If not set, the price strategy must be SwapperOnly and swapperAccuracy must be 0
     address priceOracle;
@@ -110,4 +106,3 @@ interface IAssetPriceOracleAndSwapper {
         view
         returns (uint256 minAmountOut);
 }
-

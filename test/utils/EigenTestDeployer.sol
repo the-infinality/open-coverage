@@ -16,9 +16,8 @@ import {UniswapHelper, UniswapAddressbook} from "../../utils/UniswapHelper.sol";
 import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
 import {DiamondFacetsDeployer} from "../../utils/deployments/DiamondFacetsDeployer.sol";
 import {EigenFacetsDeployer} from "../../utils/deployments/EigenFacetsDeployer.sol";
-import {
-    AssetPriceOracleAndSwapperFacetDeployer
-} from "../../utils/deployments/AssetPriceOracleAndSwapperFacetDeployer.sol";
+import {AssetPriceOracleAndSwapperFacetDeployer} from
+    "../../utils/deployments/AssetPriceOracleAndSwapperFacetDeployer.sol";
 
 contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
     address public eigenOperatorInstance;
@@ -57,10 +56,8 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
             DiamondFacetsDeployer.getDiamondFacetCuts(diamondCutFacet, diamondLoupeFacet);
         IDiamondCut.FacetCut[] memory eigenCuts =
             EigenFacetsDeployer.getEigenFacetCuts(eigenServiceManagerFacet, eigenCoverageProviderFacet);
-        IDiamondCut.FacetCut memory assetPriceOracleAndSwapperCut =
-            AssetPriceOracleAndSwapperFacetDeployer.getAssetPriceOracleAndSwapperFacetCut(
-                assetPriceOracleAndSwapperFacet
-            );
+        IDiamondCut.FacetCut memory assetPriceOracleAndSwapperCut = AssetPriceOracleAndSwapperFacetDeployer
+            .getAssetPriceOracleAndSwapperFacetCut(assetPriceOracleAndSwapperFacet);
 
         // Combine all facet cuts (5 facets total)
         IDiamondCut.FacetCut[] memory cuts = new IDiamondCut.FacetCut[](5);

@@ -36,8 +36,9 @@ contract EigenOperatorProxyTest is EigenTestDeployer {
         );
 
         // Accept admin for the operator proxy
-        IPermissionController(eigenServiceManager.eigenAddresses().permissionController)
-            .acceptAdmin(address(operatorProxy));
+        IPermissionController(eigenServiceManager.eigenAddresses().permissionController).acceptAdmin(
+            address(operatorProxy)
+        );
 
         // Whitelist the test strategy for allocations
         eigenServiceManager.setStrategyWhitelist(address(_getTestStrategy()), true);
@@ -292,11 +293,12 @@ contract EigenOperatorProxyTest is EigenTestDeployer {
 
         // Verify allocation
         OperatorSet memory operatorSet = OperatorSet({
-            avs: address(eigenCoverageDiamond), id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
+            avs: address(eigenCoverageDiamond),
+            id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
         });
         IAllocationManagerTypes.Allocation memory allocation = IAllocationManager(
-                eigenServiceManager.eigenAddresses().allocationManager
-            ).getAllocation(address(operatorProxy), operatorSet, _getTestStrategy());
+            eigenServiceManager.eigenAddresses().allocationManager
+        ).getAllocation(address(operatorProxy), operatorSet, _getTestStrategy());
 
         assertEq(allocation.currentMagnitude, 1e18, "Allocation magnitude should be set");
     }
@@ -350,11 +352,12 @@ contract EigenOperatorProxyTest is EigenTestDeployer {
 
         // Verify allocation
         OperatorSet memory operatorSet = OperatorSet({
-            avs: address(eigenCoverageDiamond), id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
+            avs: address(eigenCoverageDiamond),
+            id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
         });
         IAllocationManagerTypes.Allocation memory allocation = IAllocationManager(
-                eigenServiceManager.eigenAddresses().allocationManager
-            ).getAllocation(address(operatorProxy), operatorSet, _getTestStrategy());
+            eigenServiceManager.eigenAddresses().allocationManager
+        ).getAllocation(address(operatorProxy), operatorSet, _getTestStrategy());
 
         assertEq(allocation.currentMagnitude, 5e17, "Allocation magnitude should match");
     }
@@ -375,11 +378,12 @@ contract EigenOperatorProxyTest is EigenTestDeployer {
         operatorProxy.allocate(address(eigenCoverageDiamond), address(coverageAgent), strategyAddresses, magnitudes);
 
         OperatorSet memory operatorSet = OperatorSet({
-            avs: address(eigenCoverageDiamond), id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
+            avs: address(eigenCoverageDiamond),
+            id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
         });
         IAllocationManagerTypes.Allocation memory allocation = IAllocationManager(
-                eigenServiceManager.eigenAddresses().allocationManager
-            ).getAllocation(address(operatorProxy), operatorSet, _getTestStrategy());
+            eigenServiceManager.eigenAddresses().allocationManager
+        ).getAllocation(address(operatorProxy), operatorSet, _getTestStrategy());
 
         assertEq(allocation.currentMagnitude, magnitude, "Allocation magnitude should match fuzzed value");
     }
@@ -463,4 +467,3 @@ contract EigenOperatorProxyTest is EigenTestDeployer {
         operatorProxy.updateOperatorMetadataURI("https://evil.uri");
     }
 }
-

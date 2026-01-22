@@ -62,4 +62,3 @@ abstract contract EigenCoverageStorage {
     /// @dev Gap for future storage variables (following OpenZeppelin upgradeable pattern)
     uint256[50] private __gap;
 }
-

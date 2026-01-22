@@ -88,7 +88,9 @@ contract EigenOperatorProxy is IEigenOperatorProxy {
         OperatorSet memory operatorSet = OperatorSet({avs: serviceManager_, id: operatorSetId});
         IAllocationManager.AllocateParams[] memory allocations = new IAllocationManager.AllocateParams[](1);
         allocations[0] = IAllocationManagerTypes.AllocateParams({
-            operatorSet: operatorSet, strategies: strategies, newMagnitudes: _magnitudes
+            operatorSet: operatorSet,
+            strategies: strategies,
+            newMagnitudes: _magnitudes
         });
 
         // Allocates the operator set. Can only be called after ALLOCATION_CONFIGURATION_DELAY (approximately 17.5 days) has passed since registration.
@@ -107,8 +109,9 @@ contract EigenOperatorProxy is IEigenOperatorProxy {
         if (rewardsSplit_ > 10000) revert InvalidRewardsSplit(rewardsSplit_);
         uint32 operatorSetId = IEigenServiceManager(serviceManager_).getOperatorSetId(coverageAgent_);
         OperatorSet memory operatorSet = OperatorSet({avs: serviceManager_, id: operatorSetId});
-        IRewardsCoordinator(_eigenAddresses.rewardsCoordinator)
-            .setOperatorSetSplit(address(this), operatorSet, rewardsSplit_);
+        IRewardsCoordinator(_eigenAddresses.rewardsCoordinator).setOperatorSetSplit(
+            address(this), operatorSet, rewardsSplit_
+        );
     }
 
     /// @inheritdoc IEigenOperatorProxy

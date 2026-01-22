@@ -44,4 +44,3 @@ contract MockPriceOracle is IPriceOracle {
         }
     }
 }
-

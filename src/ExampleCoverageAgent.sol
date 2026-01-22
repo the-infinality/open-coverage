@@ -91,8 +91,9 @@ contract ExampleCoverageAgent is ICoverageAgent {
             SafeERC20.forceApprove(IERC20(_ASSET), request.coverageProvider, request.reward);
 
             // Call issueClaim on the coverage provider
-            uint256 claimId = ICoverageProvider(request.coverageProvider)
-                .issueClaim(request.positionId, request.amount, request.duration, request.reward);
+            uint256 claimId = ICoverageProvider(request.coverageProvider).issueClaim(
+                request.positionId, request.amount, request.duration, request.reward
+            );
 
             // Store the claim
             claims.push(Claim({coverageProvider: request.coverageProvider, claimId: claimId}));
@@ -126,8 +127,9 @@ contract ExampleCoverageAgent is ICoverageAgent {
             }
 
             // Call reserveClaim on the coverage provider (no reward transfer yet)
-            uint256 claimId = ICoverageProvider(request.coverageProvider)
-                .reserveClaim(request.positionId, request.amount, request.duration, request.reward);
+            uint256 claimId = ICoverageProvider(request.coverageProvider).reserveClaim(
+                request.positionId, request.amount, request.duration, request.reward
+            );
 
             // Store the claim
             claims.push(Claim({coverageProvider: request.coverageProvider, claimId: claimId}));
@@ -173,8 +175,9 @@ contract ExampleCoverageAgent is ICoverageAgent {
             SafeERC20.forceApprove(IERC20(_ASSET), claimData.coverageProvider, request.reward);
 
             // Call convertReservedClaim on the coverage provider
-            ICoverageProvider(claimData.coverageProvider)
-                .convertReservedClaim(claimData.claimId, request.amount, request.duration, request.reward);
+            ICoverageProvider(claimData.coverageProvider).convertReservedClaim(
+                claimData.claimId, request.amount, request.duration, request.reward
+            );
         }
 
         // Mark as no longer a reservation
@@ -245,4 +248,3 @@ contract ExampleCoverageAgent is ICoverageAgent {
         if (msg.sender != _COORDINATOR) revert NotCoverageAgentCoordinator();
     }
 }
-

@@ -14,34 +14,27 @@ enum Refundable {
 struct CoveragePosition {
     /// @notice The address of the coverage agent that this position will cover.
     address coverageAgent;
-
     /// @notice The minimum rate for any delegation locking.
     /// @dev Rate is in basis points per annum
     uint16 minRate;
-
     /// @notice The maximum duration of any delegation locking in seconds.
     /// @dev If 0 there is no maximum duration.
     uint256 maxDuration;
-
     /// @notice The timestamp at which the coverage position expires.
     /// @dev If 0 there is no expiry block.
     uint256 expiryTimestamp;
-
     /// @notice The asset that the coverage position is denominated in.
     address asset;
-
     /// @notice The refund policy if the coverage agent cannot meet its obligations.
     /// @dev The coverage provider must provide contingencies based on the refund policy:
     /// - None: No refund required
     /// - TimeWeighted: Refund proportional to remaining duration (e.g., 50% refund if 6 months remain of 12 month position)
     /// - Full: Complete refund of reward to allow coverage agent to purchase coverage for remaining duration
     Refundable refundable;
-
     /// @notice The address of the slash coordinator for the coverage position.
     /// @dev The slash coordinator is responsible for initiating the slashing process for the coverage position.
     /// If no slash coordinator is set, the coverage provider will instantly slash the coverage position.
     address slashCoordinator;
-
     /// @notice The maximum amount of time in seconds that a reservation is valid for since it was created.
     /// @dev If 0 there is no maximum reservation time (reservations are not allowed).
     uint256 maxReservationTime;

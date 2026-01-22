@@ -29,4 +29,3 @@ contract MockAssetPriceOracleAndSwapper is AssetPriceOracleAndSwapper {
         super.register(_assetPair);
     }
 }
-

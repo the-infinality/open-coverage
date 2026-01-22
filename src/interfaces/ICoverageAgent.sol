@@ -17,7 +17,6 @@ struct ClaimCoverageRequest {
 struct Claim {
     /// @notice The coverage provider that issued the claim.
     address coverageProvider;
-
     /// @notice The id of the claim.
     uint256 claimId;
 }

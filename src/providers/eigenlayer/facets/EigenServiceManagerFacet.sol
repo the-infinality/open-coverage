@@ -245,22 +245,22 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         uint256[] memory wadsToSlash = new uint256[](1);
         wadsToSlash[0] = wadToSlash;
 
-        (uint256 slashId,) = IAllocationManager(_eigenAddresses.allocationManager)
-            .slashOperator(
-                address(this),
-                IAllocationManagerTypes.SlashingParams({
-                    operator: operator,
-                    operatorSetId: operatorSetId,
-                    strategies: strategies,
-                    wadsToSlash: wadsToSlash,
-                    description: "Coverage claim slash"
-                })
-            );
+        (uint256 slashId,) = IAllocationManager(_eigenAddresses.allocationManager).slashOperator(
+            address(this),
+            IAllocationManagerTypes.SlashingParams({
+                operator: operator,
+                operatorSetId: operatorSetId,
+                strategies: strategies,
+                wadsToSlash: wadsToSlash,
+                description: "Coverage claim slash"
+            })
+        );
 
         // Claim slashed tokens from StrategyManager (tokens are sent to this contract as redistribution recipient)
         OperatorSet memory operatorSet = OperatorSet({avs: address(this), id: operatorSetId});
-        tokensReceived = IStrategyManager(_eigenAddresses.strategyManager)
-            .clearBurnOrRedistributableSharesByStrategy(operatorSet, slashId, IStrategy(strategy));
+        tokensReceived = IStrategyManager(_eigenAddresses.strategyManager).clearBurnOrRedistributableSharesByStrategy(
+            operatorSet, slashId, IStrategy(strategy)
+        );
     }
 
     /// @inheritdoc IEigenServiceManager
@@ -327,12 +327,9 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         strategies[0] = IStrategy(strategy);
         address strategyAsset = address(IStrategy(strategy).underlyingToken());
         address coverageAsset = address(ICoverageAgent(coverageAgent).asset());
-        uint256[][] memory allocatedStake = IAllocationManager(_eigenAddresses.allocationManager)
-            .getAllocatedStake(
-                OperatorSet({avs: address(this), id: coverageAgentToOperatorSetId[coverageAgent]}),
-                _operators,
-                strategies
-            );
+        uint256[][] memory allocatedStake = IAllocationManager(_eigenAddresses.allocationManager).getAllocatedStake(
+            OperatorSet({avs: address(this), id: coverageAgentToOperatorSetId[coverageAgent]}), _operators, strategies
+        );
         (total,) =
             IAssetPriceOracleAndSwapper(address(this)).getQuote(allocatedStake[0][0], coverageAsset, strategyAsset);
     }
@@ -349,25 +346,22 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         IStrategy[] memory strats = new IStrategy[](1);
         strats[0] = IStrategy(strategy);
 
-        uint256 totalAllocatedStake = IAllocationManager(_eigenAddresses.allocationManager)
-            .getAllocatedStake(
-                OperatorSet({avs: address(this), id: coverageAgentToOperatorSetId[coverageAgent]}), ops, strats
-            )[0][0];
+        uint256 totalAllocatedStake = IAllocationManager(_eigenAddresses.allocationManager).getAllocatedStake(
+            OperatorSet({avs: address(this), id: coverageAgentToOperatorSetId[coverageAgent]}), ops, strats
+        )[0][0];
 
         // Convert amount to strategy asset and calculate proportion
-        uint256 requiredSlashAmount = IAssetPriceOracleAndSwapper(address(this))
-            .swapForOutputQuote(
-                amount, address(IStrategy(strategy).underlyingToken()), address(ICoverageAgent(coverageAgent).asset())
-            );
+        uint256 requiredSlashAmount = IAssetPriceOracleAndSwapper(address(this)).swapForOutputQuote(
+            amount, address(IStrategy(strategy).underlyingToken()), address(ICoverageAgent(coverageAgent).asset())
+        );
         wadToSlash = (requiredSlashAmount * WAD) / totalAllocatedStake;
         // Revert if the required slash amount is greater than the total allocated stake
         if (wadToSlash > WAD) {
-            (uint256 totalAllocatedStakeValue,) = IAssetPriceOracleAndSwapper(address(this))
-                .getQuote(
-                    totalAllocatedStake,
-                    address(ICoverageAgent(coverageAgent).asset()),
-                    address(IStrategy(strategy).underlyingToken())
-                );
+            (uint256 totalAllocatedStakeValue,) = IAssetPriceOracleAndSwapper(address(this)).getQuote(
+                totalAllocatedStake,
+                address(ICoverageAgent(coverageAgent).asset()),
+                address(IStrategy(strategy).underlyingToken())
+            );
 
             // Capture edge case rounding issues
             if (totalAllocatedStakeValue > amount) {
@@ -383,4 +377,3 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         IAllocationManager(_eigenAddresses.allocationManager).updateAVSMetadataURI(address(this), metadataURI);
     }
 }
-

@@ -15,9 +15,7 @@ import {IDiamondCut} from "../src/diamond/interfaces/IDiamondCut.sol";
 import {EigenAddresses} from "../src/providers/eigenlayer/Types.sol";
 import {DiamondFacetsDeployer} from "../utils/deployments/DiamondFacetsDeployer.sol";
 import {EigenFacetsDeployer} from "../utils/deployments/EigenFacetsDeployer.sol";
-import {
-    AssetPriceOracleAndSwapperFacetDeployer
-} from "../utils/deployments/AssetPriceOracleAndSwapperFacetDeployer.sol";
+import {AssetPriceOracleAndSwapperFacetDeployer} from "../utils/deployments/AssetPriceOracleAndSwapperFacetDeployer.sol";
 
 /// @title DeployEigenProvider
 /// @notice Script to deploy EigenCoverageDiamond with all facets
@@ -77,10 +75,8 @@ contract DeployEigenProvider is Script, EigenHelper, UniswapHelper {
             DiamondFacetsDeployer.getDiamondFacetCuts(diamondCutFacet, diamondLoupeFacet);
         IDiamondCut.FacetCut[] memory eigenCuts =
             EigenFacetsDeployer.getEigenFacetCuts(eigenServiceManagerFacet, eigenCoverageProviderFacet);
-        IDiamondCut.FacetCut memory assetPriceOracleAndSwapperCut =
-            AssetPriceOracleAndSwapperFacetDeployer.getAssetPriceOracleAndSwapperFacetCut(
-                assetPriceOracleAndSwapperFacet
-            );
+        IDiamondCut.FacetCut memory assetPriceOracleAndSwapperCut = AssetPriceOracleAndSwapperFacetDeployer
+            .getAssetPriceOracleAndSwapperFacetCut(assetPriceOracleAndSwapperFacet);
 
         // Combine all facet cuts
         cuts[0] = diamondCuts[0]; // DiamondCutFacet

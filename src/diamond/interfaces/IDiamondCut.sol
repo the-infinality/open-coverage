@@ -22,4 +22,3 @@ interface IDiamondCut is IDiamond, IDiamondOwner {
     ///                  Can be empty if _init is address(0)
     function diamondCut(FacetCut[] calldata _diamondCut, address _init, bytes calldata _calldata) external;
 }
-

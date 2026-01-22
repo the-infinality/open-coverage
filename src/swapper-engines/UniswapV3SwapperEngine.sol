@@ -325,9 +325,7 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
                 dstOffset := add(dstOffset, 23) // Move past fee (3) + token (20)
 
                 // Only move srcOffset back if there are more pools to process
-                if lt(add(i, 1), numPools) {
-                    srcOffset := sub(srcOffset, 3) // Move back 3 bytes to next fee position
-                }
+                if lt(add(i, 1), numPools) { srcOffset := sub(srcOffset, 3) } // Move back 3 bytes to next fee position
             }
 
             // Copy first token (20 bytes) to last position

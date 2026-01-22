@@ -15,6 +15,7 @@ interface IDiamond {
         Add, // Add new functions
         Replace, // Replace existing functions
         Remove // Remove existing functions
+
     }
 
     /// @notice A facet cut describes changes to make to a facet
@@ -37,4 +38,3 @@ interface IDiamond {
     /// @param _calldata The calldata to execute on _init (can be empty)
     event DiamondCut(FacetCut[] _diamondCut, address _init, bytes _calldata);
 }
-

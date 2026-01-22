@@ -17,4 +17,3 @@ interface IPriceOracle {
         view
         returns (uint256 bidOutAmount, uint256 askOutAmount);
 }
-

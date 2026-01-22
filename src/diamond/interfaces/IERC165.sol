@@ -13,4 +13,3 @@ interface IERC165 {
     ///  `interfaceId` is not 0xffffffff, `false` otherwise
     function supportsInterface(bytes4 interfaceId) external view returns (bool);
 }
-

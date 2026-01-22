@@ -41,4 +41,3 @@ contract DeployEigenOperatorProxy is Script, EigenHelper {
         return eigenOperatorProxyAddress;
     }
 }
-
