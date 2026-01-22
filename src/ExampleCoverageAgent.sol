@@ -90,9 +90,9 @@ contract ExampleCoverageAgent is ICoverageAgent {
             // Approve tokens for the reward
             SafeERC20.forceApprove(IERC20(_ASSET), request.coverageProvider, request.reward);
 
-            // Call claimCoverage on the coverage provider
+            // Call issueClaim on the coverage provider
             uint256 claimId = ICoverageProvider(request.coverageProvider)
-                .claimCoverage(request.positionId, request.amount, request.duration, request.reward);
+                .issueClaim(request.positionId, request.amount, request.duration, request.reward);
 
             // Store the claim
             claims.push(Claim({coverageProvider: request.coverageProvider, claimId: claimId}));

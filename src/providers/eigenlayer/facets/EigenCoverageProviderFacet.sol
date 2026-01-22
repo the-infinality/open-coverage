@@ -106,7 +106,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     }
 
     /// @inheritdoc ICoverageProvider
-    function claimCoverage(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
+    function issueClaim(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
         external
         returns (uint256 claimId)
     {
@@ -125,8 +125,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         if (!success) revert RewardTransferFailed();
 
         address strategy = assetToStrategy[positionData.data.asset];
-        _updateCoverageMap(positionData.operator, strategy, positionData.data.coverageAgent, amount);
-        _checkCoverage(positionData.operator, strategy, positionData.data.coverageAgent);
+        _modifyCoverageForAgent(positionData.operator, strategy, positionData.data.coverageAgent, int256(amount));
+        _checkCoverageForAgent(positionData.operator, strategy, positionData.data.coverageAgent);
 
         claimId = claims.length;
         claims.push(
@@ -170,8 +170,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
 
         // Reserve coverage in the coverage map (without transferring rewards yet)
         address strategy = assetToStrategy[positionData.data.asset];
-        _updateCoverageMap(positionData.operator, strategy, positionData.data.coverageAgent, amount);
-        _checkCoverage(positionData.operator, strategy, positionData.data.coverageAgent);
+        _modifyCoverageForAgent(positionData.operator, strategy, positionData.data.coverageAgent, int256(amount));
+        _checkCoverageForAgent(positionData.operator, strategy, positionData.data.coverageAgent);
 
         claimId = claims.length;
         claims.push(
@@ -222,8 +222,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         // If amount is less than reserved, update coverage tracking
         if (amount < _claim.amount) {
             address strategy = assetToStrategy[positionData.data.asset];
-            uint256 releasedAmount = _claim.amount - amount;
-            _decreaseCoverageMap(positionData.operator, strategy, positionData.data.coverageAgent, releasedAmount);
+            int256 releasedAmount = int256(_claim.amount - amount);
+            _modifyCoverageForAgent(positionData.operator, strategy, positionData.data.coverageAgent, -releasedAmount);
         }
 
         // Capture rewards funds from coverage agent
@@ -261,22 +261,22 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         bool isCoverageAgent = msg.sender == positionData.data.coverageAgent;
         bool reservationExpired =
             isReservation && (block.timestamp > _claim.createdAt + positionData.data.maxReservationTime);
+        bool claimDurationElapsed = isIssued && (block.timestamp >= _claim.createdAt + _claim.duration);
 
-        // Anyone can close an expired reservation
-        // Only the coverage agent can close their own issued claim
-        if (!reservationExpired && !isCoverageAgent) {
+        // Anyone can close an expired reservation or an issued claim whose duration has elapsed
+        // Only the coverage agent can close their own claim early
+        if (!reservationExpired && !claimDurationElapsed && !isCoverageAgent) {
             if (isReservation) {
                 revert ClaimNotExpired(claimId);
-            } else {
-                revert NotCoverageAgent(msg.sender, positionData.data.coverageAgent);
             }
+            revert NotCoverageAgent(msg.sender, positionData.data.coverageAgent);
         }
 
         // Release the coverage from the coverage map
         address strategy = assetToStrategy[positionData.data.asset];
-        _decreaseCoverageMap(positionData.operator, strategy, positionData.data.coverageAgent, _claim.amount);
+        _modifyCoverageForAgent(positionData.operator, strategy, positionData.data.coverageAgent, -int256(_claim.amount));
 
-        // Update duration to reflect actual time coverage was active
+        // Update duration to reflect actual time coverage was active (only if closed early by coverage agent)
         if (isIssued && block.timestamp < _claim.createdAt + _claim.duration) {
             _claim.duration = block.timestamp - _claim.createdAt;
         }
@@ -289,19 +289,6 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     function liquidateClaim(uint256) external pure {
         //TODO: Implement liquidateClaim
         revert IEigenServiceManager.NotImplemented();
-    }
-
-    /// @inheritdoc ICoverageProvider
-    function completeClaims(uint256 claimId) external {
-        CoverageClaim storage _claim = claims[claimId];
-        if (_claim.status != CoverageClaimStatus.Issued) revert InvalidClaim(claimId);
-        // Ensure the claim cannot be completed before its duration has elapsed
-        if (block.timestamp < _claim.createdAt + _claim.duration) {
-            revert TimestampInvalid(_claim.createdAt + _claim.duration);
-        }
-
-        _claim.status = CoverageClaimStatus.Completed;
-        emit ClaimCompleted(claimId);
     }
 
     /// @inheritdoc ICoverageProvider
@@ -406,31 +393,32 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         );
     }
 
-    /// @notice Updates the operator's coverage tracking map for a strategy and coverage agent
-    function _updateCoverageMap(address operator, address strategy, address coverageAgent, uint256 amount) private {
+    /// @notice Modifies the operator's coverage tracking map for a strategy and coverage agent
+    /// @param operator The operator address
+    /// @param strategy The strategy address
+    /// @param coverageAgent The coverage agent address
+    /// @param amount Positive to increase coverage, negative to decrease coverage
+    function _modifyCoverageForAgent(address operator, address strategy, address coverageAgent, int256 amount) private {
         EnumerableMap.AddressToUintMap storage coverageMap = operators[operator].coverageStrategies[strategy];
 
         // Get the current value, or 0 if the key doesn't exist
         (bool exists, uint256 currentValue) = coverageMap.tryGet(coverageAgent);
-        uint256 newValue = (exists ? currentValue : 0) + amount;
+        uint256 current = exists ? currentValue : 0;
+
+        uint256 newValue;
+        if (amount >= 0) {
+            newValue = current + uint256(amount);
+        } else {
+            uint256 decrease = uint256(-amount);
+            newValue = current >= decrease ? current - decrease : 0;
+        }
 
         coverageMap.set(coverageAgent, newValue);
     }
 
-    /// @notice Decreases the operator's coverage tracking map for a strategy and coverage agent
-    function _decreaseCoverageMap(address operator, address strategy, address coverageAgent, uint256 amount) private {
-        EnumerableMap.AddressToUintMap storage coverageMap = operators[operator].coverageStrategies[strategy];
-
-        // Get the current value
-        (bool exists, uint256 currentValue) = coverageMap.tryGet(coverageAgent);
-        if (exists && currentValue >= amount) {
-            coverageMap.set(coverageAgent, currentValue - amount);
-        }
-    }
-
     /// @notice Checks if the operator has sufficient coverage available for the coverage agent
     /// @dev Reverts only if the operator does not have enough allocated to safely cover the agent.
-    function _checkCoverage(address operator, address strategy, address coverageAgent) private view {
+    function _checkCoverageForAgent(address operator, address strategy, address coverageAgent) private view {
         int256 backing = _coverageBackingAmount(operator, strategy, coverageAgent);
         // Check to see if agent has a deficit of coverage (negative backing)
         if (backing < 0) {
@@ -518,6 +506,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         _claim.status = CoverageClaimStatus.Slashed;
         ICoverageAgent(_position.coverageAgent).onSlashCompleted(claimId, amount);
         emit ClaimSlashed(claimId, amount);
+
+        _modifyCoverageForAgent(eigenPosition.operator, eigenPosition.strategy, _position.coverageAgent, -int256(amount));
 
         // Calculate the difference in strategy asset balance
         uint256 closingStrategyAssetBalance = IERC20(strategyAsset).balanceOf(address(this));

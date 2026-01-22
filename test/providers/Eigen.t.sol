@@ -293,7 +293,7 @@ contract EigenTest is EigenTestDeployer {
         vm.expectEmit(true, true, false, true);
         emit ICoverageProvider.ClaimIssued(positionId, 0, 1000e6, 30 days);
 
-        uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
         vm.stopPrank();
 
         assertEq(claimId, 0);
@@ -365,7 +365,7 @@ contract EigenTest is EigenTestDeployer {
         // Track the expected claim ID (should be 0 for first claim in a fresh test)
         // Since each fuzz test run is independent, this will be the first claim
         uint256 expectedClaimId = 0;
-        uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, claimAmount, 30 days, reward);
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, reward);
         vm.stopPrank();
 
         // Verify claim ID (should be 0 for first claim)
@@ -527,7 +527,7 @@ contract EigenTest is EigenTestDeployer {
                 ICoverageProvider.InsufficientCoverageAvailable.selector, claimAmount - coverageAllocated
             )
         );
-        eigenCoverageProvider.claimCoverage(positionId, claimAmount, 30 days, 10e6);
+        eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, 10e6);
     }
 
     /// @notice Fuzz test to verify insufficient coverage error with various stake amounts
@@ -584,7 +584,7 @@ contract EigenTest is EigenTestDeployer {
                 ICoverageProvider.InsufficientCoverageAvailable.selector, claimAmount - coverageAllocated
             )
         );
-        eigenCoverageProvider.claimCoverage(positionId, claimAmount, 30 days, 10e6);
+        eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, 10e6);
     }
 
     function test_RevertWhen_claimPosition_invalidAmount() public {
@@ -611,7 +611,7 @@ contract EigenTest is EigenTestDeployer {
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
         vm.expectRevert(ICoverageProvider.InvalidAmount.selector);
-        eigenCoverageProvider.claimCoverage(positionId, 0, 30 days, 10e6);
+        eigenCoverageProvider.issueClaim(positionId, 0, 30 days, 10e6);
         vm.stopPrank();
     }
 
@@ -638,7 +638,7 @@ contract EigenTest is EigenTestDeployer {
         vm.expectRevert(
             abi.encodeWithSelector(ICoverageProvider.NotCoverageAgent.selector, staker, address(coverageAgent))
         );
-        eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
+        eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
     }
 
     function test_positionMaxAmount() public {
@@ -686,7 +686,7 @@ contract EigenTest is EigenTestDeployer {
 
         vm.startPrank(address(coverageAgent));
         vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.DurationExceedsMax.selector, 30 days, 365 days));
-        eigenCoverageProvider.claimCoverage(positionId, 1000e6, 365 days, 10e6);
+        eigenCoverageProvider.issueClaim(positionId, 1000e6, 365 days, 10e6);
         vm.stopPrank();
     }
 
@@ -715,7 +715,7 @@ contract EigenTest is EigenTestDeployer {
         uint256 duration = 30 days;
         uint256 minimumReward = (amount * data.minRate * duration) / (10000 * 365 days);
         vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.InsufficientReward.selector, minimumReward, 10));
-        eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10);
+        eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10);
         vm.stopPrank();
     }
 
@@ -752,7 +752,7 @@ contract EigenTest is EigenTestDeployer {
                 ICoverageProvider.DurationExceedsExpiry.selector, expiryTimestamp, completionTimestamp
             )
         );
-        eigenCoverageProvider.claimCoverage(positionId, 1000e6, duration, 10e6);
+        eigenCoverageProvider.issueClaim(positionId, 1000e6, duration, 10e6);
         vm.stopPrank();
     }
 
@@ -779,7 +779,7 @@ contract EigenTest is EigenTestDeployer {
 
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
-        uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
         vm.stopPrank();
 
         console2.log("block timestamp", block.timestamp);
@@ -822,7 +822,7 @@ contract EigenTest is EigenTestDeployer {
 
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
-        uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
         vm.stopPrank();
 
         uint256 amount;
@@ -899,7 +899,7 @@ contract EigenTest is EigenTestDeployer {
     ) internal returns (uint256 claimId) {
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), reward);
-        claimId = eigenCoverageProvider.claimCoverage(positionId, claimAmount, duration, reward);
+        claimId = eigenCoverageProvider.issueClaim(positionId, claimAmount, duration, reward);
 
         if (timeOffset > 0) {
             vm.warp(block.timestamp + timeOffset);
@@ -1052,8 +1052,8 @@ contract EigenTest is EigenTestDeployer {
 
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 20e6);
-        uint256 claimId1 = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
-        uint256 claimId2 = eigenCoverageProvider.claimCoverage(positionId, 500e6, 30 days, 5e6);
+        uint256 claimId1 = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
+        uint256 claimId2 = eigenCoverageProvider.issueClaim(positionId, 500e6, 30 days, 5e6);
         vm.stopPrank();
 
         uint256[] memory claimIds = new uint256[](2);
@@ -1140,7 +1140,7 @@ contract EigenTest is EigenTestDeployer {
 
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
-        uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
 
         // Slash immediately after creation (should succeed)
         uint256[] memory claimIds = new uint256[](1);
@@ -1192,14 +1192,11 @@ contract EigenTest is EigenTestDeployer {
         uint256 positionId = _setupSlashingPosition(1000e18);
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 30 days, 10e6, 31 days);
 
-        vm.startPrank(address(coverageAgent));
-
-        // Expect ClaimCompleted event
+        // Expect ClaimClosed event
         vm.expectEmit(true, false, false, false);
-        emit ICoverageProvider.ClaimCompleted(claimId);
+        emit ICoverageProvider.ClaimClosed(claimId);
 
-        eigenCoverageProvider.completeClaims(claimId);
-        vm.stopPrank();
+        eigenCoverageProvider.closeClaim(claimId);
 
         // Try to slash a completed claim
         vm.warp(block.timestamp - 1 days); // Go back to within duration window
@@ -1340,7 +1337,7 @@ contract EigenTest is EigenTestDeployer {
         for (uint256 i = 0; i < numClaims; i++) {
             uint256 claimAmount = 1000e6 + (i * 100e6); // Varying amounts
             uint256 reward = 10e6 + (i * 1e6);
-            claimIds[i] = eigenCoverageProvider.claimCoverage(positionId, claimAmount, 30 days, reward);
+            claimIds[i] = eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, reward);
             amounts[i] = claimAmount; // Slash full amount
         }
         vm.stopPrank();

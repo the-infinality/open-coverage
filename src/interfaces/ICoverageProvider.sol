@@ -75,7 +75,6 @@ interface ICoverageProvider {
     event ClaimReserved(uint256 indexed positionId, uint256 indexed claimId, uint256 amount, uint256 duration);
     event ClaimClosed(uint256 indexed claimId);
     event Liquidated(uint256 indexed claimId);
-    event ClaimCompleted(uint256 indexed claimId);
     event ClaimSlashed(uint256 indexed claimId, uint256 amount);
     event ClaimSlashPending(uint256 indexed claimId, address slashCoordinator);
 
@@ -130,7 +129,7 @@ interface ICoverageProvider {
     /// @param duration The duration of the coverage to claim.
     /// @param reward The amount of the coverage reward to pay.
     /// @return claimId ID of the coverage claim on success.
-    function claimCoverage(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
+    function issueClaim(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
         external
         returns (uint256 claimId);
 
@@ -157,7 +156,8 @@ interface ICoverageProvider {
 
     /// @notice Close a coverage claim.
     /// @dev Can be called by anyone if the reservation has expired (createdAt + maxReservationTime < block.timestamp).
-    /// Can be called by the coverage agent that made the claim to close their own claim.
+    /// @dev Can be called by anyone if an issued claim's duration has elapsed (createdAt + duration <= block.timestamp).
+    /// @dev Can be called by the coverage agent that made the claim to close their own claim early.
     /// @param claimId The ID of the claim to close.
     function closeClaim(uint256 claimId) external;
 
@@ -165,12 +165,6 @@ interface ICoverageProvider {
     /// @dev This should be called by the coverage agent if the coverage position doesn't meet its obligations.
     /// @param claimId The id of the coverage position to liquidate.
     function liquidateClaim(uint256 claimId) external;
-
-    /// @notice Complete a coverage claim.
-    /// @dev This can be called by anyone if the coverage claim is completed and should be removed from coverage tracking.
-    /// If a claim is in the pending slash state, it can only be completed as a result of the slashing process.
-    /// @param claimId The id of the coverage claim to complete.
-    function completeClaims(uint256 claimId) external;
 
     /// @notice Slash on coverage claims.
     /// @dev Can only be called by a coverage agent. Should take a slash coordinator into account if set.

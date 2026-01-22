@@ -43,7 +43,7 @@ contract MockCoverageProvider is ICoverageProvider {
         emit PositionClosed(positionId);
     }
 
-    function claimCoverage(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
+    function issueClaim(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
         external
         returns (uint256 claimId)
     {
@@ -108,13 +108,6 @@ contract MockCoverageProvider is ICoverageProvider {
     function liquidateClaim(uint256 claimId) external override {
         _claims[claimId].status = CoverageClaimStatus.Liquidated;
         emit Liquidated(claimId);
-    }
-
-    function completeClaims(uint256 claimId) external override {
-        CoverageClaim storage coverageClaim = _claims[claimId];
-        _totalCoverageByAgent[msg.sender] -= coverageClaim.amount;
-        coverageClaim.status = CoverageClaimStatus.Completed;
-        emit ClaimCompleted(claimId);
     }
 
     function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts)

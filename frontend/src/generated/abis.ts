@@ -200,6 +200,7 @@ export const iCoverageAgentAbi = [
                             { name: "claimId", internalType: "uint256", type: "uint256" },
                         ],
                     },
+                    { name: "reservation", internalType: "bool", type: "bool" },
                 ],
             },
         ],
@@ -231,46 +232,6 @@ export const iCoverageAgentAbi = [
     },
     {
         type: "function",
-        inputs: [
-            {
-                name: "requests",
-                internalType: "struct ClaimCoverageRequest[]",
-                type: "tuple[]",
-                components: [
-                    { name: "coverageProvider", internalType: "address", type: "address" },
-                    { name: "positionId", internalType: "uint256", type: "uint256" },
-                    { name: "amount", internalType: "uint256", type: "uint256" },
-                    { name: "reward", internalType: "uint256", type: "uint256" },
-                    { name: "duration", internalType: "uint256", type: "uint256" },
-                ],
-            },
-        ],
-        name: "purchaseCoverage",
-        outputs: [{ name: "coverageId", internalType: "uint256", type: "uint256" }],
-        stateMutability: "nonpayable",
-    },
-    {
-        type: "function",
-        inputs: [
-            {
-                name: "requests",
-                internalType: "struct ClaimCoverageRequest[]",
-                type: "tuple[]",
-                components: [
-                    { name: "coverageProvider", internalType: "address", type: "address" },
-                    { name: "positionId", internalType: "uint256", type: "uint256" },
-                    { name: "amount", internalType: "uint256", type: "uint256" },
-                    { name: "reward", internalType: "uint256", type: "uint256" },
-                    { name: "duration", internalType: "uint256", type: "uint256" },
-                ],
-            },
-        ],
-        name: "reserveCoverage",
-        outputs: [{ name: "coverageId", internalType: "uint256", type: "uint256" }],
-        stateMutability: "nonpayable",
-    },
-    {
-        type: "function",
         inputs: [{ name: "coverageProvider", internalType: "address", type: "address" }],
         name: "registerCoverageProvider",
         outputs: [],
@@ -290,19 +251,6 @@ export const iCoverageAgentAbi = [
         stateMutability: "view",
     },
     {
-        type: "function",
-        inputs: [{ name: "coverageId", internalType: "uint256", type: "uint256" }],
-        name: "slashCoverage",
-        outputs: [
-            {
-                name: "slashStatuses",
-                internalType: "enum CoverageClaimStatus[]",
-                type: "uint8[]",
-            },
-        ],
-        stateMutability: "nonpayable",
-    },
-    {
         type: "event",
         anonymous: false,
         inputs: [
@@ -314,6 +262,19 @@ export const iCoverageAgentAbi = [
             },
         ],
         name: "CoverageClaimed",
+    },
+    {
+        type: "event",
+        anonymous: false,
+        inputs: [
+            {
+                name: "coverageProvider",
+                internalType: "address",
+                type: "address",
+                indexed: true,
+            },
+        ],
+        name: "CoverageProviderRegistered",
     },
     {
         type: "event",
@@ -338,19 +299,6 @@ export const iCoverageAgentAbi = [
                 type: "address",
                 indexed: true,
             },
-        ],
-        name: "CoverageProviderRegistered",
-    },
-    {
-        type: "event",
-        anonymous: false,
-        inputs: [
-            {
-                name: "coverageProvider",
-                internalType: "address",
-                type: "address",
-                indexed: true,
-            },
             {
                 name: "positionId",
                 internalType: "uint256",
@@ -360,6 +308,17 @@ export const iCoverageAgentAbi = [
         ],
         name: "PositionRegistered",
     },
+    {
+        type: "error",
+        inputs: [{ name: "coverageId", internalType: "uint256", type: "uint256" }],
+        name: "CoverageAlreadyConverted",
+    },
+    {
+        type: "error",
+        inputs: [{ name: "coverageId", internalType: "uint256", type: "uint256" }],
+        name: "CoverageNotReservation",
+    },
+    { type: "error", inputs: [], name: "CoverageProviderNotRegistered" },
     {
         type: "error",
         inputs: [{ name: "coverageId", internalType: "uint256", type: "uint256" }],
@@ -406,22 +365,17 @@ export const iCoverageProviderAbi = [
     },
     {
         type: "function",
-        inputs: [
-            { name: "positionId", internalType: "uint256", type: "uint256" },
-            { name: "amount", internalType: "uint256", type: "uint256" },
-            { name: "duration", internalType: "uint256", type: "uint256" },
-            { name: "reward", internalType: "uint256", type: "uint256" },
-        ],
-        name: "claimCoverage",
-        outputs: [{ name: "claimId", internalType: "uint256", type: "uint256" }],
-        stateMutability: "nonpayable",
-    },
-    {
-        type: "function",
         inputs: [{ name: "claimId", internalType: "uint256", type: "uint256" }],
         name: "claimTotalSlashAmount",
         outputs: [{ name: "slashAmount", internalType: "uint256", type: "uint256" }],
         stateMutability: "view",
+    },
+    {
+        type: "function",
+        inputs: [{ name: "claimId", internalType: "uint256", type: "uint256" }],
+        name: "closeClaim",
+        outputs: [],
+        stateMutability: "nonpayable",
     },
     {
         type: "function",
@@ -433,14 +387,19 @@ export const iCoverageProviderAbi = [
     {
         type: "function",
         inputs: [{ name: "claimId", internalType: "uint256", type: "uint256" }],
-        name: "completeClaims",
+        name: "completeSlash",
         outputs: [],
         stateMutability: "nonpayable",
     },
     {
         type: "function",
-        inputs: [{ name: "claimId", internalType: "uint256", type: "uint256" }],
-        name: "completeSlash",
+        inputs: [
+            { name: "claimId", internalType: "uint256", type: "uint256" },
+            { name: "amount", internalType: "uint256", type: "uint256" },
+            { name: "duration", internalType: "uint256", type: "uint256" },
+            { name: "reward", internalType: "uint256", type: "uint256" },
+        ],
+        name: "convertReservedClaim",
         outputs: [],
         stateMutability: "nonpayable",
     },
@@ -467,12 +426,29 @@ export const iCoverageProviderAbi = [
                         internalType: "address",
                         type: "address",
                     },
+                    {
+                        name: "maxReservationTime",
+                        internalType: "uint256",
+                        type: "uint256",
+                    },
                 ],
             },
             { name: "additionalData", internalType: "bytes", type: "bytes" },
         ],
         name: "createPosition",
         outputs: [{ name: "positionId", internalType: "uint256", type: "uint256" }],
+        stateMutability: "nonpayable",
+    },
+    {
+        type: "function",
+        inputs: [
+            { name: "positionId", internalType: "uint256", type: "uint256" },
+            { name: "amount", internalType: "uint256", type: "uint256" },
+            { name: "duration", internalType: "uint256", type: "uint256" },
+            { name: "reward", internalType: "uint256", type: "uint256" },
+        ],
+        name: "issueClaim",
+        outputs: [{ name: "claimId", internalType: "uint256", type: "uint256" }],
         stateMutability: "nonpayable",
     },
     {
@@ -514,6 +490,11 @@ export const iCoverageProviderAbi = [
                         internalType: "address",
                         type: "address",
                     },
+                    {
+                        name: "maxReservationTime",
+                        internalType: "uint256",
+                        type: "uint256",
+                    },
                 ],
             },
         ],
@@ -525,6 +506,18 @@ export const iCoverageProviderAbi = [
         name: "positionMaxAmount",
         outputs: [{ name: "maxAmount", internalType: "uint256", type: "uint256" }],
         stateMutability: "view",
+    },
+    {
+        type: "function",
+        inputs: [
+            { name: "positionId", internalType: "uint256", type: "uint256" },
+            { name: "amount", internalType: "uint256", type: "uint256" },
+            { name: "duration", internalType: "uint256", type: "uint256" },
+            { name: "reward", internalType: "uint256", type: "uint256" },
+        ],
+        name: "reserveClaim",
+        outputs: [{ name: "claimId", internalType: "uint256", type: "uint256" }],
+        stateMutability: "nonpayable",
     },
     {
         type: "function",
@@ -553,7 +546,7 @@ export const iCoverageProviderAbi = [
                 indexed: true,
             },
         ],
-        name: "ClaimCompleted",
+        name: "ClaimClosed",
     },
     {
         type: "event",
@@ -585,6 +578,37 @@ export const iCoverageProviderAbi = [
             },
         ],
         name: "ClaimIssued",
+    },
+    {
+        type: "event",
+        anonymous: false,
+        inputs: [
+            {
+                name: "positionId",
+                internalType: "uint256",
+                type: "uint256",
+                indexed: true,
+            },
+            {
+                name: "claimId",
+                internalType: "uint256",
+                type: "uint256",
+                indexed: true,
+            },
+            {
+                name: "amount",
+                internalType: "uint256",
+                type: "uint256",
+                indexed: false,
+            },
+            {
+                name: "duration",
+                internalType: "uint256",
+                type: "uint256",
+                indexed: false,
+            },
+        ],
+        name: "ClaimReserved",
     },
     {
         type: "event",
@@ -629,37 +653,6 @@ export const iCoverageProviderAbi = [
         anonymous: false,
         inputs: [
             {
-                name: "positionId",
-                internalType: "uint256",
-                type: "uint256",
-                indexed: true,
-            },
-            {
-                name: "claimId",
-                internalType: "uint256",
-                type: "uint256",
-                indexed: true,
-            },
-            {
-                name: "amount",
-                internalType: "uint256",
-                type: "uint256",
-                indexed: false,
-            },
-            {
-                name: "duration",
-                internalType: "uint256",
-                type: "uint256",
-                indexed: false,
-            },
-        ],
-        name: "CoverageIssued",
-    },
-    {
-        type: "event",
-        anonymous: false,
-        inputs: [
-            {
                 name: "claimId",
                 internalType: "uint256",
                 type: "uint256",
@@ -697,6 +690,25 @@ export const iCoverageProviderAbi = [
     {
         type: "error",
         inputs: [
+            { name: "claimId", internalType: "uint256", type: "uint256" },
+            { name: "amount", internalType: "uint256", type: "uint256" },
+            { name: "reserved", internalType: "uint256", type: "uint256" },
+        ],
+        name: "AmountExceedsReserved",
+    },
+    {
+        type: "error",
+        inputs: [{ name: "claimId", internalType: "uint256", type: "uint256" }],
+        name: "ClaimNotExpired",
+    },
+    {
+        type: "error",
+        inputs: [{ name: "claimId", internalType: "uint256", type: "uint256" }],
+        name: "ClaimNotReserved",
+    },
+    {
+        type: "error",
+        inputs: [
             { name: "expiryTimestamp", internalType: "uint256", type: "uint256" },
             { name: "completionTimestamp", internalType: "uint256", type: "uint256" },
         ],
@@ -709,6 +721,15 @@ export const iCoverageProviderAbi = [
             { name: "duration", internalType: "uint256", type: "uint256" },
         ],
         name: "DurationExceedsMax",
+    },
+    {
+        type: "error",
+        inputs: [
+            { name: "claimId", internalType: "uint256", type: "uint256" },
+            { name: "duration", internalType: "uint256", type: "uint256" },
+            { name: "reserved", internalType: "uint256", type: "uint256" },
+        ],
+        name: "DurationExceedsReserved",
     },
     {
         type: "error",
@@ -746,6 +767,16 @@ export const iCoverageProviderAbi = [
         type: "error",
         inputs: [{ name: "positionId", internalType: "uint256", type: "uint256" }],
         name: "PositionExpired",
+    },
+    {
+        type: "error",
+        inputs: [{ name: "claimId", internalType: "uint256", type: "uint256" }],
+        name: "ReservationExpired",
+    },
+    {
+        type: "error",
+        inputs: [{ name: "positionId", internalType: "uint256", type: "uint256" }],
+        name: "ReservationNotAllowed",
     },
     { type: "error", inputs: [], name: "RewardTransferFailed" },
     {
@@ -1060,6 +1091,13 @@ export const iEigenServiceManagerAbi = [
         type: "function",
         inputs: [{ name: "metadataURI", internalType: "string", type: "string" }],
         name: "updateAVSMetadataURI",
+        outputs: [],
+        stateMutability: "nonpayable",
+    },
+    {
+        type: "function",
+        inputs: [{ name: "metadataURI", internalType: "string", type: "string" }],
+        name: "updateMetadataURI",
         outputs: [],
         stateMutability: "nonpayable",
     },
