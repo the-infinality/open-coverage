@@ -519,10 +519,13 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         ICoverageAgent(_position.coverageAgent).onSlashCompleted(claimId, amount);
         emit ClaimSlashed(claimId, amount);
 
-        // casting to 'int256' is safe because amount won't exceed max int256 for practical slash amounts
-        // forge-lint: disable-next-line(unsafe-typecast)
         _modifyCoverageForAgent(
-            eigenPosition.operator, eigenPosition.strategy, _position.coverageAgent, -int256(amount)
+            eigenPosition.operator,
+            eigenPosition.strategy,
+            _position.coverageAgent,
+            // casting to 'int256' is safe because amount won't exceed max int256 for practical slash amounts
+            // forge-lint: disable-next-line(unsafe-typecast)
+            -int256(amount)
         );
 
         // Calculate the difference in strategy asset balance
