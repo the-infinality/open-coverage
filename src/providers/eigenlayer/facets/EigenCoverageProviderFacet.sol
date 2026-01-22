@@ -150,6 +150,142 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     }
 
     /// @inheritdoc ICoverageProvider
+    function reserveClaim(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
+        external
+        returns (uint256 claimId)
+    {
+        if (amount == 0) revert InvalidAmount();
+
+        EigenCoveragePosition storage positionData = positions[positionId];
+        if (msg.sender != positionData.data.coverageAgent) {
+            revert NotCoverageAgent(msg.sender, positionData.data.coverageAgent);
+        }
+
+        // Check if reservations are allowed for this position
+        if (positionData.data.maxReservationTime == 0) {
+            revert ReservationNotAllowed(positionId);
+        }
+
+        _validatePosition(positionData.data, amount, duration, reward);
+
+        // Reserve coverage in the coverage map (without transferring rewards yet)
+        address strategy = assetToStrategy[positionData.data.asset];
+        _updateCoverageMap(positionData.operator, strategy, positionData.data.coverageAgent, amount);
+        _checkCoverage(positionData.operator, strategy, positionData.data.coverageAgent);
+
+        claimId = claims.length;
+        claims.push(
+            CoverageClaim({
+                positionId: positionId,
+                amount: amount,
+                duration: duration,
+                createdAt: block.timestamp,
+                status: CoverageClaimStatus.Reserved,
+                reward: reward
+            })
+        );
+
+        emit ClaimReserved(positionId, claimId, amount, duration);
+    }
+
+    /// @inheritdoc ICoverageProvider
+    function convertReservedClaim(uint256 claimId, uint256 amount, uint256 duration, uint256 reward) external {
+        CoverageClaim storage _claim = claims[claimId];
+        EigenCoveragePosition storage positionData = positions[_claim.positionId];
+
+        // Verify claim is in Reserved status
+        if (_claim.status != CoverageClaimStatus.Reserved) revert ClaimNotReserved(claimId);
+
+        // Verify caller is the coverage agent
+        if (msg.sender != positionData.data.coverageAgent) {
+            revert NotCoverageAgent(msg.sender, positionData.data.coverageAgent);
+        }
+
+        // Check reservation hasn't expired
+        if (block.timestamp > _claim.createdAt + positionData.data.maxReservationTime) {
+            revert ReservationExpired(claimId);
+        }
+
+        // Verify amount and duration are not larger than reserved
+        if (amount > _claim.amount) {
+            revert AmountExceedsReserved(claimId, amount, _claim.amount);
+        }
+        if (duration > _claim.duration) {
+            revert DurationExceedsReserved(claimId, duration, _claim.duration);
+        }
+        if (amount == 0) revert InvalidAmount();
+
+        // Calculate minimum reward pro-rata based on the new amount and duration
+        uint256 minimumReward = (amount * positionData.data.minRate * duration) / (10000 * 365 days);
+        if (minimumReward > reward) revert InsufficientReward(minimumReward, reward);
+
+        // If amount is less than reserved, update coverage tracking
+        if (amount < _claim.amount) {
+            address strategy = assetToStrategy[positionData.data.asset];
+            uint256 releasedAmount = _claim.amount - amount;
+            _decreaseCoverageMap(positionData.operator, strategy, positionData.data.coverageAgent, releasedAmount);
+        }
+
+        // Capture rewards funds from coverage agent
+        bool success = IERC20(ICoverageAgent(positionData.data.coverageAgent).asset())
+            .transferFrom(msg.sender, address(this), reward);
+        if (!success) revert RewardTransferFailed();
+
+        // Update claim to Issued status with new values
+        _claim.amount = amount;
+        _claim.duration = duration;
+        _claim.reward = reward;
+        _claim.createdAt = block.timestamp; // Reset createdAt to current time
+        _claim.status = CoverageClaimStatus.Issued;
+
+        // Initialize the claim reward distribution
+        if (positionData.data.refundable != Refundable.Full) {
+            claimRewardDistributions[claimId] =
+                ClaimRewardDistribution({amount: 0, lastDistributedTimestamp: uint32(block.timestamp)});
+        }
+
+        emit ClaimIssued(_claim.positionId, claimId, amount, duration);
+    }
+
+    /// @inheritdoc ICoverageProvider
+    function closeClaim(uint256 claimId) external {
+        CoverageClaim storage _claim = claims[claimId];
+        EigenCoveragePosition storage positionData = positions[_claim.positionId];
+
+        // Determine if this is a reservation that can be closed by anyone
+        bool isReservation = _claim.status == CoverageClaimStatus.Reserved;
+        bool isIssued = _claim.status == CoverageClaimStatus.Issued;
+
+        if (!isReservation && !isIssued) revert InvalidClaim(claimId);
+
+        bool isCoverageAgent = msg.sender == positionData.data.coverageAgent;
+        bool reservationExpired =
+            isReservation && (block.timestamp > _claim.createdAt + positionData.data.maxReservationTime);
+
+        // Anyone can close an expired reservation
+        // Only the coverage agent can close their own issued claim
+        if (!reservationExpired && !isCoverageAgent) {
+            if (isReservation) {
+                revert ClaimNotExpired(claimId);
+            } else {
+                revert NotCoverageAgent(msg.sender, positionData.data.coverageAgent);
+            }
+        }
+
+        // Release the coverage from the coverage map
+        address strategy = assetToStrategy[positionData.data.asset];
+        _decreaseCoverageMap(positionData.operator, strategy, positionData.data.coverageAgent, _claim.amount);
+
+        // Update duration to reflect actual time coverage was active
+        if (isIssued && block.timestamp < _claim.createdAt + _claim.duration) {
+            _claim.duration = block.timestamp - _claim.createdAt;
+        }
+
+        _claim.status = CoverageClaimStatus.Completed;
+        emit ClaimClosed(claimId);
+    }
+
+    /// @inheritdoc ICoverageProvider
     function liquidateClaim(uint256) external pure {
         //TODO: Implement liquidateClaim
         revert IEigenServiceManager.NotImplemented();
@@ -279,6 +415,17 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         uint256 newValue = (exists ? currentValue : 0) + amount;
 
         coverageMap.set(coverageAgent, newValue);
+    }
+
+    /// @notice Decreases the operator's coverage tracking map for a strategy and coverage agent
+    function _decreaseCoverageMap(address operator, address strategy, address coverageAgent, uint256 amount) private {
+        EnumerableMap.AddressToUintMap storage coverageMap = operators[operator].coverageStrategies[strategy];
+
+        // Get the current value
+        (bool exists, uint256 currentValue) = coverageMap.tryGet(coverageAgent);
+        if (exists && currentValue >= amount) {
+            coverageMap.set(coverageAgent, currentValue - amount);
+        }
     }
 
     /// @notice Checks if the operator has sufficient coverage available for the coverage agent

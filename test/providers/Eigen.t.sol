@@ -172,7 +172,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -196,7 +197,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -221,7 +223,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -245,7 +248,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -274,7 +278,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -318,7 +323,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -501,7 +507,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -557,7 +564,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -592,7 +600,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -617,7 +626,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -643,7 +653,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -664,7 +675,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
 
         bytes memory additionalData = abi.encode(
@@ -690,7 +702,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -720,7 +733,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: expiryTimestamp,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -755,7 +769,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -797,7 +812,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.TimeWeighted,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -851,7 +867,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: refundable,
-            slashCoordinator: slashCoordinator
+            slashCoordinator: slashCoordinator,
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -1113,7 +1130,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -1492,6 +1510,235 @@ contract EigenTest is EigenTestDeployer {
         emit IAllocationManagerEvents.AVSMetadataURIUpdated(address(eigenCoverageDiamond), metadataURI);
 
         eigenServiceManager.updateMetadataURI(metadataURI);
+    }
+
+    // ============ Reservation Tests ============
+
+    /// @notice Helper to setup a position with reservations enabled
+    function _setupPositionWithReservation(uint256 stakeAmount, uint256 maxReservationTime)
+        internal
+        returns (uint256 positionId)
+    {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(stakeAmount);
+
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: maxReservationTime
+        });
+        bytes memory additionalData = abi.encode(
+            CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
+        );
+        positionId = eigenCoverageProvider.createPosition(data, additionalData);
+    }
+
+    /// @notice Test reserving a claim
+    function test_reserveClaim() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+
+        // Expect ClaimReserved event
+        vm.expectEmit(true, true, false, true);
+        emit ICoverageProvider.ClaimReserved(positionId, 0, 1000e6, 30 days);
+
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+
+        assertEq(claimId, 0);
+
+        CoverageClaim memory claim = eigenCoverageProvider.claim(claimId);
+        assertEq(claim.amount, 1000e6);
+        assertEq(claim.duration, 30 days);
+        assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Reserved));
+        assertEq(claim.reward, 10e6);
+    }
+
+    /// @notice Test that reservations are not allowed when maxReservationTime is 0
+    function test_RevertWhen_reserveClaim_reservationsNotAllowed() public {
+        // Create position without reservation enabled (maxReservationTime = 0)
+        uint256 positionId = _setupSlashingPosition(10e18);
+
+        vm.startPrank(address(coverageAgent));
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.ReservationNotAllowed.selector, positionId));
+        eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+    }
+
+    /// @notice Test converting a reserved claim to issued
+    function test_convertReservedClaim() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+
+        // Approve tokens for the reward
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+
+        // Expect ClaimIssued event
+        vm.expectEmit(true, true, false, true);
+        emit ICoverageProvider.ClaimIssued(positionId, claimId, 1000e6, 30 days);
+
+        eigenCoverageProvider.convertReservedClaim(claimId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+
+        CoverageClaim memory claim = eigenCoverageProvider.claim(claimId);
+        assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Issued));
+        assertEq(claim.amount, 1000e6);
+        assertEq(claim.duration, 30 days);
+    }
+
+    /// @notice Test converting a reserved claim with smaller amount and duration
+    function test_convertReservedClaim_partialConversion() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+
+        // Approve tokens for a smaller reward (pro-rata)
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 5e6);
+
+        // Convert with smaller amount and duration
+        eigenCoverageProvider.convertReservedClaim(claimId, 500e6, 15 days, 5e6);
+        vm.stopPrank();
+
+        CoverageClaim memory claim = eigenCoverageProvider.claim(claimId);
+        assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Issued));
+        assertEq(claim.amount, 500e6);
+        assertEq(claim.duration, 15 days);
+    }
+
+    /// @notice Test that converting a claim fails if reservation has expired
+    function test_RevertWhen_convertReservedClaim_expired() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+
+        // Warp past reservation time
+        vm.warp(block.timestamp + 2 hours);
+
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.ReservationExpired.selector, claimId));
+        eigenCoverageProvider.convertReservedClaim(claimId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+    }
+
+    /// @notice Test that amount cannot exceed reserved amount
+    function test_RevertWhen_convertReservedClaim_amountExceedsReserved() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 20e6);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.AmountExceedsReserved.selector, claimId, 2000e6, 1000e6)
+        );
+        eigenCoverageProvider.convertReservedClaim(claimId, 2000e6, 30 days, 20e6);
+        vm.stopPrank();
+    }
+
+    /// @notice Test that duration cannot exceed reserved duration
+    function test_RevertWhen_convertReservedClaim_durationExceedsReserved() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 20e6);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.DurationExceedsReserved.selector, claimId, 60 days, 30 days)
+        );
+        eigenCoverageProvider.convertReservedClaim(claimId, 1000e6, 60 days, 20e6);
+        vm.stopPrank();
+    }
+
+    /// @notice Test closing an expired reservation
+    function test_closeClaim_expiredReservation() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+
+        // Warp past reservation time
+        vm.warp(block.timestamp + 2 hours);
+
+        // Anyone can close an expired reservation
+        address anyone = makeAddr("anyone");
+        vm.prank(anyone);
+
+        vm.expectEmit(true, false, false, false);
+        emit ICoverageProvider.ClaimClosed(claimId);
+
+        eigenCoverageProvider.closeClaim(claimId);
+
+        CoverageClaim memory claim = eigenCoverageProvider.claim(claimId);
+        assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Completed));
+    }
+
+    /// @notice Test that non-coverage-agent cannot close a non-expired reservation
+    function test_RevertWhen_closeClaim_reservationNotExpired() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+
+        // Try to close before expiration as non-coverage-agent
+        address anyone = makeAddr("anyone");
+        vm.prank(anyone);
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.ClaimNotExpired.selector, claimId));
+        eigenCoverageProvider.closeClaim(claimId);
+    }
+
+    /// @notice Test that coverage agent can close their own claim
+    function test_closeClaim_byCoverageAgent() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+
+        // Coverage agent can close their own claim even before expiration
+        vm.expectEmit(true, false, false, false);
+        emit ICoverageProvider.ClaimClosed(claimId);
+
+        eigenCoverageProvider.closeClaim(claimId);
+        vm.stopPrank();
+
+        CoverageClaim memory claim = eigenCoverageProvider.claim(claimId);
+        assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Completed));
+    }
+
+    /// @notice Test closing an issued claim by coverage agent
+    function test_closeClaim_issuedClaim() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        // Create a reservation and convert it
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+        eigenCoverageProvider.convertReservedClaim(claimId, 1000e6, 30 days, 10e6);
+
+        // Coverage agent can close their own issued claim
+        vm.expectEmit(true, false, false, false);
+        emit ICoverageProvider.ClaimClosed(claimId);
+
+        eigenCoverageProvider.closeClaim(claimId);
+        vm.stopPrank();
+
+        CoverageClaim memory claim = eigenCoverageProvider.claim(claimId);
+        assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Completed));
     }
 }
 

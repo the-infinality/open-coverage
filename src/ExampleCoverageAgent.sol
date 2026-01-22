@@ -69,6 +69,7 @@ contract ExampleCoverageAgent is ICoverageAgent {
         // Initialize coverage storage
         Coverage storage coverageData = _coverages.push();
         Claim[] storage claims = coverageData.claims;
+        coverageData.reservation = false;
 
         uint256 totalReward = 0;
         for (uint256 i = 0; i < requests.length; i++) {
@@ -96,6 +97,88 @@ contract ExampleCoverageAgent is ICoverageAgent {
             // Store the claim
             claims.push(Claim({coverageProvider: request.coverageProvider, claimId: claimId}));
         }
+
+        emit CoverageClaimed(coverageId);
+    }
+
+    /// @notice Reserve coverage from coverage providers.
+    /// @dev Can only be called by the coverage agent coordinator. Creates reservations without immediate reward payment.
+    /// @param requests The requests to reserve coverage.
+    /// @return coverageId The id of the reserved coverage.
+    function reserveCoverage(ClaimCoverageRequest[] calldata requests)
+        external
+        onlyCoordinator
+        returns (uint256 coverageId)
+    {
+        coverageId = _coverages.length;
+
+        // Initialize coverage storage
+        Coverage storage coverageData = _coverages.push();
+        Claim[] storage claims = coverageData.claims;
+        coverageData.reservation = true;
+
+        for (uint256 i = 0; i < requests.length; i++) {
+            ClaimCoverageRequest memory request = requests[i];
+
+            // Verify coverage provider is registered
+            if (!_coverageProviders.contains(request.coverageProvider)) {
+                revert ICoverageAgent.CoverageProviderNotRegistered();
+            }
+
+            // Call reserveClaim on the coverage provider (no reward transfer yet)
+            uint256 claimId = ICoverageProvider(request.coverageProvider)
+                .reserveClaim(request.positionId, request.amount, request.duration, request.reward);
+
+            // Store the claim
+            claims.push(Claim({coverageProvider: request.coverageProvider, claimId: claimId}));
+        }
+
+        emit CoverageReserved(coverageId);
+    }
+
+    /// @notice Convert reserved coverage to issued coverage.
+    /// @dev Can only be called by the coverage agent coordinator.
+    /// @param coverageId The id of the reserved coverage to convert.
+    /// @param requests The requests to convert. Only duration, amount, and reward need to be filled.
+    ///        coverageProvider and positionId are taken from the original reservation.
+    function convertReservedCoverage(uint256 coverageId, ClaimCoverageRequest[] calldata requests)
+        external
+        onlyCoordinator
+    {
+        require(coverageId < _coverages.length, InvalidCoverage(coverageId));
+        Coverage storage coverageData = _coverages[coverageId];
+
+        // Verify this is a reservation
+        if (!coverageData.reservation) {
+            revert ICoverageAgent.CoverageNotReservation(coverageId);
+        }
+
+        // Verify request length matches claims
+        require(requests.length == coverageData.claims.length, InvalidCoverage(coverageId));
+
+        // Calculate total reward needed
+        uint256 totalReward = 0;
+        for (uint256 i = 0; i < requests.length; i++) {
+            totalReward += requests[i].reward;
+        }
+
+        // Transfer rewards from coordinator to the coverage agent for all claims
+        SafeERC20.safeTransferFrom(IERC20(_ASSET), msg.sender, address(this), totalReward);
+
+        for (uint256 i = 0; i < requests.length; i++) {
+            ClaimCoverageRequest memory request = requests[i];
+            Claim storage claimData = coverageData.claims[i];
+
+            // Approve tokens for the reward
+            SafeERC20.forceApprove(IERC20(_ASSET), claimData.coverageProvider, request.reward);
+
+            // Call convertReservedClaim on the coverage provider
+            ICoverageProvider(claimData.coverageProvider)
+                .convertReservedClaim(claimData.claimId, request.amount, request.duration, request.reward);
+        }
+
+        // Mark as no longer a reservation
+        coverageData.reservation = false;
 
         emit CoverageClaimed(coverageId);
     }

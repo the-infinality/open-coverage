@@ -58,6 +58,7 @@ const CLAIM_STATUS_LABELS: Record<
     2: { label: "Completed", variant: "secondary" },
     3: { label: "Pending Slash", variant: "outline" },
     4: { label: "Slashed", variant: "destructive" },
+    5: { label: "Reserved", variant: "outline" },
 }
 
 interface CoverageClaimData {
@@ -430,6 +431,7 @@ function CoverageClaimsManagement({
     const [claimReward, setClaimReward] = useState("")
     const [positionMaxAmount, setPositionMaxAmount] = useState<bigint | null>(null)
     const [isLoadingMaxAmount, setIsLoadingMaxAmount] = useState(false)
+    const [isReservation, setIsReservation] = useState(false)
 
     // Claims viewing state
     const [loadedClaims, setLoadedClaims] = useState<LoadedClaimData[]>([])
@@ -721,7 +723,7 @@ function CoverageClaimsManagement({
         const duration = BigInt(Number(claimDuration) * 24 * 60 * 60) // days to seconds
         const reward = BigInt(Math.floor(parseFloat(claimReward) * 10 ** tokenDecimals))
 
-        // Create the ClaimCoverageRequest struct for purchaseCoverage
+        // Create the ClaimCoverageRequest struct
         const request = {
             coverageProvider: selectedProviderAddress as Address,
             positionId: BigInt(positionId),
@@ -730,17 +732,23 @@ function CoverageClaimsManagement({
             duration,
         }
 
+        // Use reserveCoverage if isReservation is true, otherwise use purchaseCoverage
+        const functionName = isReservation ? "reserveCoverage" : "purchaseCoverage"
+        const successMessage = isReservation
+            ? "Coverage reservation submitted"
+            : "Coverage purchase submitted"
+
         writeContract(
             {
                 address: contract.address,
                 abi: iCoverageAgentAbi,
-                functionName: "purchaseCoverage",
+                functionName,
                 args: [[request]],
                 chainId,
             },
             {
                 onSuccess: (hash) => {
-                    toast.success(`Transaction submitted: ${hash.slice(0, 10)}...`)
+                    toast.success(`${successMessage}: ${hash.slice(0, 10)}...`)
                 },
                 onError: (error) => {
                     toast.error(error.message.slice(0, 100))
@@ -817,10 +825,28 @@ function CoverageClaimsManagement({
                 {/* Create Claim Section */}
                 <div className="space-y-4">
                     <div className="rounded-lg bg-muted/50 p-3">
-                        <h4 className="text-sm font-medium">Create New Claim</h4>
+                        <h4 className="text-sm font-medium">Create New Coverage</h4>
                         <p className="text-xs text-muted-foreground mt-1">
-                            Claim coverage from a registered provider position
+                            {isReservation
+                                ? "Reserve coverage without immediate payment (can be converted later)"
+                                : "Purchase coverage from a registered provider position"}
                         </p>
+                    </div>
+
+                    {/* Reservation Toggle */}
+                    <div className="flex items-center space-x-2">
+                        <Checkbox
+                            id="reservationMode"
+                            checked={isReservation}
+                            onCheckedChange={(checked) => setIsReservation(checked === true)}
+                            disabled={isPending || isConfirming}
+                        />
+                        <Label
+                            htmlFor="reservationMode"
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                        >
+                            Reserve coverage (no immediate payment)
+                        </Label>
                     </div>
 
                     <div className="space-y-2">
@@ -927,6 +953,7 @@ function CoverageClaimsManagement({
                         onClick={handleCreateClaim}
                         disabled={!isValidClaimForm || isPending || isConfirming}
                         className="w-full"
+                        variant={isReservation ? "outline" : "default"}
                     >
                         {isPending || isConfirming ? (
                             <Loader2 className="mr-2 size-4 animate-spin" />
@@ -936,14 +963,20 @@ function CoverageClaimsManagement({
                         {isPending
                             ? "Confirm in wallet..."
                             : isConfirming
-                              ? "Creating..."
-                              : "Create Claim"}
+                              ? isReservation
+                                  ? "Reserving..."
+                                  : "Creating..."
+                              : isReservation
+                                ? "Reserve Coverage"
+                                : "Purchase Coverage"}
                     </Button>
 
                     {isSuccess && (
                         <p className="flex items-center gap-2 text-sm text-green-600">
                             <CheckCircle2 className="size-4" />
-                            Claim created successfully!
+                            {isReservation
+                                ? "Coverage reserved successfully!"
+                                : "Coverage purchased successfully!"}
                         </p>
                     )}
                 </div>

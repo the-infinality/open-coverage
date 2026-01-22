@@ -41,6 +41,10 @@ struct CoveragePosition {
     /// @dev The slash coordinator is responsible for initiating the slashing process for the coverage position.
     /// If no slash coordinator is set, the coverage provider will instantly slash the coverage position.
     address slashCoordinator;
+
+    /// @notice The maximum amount of time in seconds that a reservation is valid for since it was created.
+    /// @dev If 0 there is no maximum reservation time (reservations are not allowed).
+    uint256 maxReservationTime;
 }
 
 enum CoverageClaimStatus {
@@ -48,7 +52,8 @@ enum CoverageClaimStatus {
     Liquidated,
     Completed,
     PendingSlash,
-    Slashed
+    Slashed,
+    Reserved
 }
 
 struct CoverageClaim {
@@ -67,6 +72,8 @@ interface ICoverageProvider {
     event PositionCreated(uint256 indexed positionId);
     event PositionClosed(uint256 indexed positionId);
     event ClaimIssued(uint256 indexed positionId, uint256 indexed claimId, uint256 amount, uint256 duration);
+    event ClaimReserved(uint256 indexed positionId, uint256 indexed claimId, uint256 amount, uint256 duration);
+    event ClaimClosed(uint256 indexed claimId);
     event Liquidated(uint256 indexed claimId);
     event ClaimCompleted(uint256 indexed claimId);
     event ClaimSlashed(uint256 indexed claimId, uint256 amount);
@@ -85,6 +92,12 @@ interface ICoverageProvider {
     error InvalidClaim(uint256 claimId);
     error SlashFailed(uint256 claimId);
     error SlashAmountExceedsClaim(uint256 claimId, uint256 slash, uint256 claim);
+    error ReservationNotAllowed(uint256 positionId);
+    error ReservationExpired(uint256 claimId);
+    error AmountExceedsReserved(uint256 claimId, uint256 amount, uint256 reserved);
+    error DurationExceedsReserved(uint256 claimId, uint256 duration, uint256 reserved);
+    error ClaimNotReserved(uint256 claimId);
+    error ClaimNotExpired(uint256 claimId);
 
     /// ============ Hooks ============
 
@@ -120,6 +133,33 @@ interface ICoverageProvider {
     function claimCoverage(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
         external
         returns (uint256 claimId);
+
+    /// @notice Reserve coverage for a coverage position.
+    /// @dev Reserves coverage without immediately requiring the full reward payment.
+    /// The reservation can be converted to an issued claim within the maxReservationTime.
+    /// @param positionId ID of the coverage position to reserve coverage from.
+    /// @param amount The amount of coverage to reserve.
+    /// @param duration The duration of the coverage to reserve.
+    /// @param reward The amount of the coverage reward that will be paid on conversion.
+    /// @return claimId ID of the reserved coverage claim on success.
+    function reserveClaim(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
+        external
+        returns (uint256 claimId);
+
+    /// @notice Convert a reserved claim to an issued claim.
+    /// @dev Can only be called by the coverage agent that created the reservation.
+    /// The amount and duration can be less than or equal to the reserved amounts.
+    /// @param claimId The ID of the reserved claim to convert.
+    /// @param amount The amount of coverage to claim (must be <= reserved amount).
+    /// @param duration The duration of the coverage (must be <= reserved duration).
+    /// @param reward The reward to pay (must be adequate pro-rata based on amount and duration).
+    function convertReservedClaim(uint256 claimId, uint256 amount, uint256 duration, uint256 reward) external;
+
+    /// @notice Close a coverage claim.
+    /// @dev Can be called by anyone if the reservation has expired (createdAt + maxReservationTime < block.timestamp).
+    /// Can be called by the coverage agent that made the claim to close their own claim.
+    /// @param claimId The ID of the claim to close.
+    function closeClaim(uint256 claimId) external;
 
     /// @notice Liquidate a coverage claim if it doesn't meet its obligations.
     /// @dev This should be called by the coverage agent if the coverage position doesn't meet its obligations.

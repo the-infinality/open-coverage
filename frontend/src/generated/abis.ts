@@ -251,6 +251,26 @@ export const iCoverageAgentAbi = [
     },
     {
         type: "function",
+        inputs: [
+            {
+                name: "requests",
+                internalType: "struct ClaimCoverageRequest[]",
+                type: "tuple[]",
+                components: [
+                    { name: "coverageProvider", internalType: "address", type: "address" },
+                    { name: "positionId", internalType: "uint256", type: "uint256" },
+                    { name: "amount", internalType: "uint256", type: "uint256" },
+                    { name: "reward", internalType: "uint256", type: "uint256" },
+                    { name: "duration", internalType: "uint256", type: "uint256" },
+                ],
+            },
+        ],
+        name: "reserveCoverage",
+        outputs: [{ name: "coverageId", internalType: "uint256", type: "uint256" }],
+        stateMutability: "nonpayable",
+    },
+    {
+        type: "function",
         inputs: [{ name: "coverageProvider", internalType: "address", type: "address" }],
         name: "registerCoverageProvider",
         outputs: [],
@@ -294,6 +314,19 @@ export const iCoverageAgentAbi = [
             },
         ],
         name: "CoverageClaimed",
+    },
+    {
+        type: "event",
+        anonymous: false,
+        inputs: [
+            {
+                name: "coverageId",
+                internalType: "uint256",
+                type: "uint256",
+                indexed: true,
+            },
+        ],
+        name: "CoverageReserved",
     },
     {
         type: "event",

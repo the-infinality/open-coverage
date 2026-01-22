@@ -66,6 +66,45 @@ contract MockCoverageProvider is ICoverageProvider {
         emit ClaimIssued(positionId, claimId, amount, duration);
     }
 
+    function reserveClaim(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
+        external
+        override
+        returns (uint256 claimId)
+    {
+        claimId = nextClaimId++;
+        _claims[claimId] = CoverageClaim({
+            positionId: positionId,
+            amount: amount,
+            duration: duration,
+            createdAt: block.timestamp,
+            status: CoverageClaimStatus.Reserved,
+            reward: reward
+        });
+        _totalCoverageByAgent[msg.sender] += amount;
+        emit ClaimReserved(positionId, claimId, amount, duration);
+    }
+
+    function convertReservedClaim(uint256 claimId, uint256 amount, uint256 duration, uint256 reward) external override {
+        CoverageClaim storage coverageClaim = _claims[claimId];
+        CoveragePosition memory _position = _positions[coverageClaim.positionId];
+
+        bool success =
+            IERC20(ICoverageAgent(_position.coverageAgent).asset()).transferFrom(msg.sender, address(this), reward);
+        if (!success) revert RewardTransferFailed();
+
+        coverageClaim.amount = amount;
+        coverageClaim.duration = duration;
+        coverageClaim.reward = reward;
+        coverageClaim.createdAt = block.timestamp;
+        coverageClaim.status = CoverageClaimStatus.Issued;
+        emit ClaimIssued(coverageClaim.positionId, claimId, amount, duration);
+    }
+
+    function closeClaim(uint256 claimId) external override {
+        _claims[claimId].status = CoverageClaimStatus.Completed;
+        emit ClaimClosed(claimId);
+    }
+
     function liquidateClaim(uint256 claimId) external override {
         _claims[claimId].status = CoverageClaimStatus.Liquidated;
         emit Liquidated(claimId);
@@ -249,7 +288,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: USDC,
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
 
         // Expect PositionRegistered event from agent
@@ -274,7 +314,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: WETH,
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -327,7 +368,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: USDC,
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -364,7 +406,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: USDC,
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -427,7 +470,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: USDC,
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -477,7 +521,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: USDC,
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -545,7 +590,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: USDC,
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         CoveragePosition memory position2 = CoveragePosition({
             coverageAgent: address(coverageAgent),
@@ -554,7 +600,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: USDC,
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         uint256 positionId1 = mockProvider.createPosition(position1, "");
         uint256 positionId2 = provider2.createPosition(position2, "");
@@ -609,7 +656,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: USDC,
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -654,7 +702,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: USDC,
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -691,7 +740,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: USDC,
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -760,7 +810,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: USDC,
             refundable: Refundable.None,
-            slashCoordinator: slashCoordinator
+            slashCoordinator: slashCoordinator,
+            maxReservationTime: 0
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
