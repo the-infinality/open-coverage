@@ -1868,6 +1868,7 @@ contract EigenTest is EigenTestDeployer {
         // All claims share the same backing since they're for the same operator/strategy/agent
         // Verify backing reflects remaining coverage
         uint256 totalClaimed = 1000e6 + 500e6 + 500e6;
+        // forge-lint: disable-next-line(unsafe-typecast)
         int256 expectedBacking = int256(totalAllocated) - int256(totalClaimed);
         assertEq(backing3, expectedBacking, "Backing should equal allocated minus claimed");
     }
@@ -2062,6 +2063,7 @@ contract EigenTest is EigenTestDeployer {
         // Now backing should be negative (deficient)
         int256 backingAfter = eigenCoverageProvider.claimBacking(claimId);
         assertLt(backingAfter, 0, "Backing should be negative (deficient) after deallocation");
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertEq(backingAfter, -int256(claimAmount), "Backing deficit should equal claimed amount");
     }
 
@@ -2127,7 +2129,7 @@ contract EigenTest is EigenTestDeployer {
         // Backing should be negative (deficient)
         assertLt(backingAfter, 0, "Backing should be negative after partial deallocation");
 
-        // Expected deficit: new allocation - claim amount
+        // forge-lint: disable-next-line(unsafe-typecast)
         int256 expectedBacking = int256(allocatedAfterDeallocation) - int256(claimAmount);
         assertEq(backingAfter, expectedBacking, "Backing deficit should match expected");
     }
@@ -2190,7 +2192,7 @@ contract EigenTest is EigenTestDeployer {
         // Backing should still be positive
         assertGt(backingAfter, 0, "Backing should remain positive when allocation > claim");
 
-        // Expected backing: new allocation - claim amount
+        // forge-lint: disable-next-line(unsafe-typecast)
         int256 expectedBacking = int256(allocatedAfterDeallocation) - int256(claimAmount);
         assertEq(backingAfter, expectedBacking, "Backing should match expected");
     }

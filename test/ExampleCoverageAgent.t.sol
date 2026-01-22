@@ -163,7 +163,7 @@ contract MockCoverageProvider is ICoverageProvider {
 }
 
 /// @notice Test suite for ExampleCoverageAgent
-contract CoverageAgentTest is TestDeployer {
+contract ExampleCoverageAgentTest is TestDeployer {
     ExampleCoverageAgent public coverageAgent;
     MockCoverageProvider public mockProvider;
 
@@ -347,6 +347,15 @@ contract CoverageAgentTest is TestDeployer {
         // Try to retrieve coverage with invalid ID (no coverage purchased yet)
         vm.expectRevert(abi.encodeWithSelector(ICoverageAgent.InvalidCoverage.selector, 0));
         coverageAgent.coverage(0);
+    }
+
+    function test_RevertWhen_coverage_invalidCoverageId_emitsError() public {
+        // Test that InvalidCoverage error is properly reverted when accessing non-existent coverage
+        // This explicitly tests the error reversion in the view function
+        uint256 invalidCoverageId = 999;
+        
+        vm.expectRevert(abi.encodeWithSelector(ICoverageAgent.InvalidCoverage.selector, invalidCoverageId));
+        coverageAgent.coverage(invalidCoverageId);
     }
 
     function test_RevertWhen_coverage_coverageIdOutOfBounds() public {
