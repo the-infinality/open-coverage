@@ -7,12 +7,24 @@ import {
     iAssetPriceOracleAndSwapperAbi,
     iEigenOperatorProxyAbi,
     iDiamondOwnerAbi,
+    iExampleCoverageAgentAbi,
 } from "@/generated/abis"
 import type { InterfaceName } from "@/lib/interface-ids"
 
 export interface NamedAbi {
     name: string
     abi: Abi
+}
+
+// Mapping from interface names to their ABIs
+const INTERFACE_ABIS: Record<InterfaceName, Abi> = {
+    IEigenServiceManager: iEigenServiceManagerAbi as Abi,
+    IAssetPriceOracleAndSwapper: iAssetPriceOracleAndSwapperAbi as Abi,
+    ICoverageProvider: iCoverageProviderAbi as Abi,
+    IDiamondOwner: iDiamondOwnerAbi as Abi,
+    IExampleCoverageAgent: iExampleCoverageAgentAbi as Abi,
+    ICoverageAgent: iCoverageAgentAbi as Abi,
+    IEigenOperatorProxy: iEigenOperatorProxyAbi as Abi,
 }
 
 /**
@@ -35,35 +47,16 @@ export function getAbisForContractType(contractType: ContractType): NamedAbi[] {
 }
 
 /**
- * Get the named ABIs for a CoverageProvider based on detected interface support
- * @param supportedInterfaces - Record of interface names to their support status
+ * Get the named ABIs for supported interfaces
+ * @param supportedInterfaces - Array of supported interface names
  * @returns Array of named ABIs based on supported interfaces
  */
-export function getAbisForCoverageProviderWithInterfaces(
-    supportedInterfaces: Record<InterfaceName, boolean>
-): NamedAbi[] {
-    const abis: NamedAbi[] = []
-
-    if (supportedInterfaces.ICoverageProvider) {
-        abis.push({ name: "ICoverageProvider", abi: iCoverageProviderAbi as Abi })
-    }
-
-    if (supportedInterfaces.IEigenServiceManager) {
-        abis.push({ name: "IEigenServiceManager", abi: iEigenServiceManagerAbi as Abi })
-    }
-
-    if (supportedInterfaces.IAssetPriceOracleAndSwapper) {
-        abis.push({
-            name: "IAssetPriceOracleAndSwapper",
-            abi: iAssetPriceOracleAndSwapperAbi as Abi,
-        })
-    }
-
-    if (supportedInterfaces.IDiamondOwner) {
-        abis.push({ name: "IDiamondOwner", abi: iDiamondOwnerAbi as Abi })
-    }
-
-    return abis
+export function getAbisForSupportedInterfaces(supportedInterfaces: InterfaceName[]): NamedAbi[] {
+    console.log("supportedInterfaces", supportedInterfaces)
+    return supportedInterfaces.map((interfaceName) => ({
+        name: interfaceName,
+        abi: INTERFACE_ABIS[interfaceName],
+    }))
 }
 
 /**

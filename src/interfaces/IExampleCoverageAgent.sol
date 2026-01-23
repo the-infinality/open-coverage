@@ -8,7 +8,7 @@ import {CoverageClaimStatus} from "./ICoverageProvider.sol";
 /// @author p-dealwis, Infinality
 /// @notice An interface for the example coverage agent implementation.
 /// @dev Extends ICoverageAgent with specific functions for purchasing, reserving, and slashing coverage.
-interface IExampleCoverageAgent is ICoverageAgent {
+interface IExampleCoverageAgent {
     error NotCoverageAgentCoordinator();
 
     /// @notice Purchase coverage from coverage providers.

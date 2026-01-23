@@ -1142,13 +1142,6 @@ export const iEigenServiceManagerAbi = [
 export const iExampleCoverageAgentAbi = [
     {
         type: "function",
-        inputs: [],
-        name: "asset",
-        outputs: [{ name: "", internalType: "address", type: "address" }],
-        stateMutability: "view",
-    },
-    {
-        type: "function",
         inputs: [
             { name: "coverageId", internalType: "uint256", type: "uint256" },
             {
@@ -1169,66 +1162,6 @@ export const iExampleCoverageAgentAbi = [
             },
         ],
         name: "convertReservedCoverage",
-        outputs: [],
-        stateMutability: "nonpayable",
-    },
-    {
-        type: "function",
-        inputs: [],
-        name: "coordinator",
-        outputs: [{ name: "", internalType: "address", type: "address" }],
-        stateMutability: "view",
-    },
-    {
-        type: "function",
-        inputs: [{ name: "coverageId", internalType: "uint256", type: "uint256" }],
-        name: "coverage",
-        outputs: [
-            {
-                name: "coverage",
-                internalType: "struct Coverage",
-                type: "tuple",
-                components: [
-                    {
-                        name: "claims",
-                        internalType: "struct Claim[]",
-                        type: "tuple[]",
-                        components: [
-                            {
-                                name: "coverageProvider",
-                                internalType: "address",
-                                type: "address",
-                            },
-                            { name: "claimId", internalType: "uint256", type: "uint256" },
-                        ],
-                    },
-                    { name: "reservation", internalType: "bool", type: "bool" },
-                ],
-            },
-        ],
-        stateMutability: "view",
-    },
-    {
-        type: "function",
-        inputs: [{ name: "coverageProvider", internalType: "address", type: "address" }],
-        name: "isCoverageProviderRegistered",
-        outputs: [{ name: "isRegistered", internalType: "bool", type: "bool" }],
-        stateMutability: "view",
-    },
-    {
-        type: "function",
-        inputs: [{ name: "positionId", internalType: "uint256", type: "uint256" }],
-        name: "onRegisterPosition",
-        outputs: [],
-        stateMutability: "nonpayable",
-    },
-    {
-        type: "function",
-        inputs: [
-            { name: "claimId", internalType: "uint256", type: "uint256" },
-            { name: "slashAmount", internalType: "uint256", type: "uint256" },
-        ],
-        name: "onSlashCompleted",
         outputs: [],
         stateMutability: "nonpayable",
     },
@@ -1255,26 +1188,6 @@ export const iExampleCoverageAgentAbi = [
         name: "purchaseCoverage",
         outputs: [{ name: "coverageId", internalType: "uint256", type: "uint256" }],
         stateMutability: "nonpayable",
-    },
-    {
-        type: "function",
-        inputs: [{ name: "coverageProvider", internalType: "address", type: "address" }],
-        name: "registerCoverageProvider",
-        outputs: [],
-        stateMutability: "nonpayable",
-    },
-    {
-        type: "function",
-        inputs: [],
-        name: "registeredCoverageProviders",
-        outputs: [
-            {
-                name: "coverageProviderAddresses",
-                internalType: "address[]",
-                type: "address[]",
-            },
-        ],
-        stateMutability: "view",
     },
     {
         type: "function",
@@ -1312,80 +1225,6 @@ export const iExampleCoverageAgentAbi = [
             },
         ],
         stateMutability: "nonpayable",
-    },
-    {
-        type: "event",
-        anonymous: false,
-        inputs: [
-            {
-                name: "coverageId",
-                internalType: "uint256",
-                type: "uint256",
-                indexed: true,
-            },
-        ],
-        name: "CoverageClaimed",
-    },
-    {
-        type: "event",
-        anonymous: false,
-        inputs: [
-            {
-                name: "coverageProvider",
-                internalType: "address",
-                type: "address",
-                indexed: true,
-            },
-        ],
-        name: "CoverageProviderRegistered",
-    },
-    {
-        type: "event",
-        anonymous: false,
-        inputs: [
-            {
-                name: "coverageId",
-                internalType: "uint256",
-                type: "uint256",
-                indexed: true,
-            },
-        ],
-        name: "CoverageReserved",
-    },
-    {
-        type: "event",
-        anonymous: false,
-        inputs: [
-            {
-                name: "coverageProvider",
-                internalType: "address",
-                type: "address",
-                indexed: true,
-            },
-            {
-                name: "positionId",
-                internalType: "uint256",
-                type: "uint256",
-                indexed: true,
-            },
-        ],
-        name: "PositionRegistered",
-    },
-    {
-        type: "error",
-        inputs: [{ name: "coverageId", internalType: "uint256", type: "uint256" }],
-        name: "CoverageAlreadyConverted",
-    },
-    {
-        type: "error",
-        inputs: [{ name: "coverageId", internalType: "uint256", type: "uint256" }],
-        name: "CoverageNotReservation",
-    },
-    { type: "error", inputs: [], name: "CoverageProviderNotRegistered" },
-    {
-        type: "error",
-        inputs: [{ name: "coverageId", internalType: "uint256", type: "uint256" }],
-        name: "InvalidCoverage",
     },
     { type: "error", inputs: [], name: "NotCoverageAgentCoordinator" },
 ] as const
