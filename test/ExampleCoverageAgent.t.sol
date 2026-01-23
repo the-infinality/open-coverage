@@ -12,6 +12,7 @@ import {
     CoverageClaimStatus,
     Refundable
 } from "src/interfaces/ICoverageProvider.sol";
+import {IExampleCoverageAgent} from "src/interfaces/IExampleCoverageAgent.sol";
 
 /// @notice Mock Coverage Provider for testing
 contract MockCoverageProvider is ICoverageProvider {
@@ -197,12 +198,12 @@ contract ExampleCoverageAgentTest is TestDeployer {
 
         // Non-coordinator should not be able to register providers
         vm.prank(nonHandler);
-        vm.expectRevert(ExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
+        vm.expectRevert(IExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
         coverageAgent.registerCoverageProvider(address(0x999));
     }
 
     function test_RevertWhen_constructor_zeroHandler() public {
-        vm.expectRevert(ExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
+        vm.expectRevert(IExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
         new ExampleCoverageAgent(address(0), USDC);
     }
 
@@ -228,7 +229,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
 
     function test_RevertWhen_registerCoverageProvider_notHandler() public {
         vm.prank(nonHandler);
-        vm.expectRevert(ExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
+        vm.expectRevert(IExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
         coverageAgent.registerCoverageProvider(address(mockProvider));
     }
 
@@ -682,7 +683,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
 
         // Try to slash as non-coordinator
         vm.prank(nonHandler);
-        vm.expectRevert(ExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
+        vm.expectRevert(IExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
         coverageAgent.slashCoverage(coverageId);
     }
 

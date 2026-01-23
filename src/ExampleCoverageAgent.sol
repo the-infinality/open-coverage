@@ -5,18 +5,18 @@ import {SafeERC20} from "@openzeppelin-v5/contracts/token/ERC20/utils/SafeERC20.
 
 import {IERC20} from "@openzeppelin-v5/contracts/token/ERC20/IERC20.sol";
 import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/EnumerableMap.sol";
-import {ICoverageAgent, ClaimCoverageRequest, Coverage, Claim} from "./interfaces/ICoverageAgent.sol";
-import {ICoverageProvider, CoverageClaim, CoverageClaimStatus} from "./interfaces/ICoverageProvider.sol";
+import {ICoverageAgent, ClaimCoverageRequest, Coverage, Claim} from "src/interfaces/ICoverageAgent.sol";
+import {ICoverageProvider, CoverageClaim, CoverageClaimStatus} from "src/interfaces/ICoverageProvider.sol";
 import {SafeERC20} from "@openzeppelin-v5/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IExampleCoverageAgent} from "src/interfaces/IExampleCoverageAgent.sol";
+import {ERC165} from "@openzeppelin-v5/contracts/utils/introspection/ERC165.sol";
 
 /// @notice An example implementation of a coverage agent.
 /// @dev This is a reference implementation that can be varied for each coordinator.
 /// Each pool acts as a target contract for the restaking networks to delegate to e.g. for Eigen this will be the strategy.
 /// Delegators are whitelisted by the operators to ensure they are trusted.
-contract ExampleCoverageAgent is ICoverageAgent {
+contract ExampleCoverageAgent is ICoverageAgent, IExampleCoverageAgent, ERC165 {
     using EnumerableMap for EnumerableMap.AddressToUintMap;
-
-    error NotCoverageAgentCoordinator();
 
     address private immutable _COORDINATOR;
     address private immutable _ASSET;
@@ -234,6 +234,12 @@ contract ExampleCoverageAgent is ICoverageAgent {
     /// @inheritdoc ICoverageAgent
     function coordinator() external view returns (address) {
         return _COORDINATOR;
+    }
+
+    /// @inheritdoc ERC165
+    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
+        return interfaceId == type(IExampleCoverageAgent).interfaceId || interfaceId == type(ICoverageAgent).interfaceId
+            || super.supportsInterface(interfaceId);
     }
 
     modifier onlyCoordinator() {
