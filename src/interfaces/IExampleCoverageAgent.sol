@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {ICoverageAgent, ClaimCoverageRequest} from "./ICoverageAgent.sol";
+import {ClaimCoverageRequest} from "./ICoverageAgent.sol";
 import {CoverageClaimStatus} from "./ICoverageProvider.sol";
 
 /// @title IExampleCoverageAgent
