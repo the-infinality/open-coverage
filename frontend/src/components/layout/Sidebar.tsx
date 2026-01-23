@@ -19,6 +19,7 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import logo from "@/assets/long-logo.svg"
 
 const navItems = [
     {
@@ -83,8 +84,8 @@ export function AppSidebar() {
 
     return (
         <Sidebar>
-            <SidebarHeader>
-                <span className="font-semibold text-sidebar-foreground">Open Coverage</span>
+            <SidebarHeader className="flex justify-center items-center p-8 bg-black mb-4">
+                <img src={logo} alt="Logo" className="w-42" />
             </SidebarHeader>
             <SidebarContent>
                 <SidebarGroup>

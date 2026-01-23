@@ -26,7 +26,7 @@ export function Header() {
                             address={address!}
                             variant="inline"
                             size="sm"
-                            className="text-muted-foreground"
+                            className="text-muted-foreground hidden md:block"
                         />
                         <Button variant="outline" size="lg" onClick={() => disconnect()}>
                             Disconnect
