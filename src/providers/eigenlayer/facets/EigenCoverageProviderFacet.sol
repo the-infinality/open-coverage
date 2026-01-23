@@ -106,7 +106,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     }
 
     /// @inheritdoc ICoverageProvider
-    function claimCoverage(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
+    function issueClaim(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
         external
         returns (uint256 claimId)
     {
@@ -125,8 +125,10 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         if (!success) revert RewardTransferFailed();
 
         address strategy = assetToStrategy[positionData.data.asset];
-        _updateCoverageMap(positionData.operator, strategy, positionData.data.coverageAgent, amount);
-        _checkCoverage(positionData.operator, strategy, positionData.data.coverageAgent);
+        // casting to 'int256' is safe because amount won't exceed max int256 for practical coverage amounts
+        // forge-lint: disable-next-line(unsafe-typecast)
+        _modifyCoverageForAgent(positionData.operator, strategy, positionData.data.coverageAgent, int256(amount));
+        _checkCoverageForAgent(positionData.operator, strategy, positionData.data.coverageAgent);
 
         claimId = claims.length;
         claims.push(
@@ -150,22 +152,151 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     }
 
     /// @inheritdoc ICoverageProvider
-    function liquidateClaim(uint256) external pure {
-        //TODO: Implement liquidateClaim
-        revert IEigenServiceManager.NotImplemented();
+    function reserveClaim(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
+        external
+        returns (uint256 claimId)
+    {
+        if (amount == 0) revert InvalidAmount();
+
+        EigenCoveragePosition storage positionData = positions[positionId];
+        if (msg.sender != positionData.data.coverageAgent) {
+            revert NotCoverageAgent(msg.sender, positionData.data.coverageAgent);
+        }
+
+        // Check if reservations are allowed for this position
+        if (positionData.data.maxReservationTime == 0) {
+            revert ReservationNotAllowed(positionId);
+        }
+
+        _validatePosition(positionData.data, amount, duration, reward);
+
+        // Reserve coverage in the coverage map (without transferring rewards yet)
+        address strategy = assetToStrategy[positionData.data.asset];
+        // casting to 'int256' is safe because amount won't exceed max int256 for practical coverage amounts
+        // forge-lint: disable-next-line(unsafe-typecast)
+        _modifyCoverageForAgent(positionData.operator, strategy, positionData.data.coverageAgent, int256(amount));
+        _checkCoverageForAgent(positionData.operator, strategy, positionData.data.coverageAgent);
+
+        claimId = claims.length;
+        claims.push(
+            CoverageClaim({
+                positionId: positionId,
+                amount: amount,
+                duration: duration,
+                createdAt: block.timestamp,
+                status: CoverageClaimStatus.Reserved,
+                reward: reward
+            })
+        );
+
+        emit ClaimReserved(positionId, claimId, amount, duration);
     }
 
     /// @inheritdoc ICoverageProvider
-    function completeClaims(uint256 claimId) external {
+    function convertReservedClaim(uint256 claimId, uint256 amount, uint256 duration, uint256 reward) external {
         CoverageClaim storage _claim = claims[claimId];
-        if (_claim.status != CoverageClaimStatus.Issued) revert InvalidClaim(claimId);
-        // Ensure the claim cannot be completed before its duration has elapsed
-        if (block.timestamp < _claim.createdAt + _claim.duration) {
-            revert TimestampInvalid(_claim.createdAt + _claim.duration);
+        EigenCoveragePosition storage positionData = positions[_claim.positionId];
+
+        // Verify claim is in Reserved status
+        if (_claim.status != CoverageClaimStatus.Reserved) revert ClaimNotReserved(claimId);
+
+        // Verify caller is the coverage agent
+        if (msg.sender != positionData.data.coverageAgent) {
+            revert NotCoverageAgent(msg.sender, positionData.data.coverageAgent);
+        }
+
+        // Check reservation hasn't expired
+        if (block.timestamp > _claim.createdAt + positionData.data.maxReservationTime) {
+            revert ReservationExpired(claimId);
+        }
+
+        // Verify amount and duration are not larger than reserved
+        if (amount > _claim.amount) {
+            revert AmountExceedsReserved(claimId, amount, _claim.amount);
+        }
+        if (duration > _claim.duration) {
+            revert DurationExceedsReserved(claimId, duration, _claim.duration);
+        }
+        if (amount == 0) revert InvalidAmount();
+
+        // Calculate minimum reward pro-rata based on the new amount and duration
+        uint256 minimumReward = (amount * positionData.data.minRate * duration) / (10000 * 365 days);
+        if (minimumReward > reward) revert InsufficientReward(minimumReward, reward);
+
+        // If amount is less than reserved, update coverage tracking
+        if (amount < _claim.amount) {
+            address strategy = assetToStrategy[positionData.data.asset];
+            // casting to 'int256' is safe because difference won't exceed max int256 for practical coverage amounts
+            // forge-lint: disable-next-line(unsafe-typecast)
+            int256 releasedAmount = int256(_claim.amount - amount);
+            _modifyCoverageForAgent(positionData.operator, strategy, positionData.data.coverageAgent, -releasedAmount);
+        }
+
+        // Capture rewards funds from coverage agent
+        bool success = IERC20(ICoverageAgent(positionData.data.coverageAgent).asset())
+            .transferFrom(msg.sender, address(this), reward);
+        if (!success) revert RewardTransferFailed();
+
+        // Update claim to Issued status with new values
+        _claim.amount = amount;
+        _claim.duration = duration;
+        _claim.reward = reward;
+        _claim.createdAt = block.timestamp; // Reset createdAt to current time
+        _claim.status = CoverageClaimStatus.Issued;
+
+        // Initialize the claim reward distribution
+        if (positionData.data.refundable != Refundable.Full) {
+            claimRewardDistributions[claimId] =
+                ClaimRewardDistribution({amount: 0, lastDistributedTimestamp: uint32(block.timestamp)});
+        }
+
+        emit ClaimIssued(_claim.positionId, claimId, amount, duration);
+    }
+
+    /// @inheritdoc ICoverageProvider
+    function closeClaim(uint256 claimId) external {
+        CoverageClaim storage _claim = claims[claimId];
+        EigenCoveragePosition storage positionData = positions[_claim.positionId];
+
+        // Determine if this is a reservation that can be closed by anyone
+        bool isReservation = _claim.status == CoverageClaimStatus.Reserved;
+        bool isIssued = _claim.status == CoverageClaimStatus.Issued;
+
+        if (!isReservation && !isIssued) revert InvalidClaim(claimId);
+
+        bool isCoverageAgent = msg.sender == positionData.data.coverageAgent;
+        bool reservationExpired =
+            isReservation && (block.timestamp > _claim.createdAt + positionData.data.maxReservationTime);
+        bool claimDurationElapsed = isIssued && (block.timestamp >= _claim.createdAt + _claim.duration);
+
+        // Anyone can close an expired reservation or an issued claim whose duration has elapsed
+        // Only the coverage agent can close their own claim early
+        if (!reservationExpired && !claimDurationElapsed && !isCoverageAgent) {
+            if (isReservation) {
+                revert ClaimNotExpired(claimId);
+            }
+            revert NotCoverageAgent(msg.sender, positionData.data.coverageAgent);
+        }
+
+        // Release the coverage from the coverage map
+        address strategy = assetToStrategy[positionData.data.asset];
+        _modifyCoverageForAgent(
+            positionData.operator, strategy, positionData.data.coverageAgent, -int256(_claim.amount)
+        );
+
+        // Update duration to reflect actual time coverage was active (only if closed early by coverage agent)
+        if (isIssued && block.timestamp < _claim.createdAt + _claim.duration) {
+            _claim.duration = block.timestamp - _claim.createdAt;
         }
 
         _claim.status = CoverageClaimStatus.Completed;
-        emit ClaimCompleted(claimId);
+        emit ClaimClosed(claimId);
+    }
+
+    /// @inheritdoc ICoverageProvider
+    function liquidateClaim(uint256) external pure {
+        //TODO: Implement liquidateClaim
+        revert IEigenServiceManager.NotImplemented();
     }
 
     /// @inheritdoc ICoverageProvider
@@ -270,20 +401,36 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         );
     }
 
-    /// @notice Updates the operator's coverage tracking map for a strategy and coverage agent
-    function _updateCoverageMap(address operator, address strategy, address coverageAgent, uint256 amount) private {
+    /// @notice Modifies the operator's coverage tracking map for a strategy and coverage agent
+    /// @param operator The operator address
+    /// @param strategy The strategy address
+    /// @param coverageAgent The coverage agent address
+    /// @param amount Positive to increase coverage, negative to decrease coverage
+    function _modifyCoverageForAgent(address operator, address strategy, address coverageAgent, int256 amount) private {
         EnumerableMap.AddressToUintMap storage coverageMap = operators[operator].coverageStrategies[strategy];
 
         // Get the current value, or 0 if the key doesn't exist
         (bool exists, uint256 currentValue) = coverageMap.tryGet(coverageAgent);
-        uint256 newValue = (exists ? currentValue : 0) + amount;
+        uint256 current = exists ? currentValue : 0;
+
+        uint256 newValue;
+        if (amount >= 0) {
+            // casting to 'uint256' is safe because we've checked amount >= 0
+            // forge-lint: disable-next-line(unsafe-typecast)
+            newValue = current + uint256(amount);
+        } else {
+            // casting to 'uint256' is safe because we've checked amount < 0, so -amount is positive
+            // forge-lint: disable-next-line(unsafe-typecast)
+            uint256 decrease = uint256(-amount);
+            newValue = current >= decrease ? current - decrease : 0;
+        }
 
         coverageMap.set(coverageAgent, newValue);
     }
 
     /// @notice Checks if the operator has sufficient coverage available for the coverage agent
     /// @dev Reverts only if the operator does not have enough allocated to safely cover the agent.
-    function _checkCoverage(address operator, address strategy, address coverageAgent) private view {
+    function _checkCoverageForAgent(address operator, address strategy, address coverageAgent) private view {
         int256 backing = _coverageBackingAmount(operator, strategy, coverageAgent);
         // Check to see if agent has a deficit of coverage (negative backing)
         if (backing < 0) {
@@ -372,6 +519,15 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         ICoverageAgent(_position.coverageAgent).onSlashCompleted(claimId, amount);
         emit ClaimSlashed(claimId, amount);
 
+        _modifyCoverageForAgent(
+            eigenPosition.operator,
+            eigenPosition.strategy,
+            _position.coverageAgent,
+            // casting to 'int256' is safe because amount won't exceed max int256 for practical slash amounts
+            // forge-lint: disable-next-line(unsafe-typecast)
+            -int256(amount)
+        );
+
         // Calculate the difference in strategy asset balance
         uint256 closingStrategyAssetBalance = IERC20(strategyAsset).balanceOf(address(this));
 
@@ -406,4 +562,3 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
             IPermissionController(_eigenAddresses.permissionController).canCall(operator, msg.sender, target, selector);
     }
 }
-

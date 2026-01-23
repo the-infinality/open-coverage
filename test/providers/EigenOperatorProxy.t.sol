@@ -463,4 +463,3 @@ contract EigenOperatorProxyTest is EigenTestDeployer {
         operatorProxy.updateOperatorMetadataURI("https://evil.uri");
     }
 }
-

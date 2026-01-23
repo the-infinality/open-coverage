@@ -8,7 +8,7 @@ import type { CoverageContract } from "@/types/contracts"
 import { iEigenServiceManagerAbi, iCoverageProviderAbi } from "@/generated/abis"
 import { iStrategyAbi, ierc20Abi } from "@/generated/eigen-abis"
 import { supportedChains } from "@/lib/wagmi"
-import { useCheckCoverageProviderSupport } from "@/hooks/use-interface-support"
+import { useInterfaceSupport } from "@/hooks/use-interface-support"
 import {
     useChainFilteredContracts,
     getSelectedOperatorProxy,
@@ -378,6 +378,7 @@ interface CoveragePositionData {
     asset: Address
     refundable: number
     slashCoordinator: Address
+    maxReservationTime: bigint
 }
 
 /**
@@ -692,6 +693,7 @@ function OperatorPositionManagement({
             refundable: Number(refundable),
             slashCoordinator: (slashCoordinator ||
                 "0x0000000000000000000000000000000000000000") as Address,
+            maxReservationTime: 0n, // No reservation time limit by default
         }
 
         console.log("Creating position with data:", [positionData, additionalData])
@@ -1058,13 +1060,19 @@ export function CoverageProviderInfo({ contract }: CoverageProviderInfoProps) {
     const supportedChainId = isChainSupported ? (contract.chainId as SupportedChainId) : undefined
 
     // Check for IEigenServiceManager and IAssetPriceOracleAndSwapper interface support via ERC-165
-    const { isLoading: isCheckingInterface, supports } = useCheckCoverageProviderSupport(
+    const { isLoading: isCheckingInterface, supportedInterfaces } = useInterfaceSupport(
         contract.address,
         contract.chainId,
         ["IEigenServiceManager", "IAssetPriceOracleAndSwapper"]
     )
-    const isEigenProvider = supports.IEigenServiceManager
-    const supportsOracleAndSwapper = supports.IAssetPriceOracleAndSwapper
+    const isEigenProvider = useMemo(
+        () => supportedInterfaces.includes("IEigenServiceManager"),
+        [supportedInterfaces]
+    )
+    const supportsOracleAndSwapper = useMemo(
+        () => supportedInterfaces.includes("IAssetPriceOracleAndSwapper"),
+        [supportedInterfaces]
+    )
 
     // Get whitelisted strategies
     const {

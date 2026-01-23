@@ -23,4 +23,3 @@ contract AssetPriceOracleAndSwapperFacet is AssetPriceOracleAndSwapper {
         super.setSwapSlippage(swapSlippage_);
     }
 }
-

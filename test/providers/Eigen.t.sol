@@ -31,6 +31,7 @@ import {ISwapperEngine} from "src/interfaces/ISwapperEngine.sol";
 import {PriceStrategy, AssetPair} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
 import {ISlashCoordinator, SlashStatus} from "src/interfaces/ISlashCoordinator.sol";
+import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
 import {console2} from "forge-std/console2.sol";
 
 contract EigenTest is EigenTestDeployer {
@@ -172,7 +173,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -196,7 +198,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -221,7 +224,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -245,7 +249,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -274,7 +279,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -288,7 +294,7 @@ contract EigenTest is EigenTestDeployer {
         vm.expectEmit(true, true, false, true);
         emit ICoverageProvider.ClaimIssued(positionId, 0, 1000e6, 30 days);
 
-        uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
         vm.stopPrank();
 
         assertEq(claimId, 0);
@@ -299,6 +305,10 @@ contract EigenTest is EigenTestDeployer {
         assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Issued));
         assertEq(claim.reward, 10e6);
         assertEq(claim.positionId, positionId);
+
+        // Verify claim backing is positive (fully backed)
+        int256 backing = eigenCoverageProvider.claimBacking(claimId);
+        assertGt(backing, 0, "Claim should be fully backed after issuance");
     }
 
     /// @notice Fuzz test to verify claim coverage with various claim amounts up to the maximum staked coverage
@@ -318,7 +328,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -359,7 +370,7 @@ contract EigenTest is EigenTestDeployer {
         // Track the expected claim ID (should be 0 for first claim in a fresh test)
         // Since each fuzz test run is independent, this will be the first claim
         uint256 expectedClaimId = 0;
-        uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, claimAmount, 30 days, reward);
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, reward);
         vm.stopPrank();
 
         // Verify claim ID (should be 0 for first claim)
@@ -372,6 +383,10 @@ contract EigenTest is EigenTestDeployer {
         assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Issued));
         assertEq(claim.reward, reward);
         assertEq(claim.positionId, positionId);
+
+        // Verify claim backing is non-negative (fully backed or at least not in deficit)
+        int256 backing = eigenCoverageProvider.claimBacking(claimId);
+        assertGe(backing, 0, "Claim should be fully backed after issuance");
     }
 
     function test_getAllocationedStrategies() public {
@@ -501,7 +516,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -520,7 +536,7 @@ contract EigenTest is EigenTestDeployer {
                 ICoverageProvider.InsufficientCoverageAvailable.selector, claimAmount - coverageAllocated
             )
         );
-        eigenCoverageProvider.claimCoverage(positionId, claimAmount, 30 days, 10e6);
+        eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, 10e6);
     }
 
     /// @notice Fuzz test to verify insufficient coverage error with various stake amounts
@@ -557,7 +573,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -576,7 +593,7 @@ contract EigenTest is EigenTestDeployer {
                 ICoverageProvider.InsufficientCoverageAvailable.selector, claimAmount - coverageAllocated
             )
         );
-        eigenCoverageProvider.claimCoverage(positionId, claimAmount, 30 days, 10e6);
+        eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, 10e6);
     }
 
     function test_RevertWhen_claimPosition_invalidAmount() public {
@@ -592,7 +609,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -602,7 +620,7 @@ contract EigenTest is EigenTestDeployer {
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
         vm.expectRevert(ICoverageProvider.InvalidAmount.selector);
-        eigenCoverageProvider.claimCoverage(positionId, 0, 30 days, 10e6);
+        eigenCoverageProvider.issueClaim(positionId, 0, 30 days, 10e6);
         vm.stopPrank();
     }
 
@@ -617,7 +635,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -628,7 +647,7 @@ contract EigenTest is EigenTestDeployer {
         vm.expectRevert(
             abi.encodeWithSelector(ICoverageProvider.NotCoverageAgent.selector, staker, address(coverageAgent))
         );
-        eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
+        eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
     }
 
     function test_positionMaxAmount() public {
@@ -643,7 +662,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -664,7 +684,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
 
         bytes memory additionalData = abi.encode(
@@ -674,7 +695,7 @@ contract EigenTest is EigenTestDeployer {
 
         vm.startPrank(address(coverageAgent));
         vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.DurationExceedsMax.selector, 30 days, 365 days));
-        eigenCoverageProvider.claimCoverage(positionId, 1000e6, 365 days, 10e6);
+        eigenCoverageProvider.issueClaim(positionId, 1000e6, 365 days, 10e6);
         vm.stopPrank();
     }
 
@@ -690,7 +711,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -702,7 +724,7 @@ contract EigenTest is EigenTestDeployer {
         uint256 duration = 30 days;
         uint256 minimumReward = (amount * data.minRate * duration) / (10000 * 365 days);
         vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.InsufficientReward.selector, minimumReward, 10));
-        eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10);
+        eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10);
         vm.stopPrank();
     }
 
@@ -720,7 +742,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: expiryTimestamp,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -738,7 +761,7 @@ contract EigenTest is EigenTestDeployer {
                 ICoverageProvider.DurationExceedsExpiry.selector, expiryTimestamp, completionTimestamp
             )
         );
-        eigenCoverageProvider.claimCoverage(positionId, 1000e6, duration, 10e6);
+        eigenCoverageProvider.issueClaim(positionId, 1000e6, duration, 10e6);
         vm.stopPrank();
     }
 
@@ -755,7 +778,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -764,7 +788,7 @@ contract EigenTest is EigenTestDeployer {
 
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
-        uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
         vm.stopPrank();
 
         console2.log("block timestamp", block.timestamp);
@@ -797,7 +821,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.TimeWeighted,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -806,7 +831,7 @@ contract EigenTest is EigenTestDeployer {
 
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
-        uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
         vm.stopPrank();
 
         uint256 amount;
@@ -851,7 +876,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: refundable,
-            slashCoordinator: slashCoordinator
+            slashCoordinator: slashCoordinator,
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -882,7 +908,7 @@ contract EigenTest is EigenTestDeployer {
     ) internal returns (uint256 claimId) {
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), reward);
-        claimId = eigenCoverageProvider.claimCoverage(positionId, claimAmount, duration, reward);
+        claimId = eigenCoverageProvider.issueClaim(positionId, claimAmount, duration, reward);
 
         if (timeOffset > 0) {
             vm.warp(block.timestamp + timeOffset);
@@ -955,6 +981,10 @@ contract EigenTest is EigenTestDeployer {
         uint256 positionId = _setupSlashingPosition(1000e18);
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
 
+        // Verify claim backing before slashing
+        int256 backingBeforeSlash = eigenCoverageProvider.claimBacking(claimId);
+        assertGt(backingBeforeSlash, 0, "Claim should be fully backed before slashing");
+
         // Get asset addresses
         address coverageAsset = coverageAgent.asset();
         address positionAsset = eigenCoverageProvider.position(positionId).asset;
@@ -1015,6 +1045,10 @@ contract EigenTest is EigenTestDeployer {
         uint256 positionId = _setupSlashingPosition(1000e18);
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
 
+        // Verify claim backing before slashing
+        int256 backingBeforeSlash = eigenCoverageProvider.claimBacking(claimId);
+        assertGt(backingBeforeSlash, 0, "Claim should be fully backed before slashing");
+
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 500e6);
 
         // Expect ClaimSlashed event
@@ -1035,9 +1069,15 @@ contract EigenTest is EigenTestDeployer {
 
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 20e6);
-        uint256 claimId1 = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
-        uint256 claimId2 = eigenCoverageProvider.claimCoverage(positionId, 500e6, 30 days, 5e6);
+        uint256 claimId1 = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
+        uint256 claimId2 = eigenCoverageProvider.issueClaim(positionId, 500e6, 30 days, 5e6);
         vm.stopPrank();
+
+        // Verify both claims are fully backed after issuance
+        int256 backing1 = eigenCoverageProvider.claimBacking(claimId1);
+        int256 backing2 = eigenCoverageProvider.claimBacking(claimId2);
+        assertGt(backing1, 0, "First claim should be fully backed");
+        assertGt(backing2, 0, "Second claim should be fully backed");
 
         uint256[] memory claimIds = new uint256[](2);
         uint256[] memory amounts = new uint256[](2);
@@ -1113,7 +1153,8 @@ contract EigenTest is EigenTestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         bytes memory additionalData = abi.encode(
             CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
@@ -1122,7 +1163,11 @@ contract EigenTest is EigenTestDeployer {
 
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
-        uint256 claimId = eigenCoverageProvider.claimCoverage(positionId, 1000e6, 30 days, 10e6);
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
+
+        // Verify claim backing immediately after creation
+        int256 backingBeforeSlash = eigenCoverageProvider.claimBacking(claimId);
+        assertGt(backingBeforeSlash, 0, "Claim should be fully backed immediately after creation");
 
         // Slash immediately after creation (should succeed)
         uint256[] memory claimIds = new uint256[](1);
@@ -1174,14 +1219,11 @@ contract EigenTest is EigenTestDeployer {
         uint256 positionId = _setupSlashingPosition(1000e18);
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 30 days, 10e6, 31 days);
 
-        vm.startPrank(address(coverageAgent));
-
-        // Expect ClaimCompleted event
+        // Expect ClaimClosed event
         vm.expectEmit(true, false, false, false);
-        emit ICoverageProvider.ClaimCompleted(claimId);
+        emit ICoverageProvider.ClaimClosed(claimId);
 
-        eigenCoverageProvider.completeClaims(claimId);
-        vm.stopPrank();
+        eigenCoverageProvider.closeClaim(claimId);
 
         // Try to slash a completed claim
         vm.warp(block.timestamp - 1 days); // Go back to within duration window
@@ -1322,7 +1364,7 @@ contract EigenTest is EigenTestDeployer {
         for (uint256 i = 0; i < numClaims; i++) {
             uint256 claimAmount = 1000e6 + (i * 100e6); // Varying amounts
             uint256 reward = 10e6 + (i * 1e6);
-            claimIds[i] = eigenCoverageProvider.claimCoverage(positionId, claimAmount, 30 days, reward);
+            claimIds[i] = eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, reward);
             amounts[i] = claimAmount; // Slash full amount
         }
         vm.stopPrank();
@@ -1342,6 +1384,10 @@ contract EigenTest is EigenTestDeployer {
         MockSlashCoordinator coordinator = new MockSlashCoordinator();
         uint256 positionId = _setupSlashingPosition(1000e18, address(coordinator), Refundable.None);
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        // Verify claim backing before slashing
+        int256 backingBeforeSlash = eigenCoverageProvider.claimBacking(claimId);
+        assertGt(backingBeforeSlash, 0, "Claim should be fully backed before slashing");
 
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1000e6);
 
@@ -1492,6 +1538,671 @@ contract EigenTest is EigenTestDeployer {
         emit IAllocationManagerEvents.AVSMetadataURIUpdated(address(eigenCoverageDiamond), metadataURI);
 
         eigenServiceManager.updateMetadataURI(metadataURI);
+    }
+
+    // ============ Reservation Tests ============
+
+    /// @notice Helper to setup a position with reservations enabled
+    function _setupPositionWithReservation(uint256 stakeAmount, uint256 maxReservationTime)
+        internal
+        returns (uint256 positionId)
+    {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(stakeAmount);
+
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: maxReservationTime
+        });
+        bytes memory additionalData = abi.encode(
+            CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
+        );
+        positionId = eigenCoverageProvider.createPosition(data, additionalData);
+    }
+
+    /// @notice Test reserving a claim
+    function test_reserveClaim() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+
+        // Expect ClaimReserved event
+        vm.expectEmit(true, true, false, true);
+        emit ICoverageProvider.ClaimReserved(positionId, 0, 1000e6, 30 days);
+
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+
+        assertEq(claimId, 0);
+
+        CoverageClaim memory claim = eigenCoverageProvider.claim(claimId);
+        assertEq(claim.amount, 1000e6);
+        assertEq(claim.duration, 30 days);
+        assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Reserved));
+        assertEq(claim.reward, 10e6);
+
+        // Verify claim backing is positive (fully backed even for reservation)
+        int256 backing = eigenCoverageProvider.claimBacking(claimId);
+        assertGt(backing, 0, "Reserved claim should be fully backed");
+    }
+
+    /// @notice Test that reservations are not allowed when maxReservationTime is 0
+    function test_RevertWhen_reserveClaim_reservationsNotAllowed() public {
+        // Create position without reservation enabled (maxReservationTime = 0)
+        uint256 positionId = _setupSlashingPosition(10e18);
+
+        vm.startPrank(address(coverageAgent));
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.ReservationNotAllowed.selector, positionId));
+        eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+    }
+
+    /// @notice Test converting a reserved claim to issued
+    function test_convertReservedClaim() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+
+        // Verify backing after reservation
+        int256 backingAfterReservation = eigenCoverageProvider.claimBacking(claimId);
+        assertGt(backingAfterReservation, 0, "Reserved claim should be fully backed");
+
+        // Approve tokens for the reward
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+
+        // Expect ClaimIssued event
+        vm.expectEmit(true, true, false, true);
+        emit ICoverageProvider.ClaimIssued(positionId, claimId, 1000e6, 30 days);
+
+        eigenCoverageProvider.convertReservedClaim(claimId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+
+        CoverageClaim memory claim = eigenCoverageProvider.claim(claimId);
+        assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Issued));
+        assertEq(claim.amount, 1000e6);
+        assertEq(claim.duration, 30 days);
+
+        // Verify backing after conversion (should remain the same since amount didn't change)
+        int256 backingAfterConversion = eigenCoverageProvider.claimBacking(claimId);
+        assertEq(
+            backingAfterConversion,
+            backingAfterReservation,
+            "Backing should remain same after conversion with same amount"
+        );
+    }
+
+    /// @notice Test converting a reserved claim with smaller amount and duration
+    function test_convertReservedClaim_partialConversion() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+
+        // Verify backing after reservation
+        int256 backingAfterReservation = eigenCoverageProvider.claimBacking(claimId);
+        assertGt(backingAfterReservation, 0, "Reserved claim should be fully backed");
+
+        // Approve tokens for a smaller reward (pro-rata)
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 5e6);
+
+        // Convert with smaller amount and duration
+        eigenCoverageProvider.convertReservedClaim(claimId, 500e6, 15 days, 5e6);
+        vm.stopPrank();
+
+        CoverageClaim memory claim = eigenCoverageProvider.claim(claimId);
+        assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Issued));
+        assertEq(claim.amount, 500e6);
+        assertEq(claim.duration, 15 days);
+
+        // Verify backing increased after partial conversion (released 500e6 of coverage)
+        int256 backingAfterConversion = eigenCoverageProvider.claimBacking(claimId);
+        assertGt(backingAfterConversion, backingAfterReservation, "Backing should increase after partial conversion");
+    }
+
+    /// @notice Test that converting a claim fails if reservation has expired
+    function test_RevertWhen_convertReservedClaim_expired() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+
+        // Warp past reservation time
+        vm.warp(block.timestamp + 2 hours);
+
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.ReservationExpired.selector, claimId));
+        eigenCoverageProvider.convertReservedClaim(claimId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+    }
+
+    /// @notice Test that amount cannot exceed reserved amount
+    function test_RevertWhen_convertReservedClaim_amountExceedsReserved() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 20e6);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.AmountExceedsReserved.selector, claimId, 2000e6, 1000e6)
+        );
+        eigenCoverageProvider.convertReservedClaim(claimId, 2000e6, 30 days, 20e6);
+        vm.stopPrank();
+    }
+
+    /// @notice Test that duration cannot exceed reserved duration
+    function test_RevertWhen_convertReservedClaim_durationExceedsReserved() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 20e6);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.DurationExceedsReserved.selector, claimId, 60 days, 30 days)
+        );
+        eigenCoverageProvider.convertReservedClaim(claimId, 1000e6, 60 days, 20e6);
+        vm.stopPrank();
+    }
+
+    /// @notice Test closing an expired reservation
+    function test_closeClaim_expiredReservation() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+
+        // Verify backing after reservation
+        int256 backingBeforeClose = eigenCoverageProvider.claimBacking(claimId);
+        assertGt(backingBeforeClose, 0, "Reserved claim should be fully backed");
+
+        // Warp past reservation time
+        vm.warp(block.timestamp + 2 hours);
+
+        // Anyone can close an expired reservation
+        address anyone = makeAddr("anyone");
+        vm.prank(anyone);
+
+        vm.expectEmit(true, false, false, false);
+        emit ICoverageProvider.ClaimClosed(claimId);
+
+        eigenCoverageProvider.closeClaim(claimId);
+
+        CoverageClaim memory claim = eigenCoverageProvider.claim(claimId);
+        assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Completed));
+    }
+
+    /// @notice Test that non-coverage-agent cannot close a non-expired reservation
+    function test_RevertWhen_closeClaim_reservationNotExpired() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+
+        // Try to close before expiration as non-coverage-agent
+        address anyone = makeAddr("anyone");
+        vm.prank(anyone);
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.ClaimNotExpired.selector, claimId));
+        eigenCoverageProvider.closeClaim(claimId);
+    }
+
+    /// @notice Test that coverage agent can close their own claim
+    function test_closeClaim_byCoverageAgent() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+
+        // Verify backing after reservation
+        int256 backingBeforeClose = eigenCoverageProvider.claimBacking(claimId);
+        assertGt(backingBeforeClose, 0, "Reserved claim should be fully backed");
+
+        // Coverage agent can close their own claim even before expiration
+        vm.expectEmit(true, false, false, false);
+        emit ICoverageProvider.ClaimClosed(claimId);
+
+        eigenCoverageProvider.closeClaim(claimId);
+        vm.stopPrank();
+
+        CoverageClaim memory claim = eigenCoverageProvider.claim(claimId);
+        assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Completed));
+    }
+
+    /// @notice Test closing an issued claim by coverage agent
+    function test_closeClaim_issuedClaim() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        // Create a reservation and convert it
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+
+        // Verify backing after reservation
+        int256 backingAfterReservation = eigenCoverageProvider.claimBacking(claimId);
+        assertGt(backingAfterReservation, 0, "Reserved claim should be fully backed");
+
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+        eigenCoverageProvider.convertReservedClaim(claimId, 1000e6, 30 days, 10e6);
+
+        // Verify backing after conversion
+        int256 backingAfterConversion = eigenCoverageProvider.claimBacking(claimId);
+        assertEq(
+            backingAfterConversion,
+            backingAfterReservation,
+            "Backing should remain same after conversion with same amount"
+        );
+
+        // Coverage agent can close their own issued claim
+        vm.expectEmit(true, false, false, false);
+        emit ICoverageProvider.ClaimClosed(claimId);
+
+        eigenCoverageProvider.closeClaim(claimId);
+        vm.stopPrank();
+
+        CoverageClaim memory claim = eigenCoverageProvider.claim(claimId);
+        assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Completed));
+    }
+
+    /// @notice Test that anyone can close an issued claim after duration has elapsed
+    function test_closeClaim_afterDurationElapsed() public {
+        uint256 positionId = _setupSlashingPosition(10e18);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 30 days, 10e6, 0);
+
+        // Verify backing after issuance
+        int256 backingBeforeClose = eigenCoverageProvider.claimBacking(claimId);
+        assertGt(backingBeforeClose, 0, "Claim should be fully backed");
+
+        // Warp past duration
+        vm.warp(block.timestamp + 31 days);
+
+        // Anyone can close an issued claim after duration has elapsed
+        address anyone = makeAddr("anyone");
+        vm.prank(anyone);
+
+        vm.expectEmit(true, false, false, false);
+        emit ICoverageProvider.ClaimClosed(claimId);
+
+        eigenCoverageProvider.closeClaim(claimId);
+
+        CoverageClaim memory claim = eigenCoverageProvider.claim(claimId);
+        assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Completed));
+    }
+
+    // ============ Claim Backing Tests ============
+
+    /// @notice Test that backing decreases as multiple claims consume coverage
+    function test_claimBacking_decreasesWithMultipleClaims() public {
+        deal(rETH, staker, 2000e18);
+        uint256 positionId = _setupSlashingPosition(2000e18);
+
+        // Get total allocated coverage
+        uint256 totalAllocated = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 30e6);
+
+        // Issue first claim
+        uint256 claimId1 = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
+        int256 backing1 = eigenCoverageProvider.claimBacking(claimId1);
+        assertGt(backing1, 0, "First claim should be fully backed");
+
+        // Issue second claim - backing should decrease
+        uint256 claimId2 = eigenCoverageProvider.issueClaim(positionId, 500e6, 30 days, 5e6);
+        int256 backing2 = eigenCoverageProvider.claimBacking(claimId2);
+        assertGt(backing2, 0, "Second claim should still be backed");
+        assertLt(backing2, backing1, "Backing should decrease with more claims");
+
+        // Issue third claim - further decrease
+        uint256 claimId3 = eigenCoverageProvider.issueClaim(positionId, 500e6, 30 days, 5e6);
+        int256 backing3 = eigenCoverageProvider.claimBacking(claimId3);
+        assertGt(backing3, 0, "Third claim should still be backed");
+        assertLt(backing3, backing2, "Backing should continue decreasing");
+
+        vm.stopPrank();
+
+        // All claims share the same backing since they're for the same operator/strategy/agent
+        // Verify backing reflects remaining coverage
+        uint256 totalClaimed = 1000e6 + 500e6 + 500e6;
+        // forge-lint: disable-next-line(unsafe-typecast)
+        int256 expectedBacking = int256(totalAllocated) - int256(totalClaimed);
+        assertEq(backing3, expectedBacking, "Backing should equal allocated minus claimed");
+    }
+
+    /// @notice Test that backing is zero when claims exactly match allocated coverage
+    function test_claimBacking_zeroWhenFullyUtilized() public {
+        _setupwithAllocations();
+
+        // Get allocated coverage amount
+        uint256 totalAllocated = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+
+        // Stake enough to cover exactly the claim amount
+        address strategyAsset = address(_getTestStrategy().underlyingToken());
+        address coverageAsset = address(coverageAgent.asset());
+        (uint256 requiredStake,) = eigenPriceOracle.getQuote(totalAllocated, strategyAsset, coverageAsset);
+
+        // Stake exactly what's needed (with small buffer for rounding)
+        _stakeAndDelegateToOperator(requiredStake + 1e15);
+
+        // Re-fetch allocated coverage after staking
+        totalAllocated = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: 0
+        });
+        bytes memory additionalData = abi.encode(
+            CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
+        );
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+
+        // Issue claim for exactly the allocated amount
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, totalAllocated, 30 days, 10e6);
+        vm.stopPrank();
+
+        // Backing should be exactly zero (fully utilized)
+        int256 backing = eigenCoverageProvider.claimBacking(claimId);
+        assertEq(backing, 0, "Backing should be zero when fully utilized");
+    }
+
+    /// @notice Test that positionMaxAmount reflects remaining coverage correctly
+    function test_positionMaxAmount_decreasesWithClaims() public {
+        deal(rETH, staker, 2000e18);
+        uint256 positionId = _setupSlashingPosition(2000e18);
+
+        uint256 initialMaxAmount = eigenCoverageProvider.positionMaxAmount(positionId);
+        assertGt(initialMaxAmount, 0, "Initial max amount should be positive");
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 20e6);
+
+        // Issue a claim
+        eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
+
+        uint256 maxAmountAfterClaim = eigenCoverageProvider.positionMaxAmount(positionId);
+        assertEq(maxAmountAfterClaim, initialMaxAmount - 1000e6, "Max amount should decrease by claimed amount");
+
+        // Issue another claim
+        eigenCoverageProvider.issueClaim(positionId, 500e6, 30 days, 5e6);
+
+        uint256 maxAmountAfterSecondClaim = eigenCoverageProvider.positionMaxAmount(positionId);
+        assertEq(maxAmountAfterSecondClaim, initialMaxAmount - 1500e6, "Max amount should decrease by total claimed");
+        vm.stopPrank();
+    }
+
+    /// @notice Test backing increases when claims are closed
+    function test_claimBacking_increasesWhenClaimsClosed() public {
+        deal(rETH, staker, 2000e18);
+        uint256 positionId = _setupSlashingPosition(2000e18);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 20e6);
+
+        // Issue two claims
+        uint256 claimId1 = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
+        uint256 claimId2 = eigenCoverageProvider.issueClaim(positionId, 500e6, 30 days, 5e6);
+
+        int256 backingWithBothClaims = eigenCoverageProvider.claimBacking(claimId1);
+
+        // Close the second claim
+        eigenCoverageProvider.closeClaim(claimId2);
+
+        // Backing should increase for remaining claims
+        int256 backingAfterClose = eigenCoverageProvider.claimBacking(claimId1);
+        assertGt(backingAfterClose, backingWithBothClaims, "Backing should increase when claims are closed");
+        assertEq(backingAfterClose, backingWithBothClaims + 500e6, "Backing should increase by closed claim amount");
+        vm.stopPrank();
+    }
+
+    /// @notice Test that InsufficientCoverageAvailable error includes correct deficit amount
+    function test_RevertWhen_claimBacking_insufficientCoverage_correctDeficit() public {
+        _setupwithAllocations();
+
+        // Stake a small amount to get limited coverage
+        _stakeAndDelegateToOperator(1e16); // Small stake
+
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: 0
+        });
+        bytes memory additionalData = abi.encode(
+            CreatePositionAddtionalData({operator: address(operator), strategy: address(_getTestStrategy())})
+        );
+        uint256 positionId = eigenCoverageProvider.createPosition(data, additionalData);
+
+        uint256 allocatedCoverage = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+
+        // Try to claim more than allocated
+        uint256 excessiveClaimAmount = allocatedCoverage + 1000e6;
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+
+        // The deficit should be exactly the amount over the allocation
+        uint256 expectedDeficit = excessiveClaimAmount - allocatedCoverage;
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.InsufficientCoverageAvailable.selector, expectedDeficit)
+        );
+        eigenCoverageProvider.issueClaim(positionId, excessiveClaimAmount, 30 days, 10e6);
+        vm.stopPrank();
+    }
+
+    /// @notice Test that backing becomes deficient (negative) when operator deallocates after claim is issued
+    function test_claimBacking_deficientAfterDeallocation() public {
+        deal(rETH, staker, 2000e18);
+        uint256 positionId = _setupSlashingPosition(2000e18);
+
+        // Get initial allocated coverage
+        uint256 initialAllocated = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+        assertGt(initialAllocated, 0, "Should have initial allocation");
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+
+        // Issue a claim while fully backed
+        uint256 claimAmount = 1000e6;
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, 10e6);
+        vm.stopPrank();
+
+        // Verify claim is initially backed
+        int256 backingBefore = eigenCoverageProvider.claimBacking(claimId);
+        assertGt(backingBefore, 0, "Claim should be backed initially");
+
+        // Operator deallocates all coverage (sets magnitude to 0)
+        address[] memory strategyAddresses = new address[](1);
+        strategyAddresses[0] = address(_getTestStrategy());
+        uint64[] memory magnitudes = new uint64[](1);
+        magnitudes[0] = 0; // Deallocate
+
+        operator.allocate(address(eigenCoverageDiamond), address(coverageAgent), strategyAddresses, magnitudes);
+
+        // Roll forward past the deallocation delay (14 days worth of blocks)
+        uint32 deallocationDelay = _getAllocationManager().DEALLOCATION_DELAY();
+        vm.roll(block.number + deallocationDelay + 1);
+
+        // Clear the deallocation queue to finalize the deallocation
+        IStrategy[] memory strategies = new IStrategy[](1);
+        strategies[0] = _getTestStrategy();
+        uint16[] memory numToClear = new uint16[](1);
+        numToClear[0] = 1;
+        _getAllocationManager().clearDeallocationQueue(address(operator), strategies, numToClear);
+
+        // Verify allocation is now 0
+        uint256 allocatedAfterDeallocation = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+        assertEq(allocatedAfterDeallocation, 0, "Allocation should be zero after deallocation");
+
+        // Now backing should be negative (deficient)
+        int256 backingAfter = eigenCoverageProvider.claimBacking(claimId);
+        assertLt(backingAfter, 0, "Backing should be negative (deficient) after deallocation");
+        // forge-lint: disable-next-line(unsafe-typecast)
+        assertEq(backingAfter, -int256(claimAmount), "Backing deficit should equal claimed amount");
+    }
+
+    /// @notice Test that backing becomes partially deficient after partial deallocation
+    function test_claimBacking_partialDeficitAfterPartialDeallocation() public {
+        deal(rETH, staker, 2000e18);
+        uint256 positionId = _setupSlashingPosition(2000e18);
+
+        // Get initial allocation so we can calculate a claim amount that will be deficient after 50% deallocation
+        uint256 initialAllocated = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+
+        // Claim 75% of the initial allocation - after 50% deallocation, this will be 25% deficient
+        uint256 claimAmount = (initialAllocated * 75) / 100;
+
+        // Calculate minimum reward: (amount * minRate * duration) / (10000 * 365 days)
+        // Position minRate is 100, duration is 30 days
+        uint256 minReward = (claimAmount * 100 * 30 days) / (10000 * 365 days) + 1;
+
+        vm.startPrank(address(coverageAgent));
+        deal(coverageAgent.asset(), address(coverageAgent), minReward);
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), minReward);
+
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, minReward);
+        vm.stopPrank();
+
+        // Verify claim is initially backed
+        int256 backingBefore = eigenCoverageProvider.claimBacking(claimId);
+        assertGt(backingBefore, 0, "Claim should be backed initially");
+
+        // Operator partially deallocates (reduces magnitude to 50%)
+        address[] memory strategyAddresses = new address[](1);
+        strategyAddresses[0] = address(_getTestStrategy());
+        uint64[] memory magnitudes = new uint64[](1);
+        magnitudes[0] = 0.5e18; // Reduce to 50% of original 1e18
+
+        operator.allocate(address(eigenCoverageDiamond), address(coverageAgent), strategyAddresses, magnitudes);
+
+        // Roll forward past the deallocation delay
+        uint32 deallocationDelay = _getAllocationManager().DEALLOCATION_DELAY();
+        vm.roll(block.number + deallocationDelay + 1);
+
+        // Clear the deallocation queue
+        IStrategy[] memory strategies = new IStrategy[](1);
+        strategies[0] = _getTestStrategy();
+        uint16[] memory numToClear = new uint16[](1);
+        numToClear[0] = 1;
+        _getAllocationManager().clearDeallocationQueue(address(operator), strategies, numToClear);
+
+        // Get the new allocated amount (should be ~50% of initial)
+        uint256 allocatedAfterDeallocation = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+
+        // Verify deallocation occurred (allocation should be roughly half)
+        assertLt(allocatedAfterDeallocation, initialAllocated, "Allocation should have decreased");
+
+        // After 50% deallocation: allocation is ~50% of initial, claim is 75% of initial
+        // So claim (75%) > allocation (50%), resulting in a deficit of ~25% of initial
+        int256 backingAfter = eigenCoverageProvider.claimBacking(claimId);
+
+        // Backing should be negative (deficient)
+        assertLt(backingAfter, 0, "Backing should be negative after partial deallocation");
+
+        // forge-lint: disable-next-line(unsafe-typecast)
+        int256 expectedBacking = int256(allocatedAfterDeallocation) - int256(claimAmount);
+        assertEq(backingAfter, expectedBacking, "Backing deficit should match expected");
+    }
+
+    /// @notice Test that backing remains positive after partial deallocation when claim is small
+    function test_claimBacking_remainsPositiveAfterPartialDeallocation() public {
+        deal(rETH, staker, 2000e18);
+        uint256 positionId = _setupSlashingPosition(2000e18);
+
+        // Get initial allocation
+        uint256 initialAllocated = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+
+        // Claim only 25% of the initial allocation - after 50% deallocation, this will still be backed
+        uint256 claimAmount = (initialAllocated * 25) / 100;
+
+        // Calculate minimum reward: (amount * minRate * duration) / (10000 * 365 days)
+        uint256 minReward = (claimAmount * 100 * 30 days) / (10000 * 365 days) + 1;
+
+        vm.startPrank(address(coverageAgent));
+        deal(coverageAgent.asset(), address(coverageAgent), minReward);
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), minReward);
+
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, minReward);
+        vm.stopPrank();
+
+        // Verify claim is initially backed
+        int256 backingBefore = eigenCoverageProvider.claimBacking(claimId);
+        assertGt(backingBefore, 0, "Claim should be backed initially");
+
+        // Operator partially deallocates (reduces magnitude to 50%)
+        address[] memory strategyAddresses = new address[](1);
+        strategyAddresses[0] = address(_getTestStrategy());
+        uint64[] memory magnitudes = new uint64[](1);
+        magnitudes[0] = 0.5e18; // Reduce to 50% of original 1e18
+
+        operator.allocate(address(eigenCoverageDiamond), address(coverageAgent), strategyAddresses, magnitudes);
+
+        // Roll forward past the deallocation delay
+        uint32 deallocationDelay = _getAllocationManager().DEALLOCATION_DELAY();
+        vm.roll(block.number + deallocationDelay + 1);
+
+        // Clear the deallocation queue
+        IStrategy[] memory strategies = new IStrategy[](1);
+        strategies[0] = _getTestStrategy();
+        uint16[] memory numToClear = new uint16[](1);
+        numToClear[0] = 1;
+        _getAllocationManager().clearDeallocationQueue(address(operator), strategies, numToClear);
+
+        // Get the new allocated amount (should be ~50% of initial)
+        uint256 allocatedAfterDeallocation = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+
+        // After 50% deallocation: allocation is ~50% of initial, claim is 25% of initial
+        // So allocation (50%) > claim (25%), backing remains positive
+        int256 backingAfter = eigenCoverageProvider.claimBacking(claimId);
+
+        // Backing should still be positive
+        assertGt(backingAfter, 0, "Backing should remain positive when allocation > claim");
+
+        // forge-lint: disable-next-line(unsafe-typecast)
+        int256 expectedBacking = int256(allocatedAfterDeallocation) - int256(claimAmount);
+        assertEq(backingAfter, expectedBacking, "Backing should match expected");
     }
 }
 

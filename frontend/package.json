@@ -11,8 +11,8 @@
         "format:check": "prettier --check .",
         "preview": "vite preview",
         "generate": "yarn generate-abi && yarn generate-operator-bytecode",
-        "generate-abi": "wagmi generate",
-        "generate-operator-bytecode": "node scripts/generate-operator-bytecode.js"
+        "generate-abi": "wagmi generate && yarn prettier --write src/generated/abis.ts",
+        "generate-operator-bytecode": "node scripts/generate-operator-bytecode.js && yarn prettier --write src/generated/eigen-operator-proxy-deployment.ts"
     },
     "dependencies": {
         "@base-ui/react": "^1.1.0",

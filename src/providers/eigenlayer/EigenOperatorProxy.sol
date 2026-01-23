@@ -7,7 +7,7 @@ import {IDelegationManager} from "eigenlayer-contracts/interfaces/IDelegationMan
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
 import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
 import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermissionController.sol";
-
+import {ERC165} from "@openzeppelin-v5/contracts/utils/introspection/ERC165.sol";
 import {IEigenOperatorProxy} from "./interfaces/IEigenOperatorProxy.sol";
 import {IEigenServiceManager} from "./interfaces/IEigenServiceManager.sol";
 import {EigenAddresses} from "./Types.sol";
@@ -16,7 +16,7 @@ import {EigenAddresses} from "./Types.sol";
 /// @author p-dealwis, Infinality
 /// @notice This contract manages the eigen operator as proxy to disable some functionality for operators
 /// @dev Not to be confused with the operator entity that is the beneficiary of the delegation pool.
-contract EigenOperatorProxy is IEigenOperatorProxy {
+contract EigenOperatorProxy is IEigenOperatorProxy, ERC165 {
     EigenAddresses private _eigenAddresses;
 
     address private _handler;
@@ -134,5 +134,10 @@ contract EigenOperatorProxy is IEigenOperatorProxy {
     modifier onlyHandler() {
         _onlyHandler();
         _;
+    }
+
+    /// @inheritdoc ERC165
+    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
+        return interfaceId == type(IEigenOperatorProxy).interfaceId || super.supportsInterface(interfaceId);
     }
 }

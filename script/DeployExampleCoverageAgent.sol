@@ -27,4 +27,3 @@ contract DeployExampleCoverageAgent is Script, ChainHelper {
         vm.stopBroadcast();
     }
 }
-

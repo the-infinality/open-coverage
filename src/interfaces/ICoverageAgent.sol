@@ -17,13 +17,13 @@ struct ClaimCoverageRequest {
 struct Claim {
     /// @notice The coverage provider that issued the claim.
     address coverageProvider;
-
     /// @notice The id of the claim.
     uint256 claimId;
 }
 
 struct Coverage {
     Claim[] claims;
+    bool reservation;
 }
 
 /// @title ICoverageAgent
@@ -33,9 +33,12 @@ interface ICoverageAgent {
     event CoverageProviderRegistered(address indexed coverageProvider);
     event PositionRegistered(address indexed coverageProvider, uint256 indexed positionId);
     event CoverageClaimed(uint256 indexed coverageId);
+    event CoverageReserved(uint256 indexed coverageId);
 
     error InvalidCoverage(uint256 coverageId);
     error CoverageProviderNotRegistered();
+    error CoverageNotReservation(uint256 coverageId);
+    error CoverageAlreadyConverted(uint256 coverageId);
 
     /// ============ Coverage Providers ============
 

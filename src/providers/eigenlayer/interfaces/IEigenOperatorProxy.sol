@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.28;
+
 import {EigenAddresses} from "../Types.sol";
 
 interface IEigenOperatorProxy {

@@ -12,6 +12,7 @@ import {
     CoverageClaimStatus,
     Refundable
 } from "src/interfaces/ICoverageProvider.sol";
+import {IExampleCoverageAgent} from "src/interfaces/IExampleCoverageAgent.sol";
 
 /// @notice Mock Coverage Provider for testing
 contract MockCoverageProvider is ICoverageProvider {
@@ -43,7 +44,7 @@ contract MockCoverageProvider is ICoverageProvider {
         emit PositionClosed(positionId);
     }
 
-    function claimCoverage(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
+    function issueClaim(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
         external
         returns (uint256 claimId)
     {
@@ -66,16 +67,48 @@ contract MockCoverageProvider is ICoverageProvider {
         emit ClaimIssued(positionId, claimId, amount, duration);
     }
 
+    function reserveClaim(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
+        external
+        override
+        returns (uint256 claimId)
+    {
+        claimId = nextClaimId++;
+        _claims[claimId] = CoverageClaim({
+            positionId: positionId,
+            amount: amount,
+            duration: duration,
+            createdAt: block.timestamp,
+            status: CoverageClaimStatus.Reserved,
+            reward: reward
+        });
+        _totalCoverageByAgent[msg.sender] += amount;
+        emit ClaimReserved(positionId, claimId, amount, duration);
+    }
+
+    function convertReservedClaim(uint256 claimId, uint256 amount, uint256 duration, uint256 reward) external override {
+        CoverageClaim storage coverageClaim = _claims[claimId];
+        CoveragePosition memory _position = _positions[coverageClaim.positionId];
+
+        bool success =
+            IERC20(ICoverageAgent(_position.coverageAgent).asset()).transferFrom(msg.sender, address(this), reward);
+        if (!success) revert RewardTransferFailed();
+
+        coverageClaim.amount = amount;
+        coverageClaim.duration = duration;
+        coverageClaim.reward = reward;
+        coverageClaim.createdAt = block.timestamp;
+        coverageClaim.status = CoverageClaimStatus.Issued;
+        emit ClaimIssued(coverageClaim.positionId, claimId, amount, duration);
+    }
+
+    function closeClaim(uint256 claimId) external override {
+        _claims[claimId].status = CoverageClaimStatus.Completed;
+        emit ClaimClosed(claimId);
+    }
+
     function liquidateClaim(uint256 claimId) external override {
         _claims[claimId].status = CoverageClaimStatus.Liquidated;
         emit Liquidated(claimId);
-    }
-
-    function completeClaims(uint256 claimId) external override {
-        CoverageClaim storage coverageClaim = _claims[claimId];
-        _totalCoverageByAgent[msg.sender] -= coverageClaim.amount;
-        coverageClaim.status = CoverageClaimStatus.Completed;
-        emit ClaimCompleted(claimId);
     }
 
     function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts)
@@ -131,7 +164,7 @@ contract MockCoverageProvider is ICoverageProvider {
 }
 
 /// @notice Test suite for ExampleCoverageAgent
-contract CoverageAgentTest is TestDeployer {
+contract ExampleCoverageAgentTest is TestDeployer {
     ExampleCoverageAgent public coverageAgent;
     MockCoverageProvider public mockProvider;
 
@@ -165,12 +198,12 @@ contract CoverageAgentTest is TestDeployer {
 
         // Non-coordinator should not be able to register providers
         vm.prank(nonHandler);
-        vm.expectRevert(ExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
+        vm.expectRevert(IExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
         coverageAgent.registerCoverageProvider(address(0x999));
     }
 
     function test_RevertWhen_constructor_zeroHandler() public {
-        vm.expectRevert(ExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
+        vm.expectRevert(IExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
         new ExampleCoverageAgent(address(0), USDC);
     }
 
@@ -196,7 +229,7 @@ contract CoverageAgentTest is TestDeployer {
 
     function test_RevertWhen_registerCoverageProvider_notHandler() public {
         vm.prank(nonHandler);
-        vm.expectRevert(ExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
+        vm.expectRevert(IExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
         coverageAgent.registerCoverageProvider(address(mockProvider));
     }
 
@@ -249,7 +282,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: USDC,
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
 
         // Expect PositionRegistered event from agent
@@ -274,7 +308,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: WETH,
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -315,6 +350,15 @@ contract CoverageAgentTest is TestDeployer {
         coverageAgent.coverage(0);
     }
 
+    function test_RevertWhen_coverage_invalidCoverageId_emitsError() public {
+        // Test that InvalidCoverage error is properly reverted when accessing non-existent coverage
+        // This explicitly tests the error reversion in the view function
+        uint256 invalidCoverageId = 999;
+
+        vm.expectRevert(abi.encodeWithSelector(ICoverageAgent.InvalidCoverage.selector, invalidCoverageId));
+        coverageAgent.coverage(invalidCoverageId);
+    }
+
     function test_RevertWhen_coverage_coverageIdOutOfBounds() public {
         // Register provider first
         coverageAgent.registerCoverageProvider(address(mockProvider));
@@ -327,7 +371,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: USDC,
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -364,7 +409,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: USDC,
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -427,7 +473,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: USDC,
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -477,7 +524,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: USDC,
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -545,7 +593,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: USDC,
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         CoveragePosition memory position2 = CoveragePosition({
             coverageAgent: address(coverageAgent),
@@ -554,7 +603,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: USDC,
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         uint256 positionId1 = mockProvider.createPosition(position1, "");
         uint256 positionId2 = provider2.createPosition(position2, "");
@@ -609,7 +659,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: USDC,
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -632,7 +683,7 @@ contract CoverageAgentTest is TestDeployer {
 
         // Try to slash as non-coordinator
         vm.prank(nonHandler);
-        vm.expectRevert(ExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
+        vm.expectRevert(IExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
         coverageAgent.slashCoverage(coverageId);
     }
 
@@ -654,7 +705,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: USDC,
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -691,7 +743,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: USDC,
             refundable: Refundable.None,
-            slashCoordinator: address(0)
+            slashCoordinator: address(0),
+            maxReservationTime: 0
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -760,7 +813,8 @@ contract CoverageAgentTest is TestDeployer {
             expiryTimestamp: block.timestamp + 365 days,
             asset: USDC,
             refundable: Refundable.None,
-            slashCoordinator: slashCoordinator
+            slashCoordinator: slashCoordinator,
+            maxReservationTime: 0
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -804,4 +858,3 @@ contract CoverageAgentTest is TestDeployer {
         assertEq(uint8(claimAfter.status), uint8(CoverageClaimStatus.PendingSlash));
     }
 }
-

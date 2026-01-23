@@ -14,33 +14,30 @@ enum Refundable {
 struct CoveragePosition {
     /// @notice The address of the coverage agent that this position will cover.
     address coverageAgent;
-
     /// @notice The minimum rate for any delegation locking.
     /// @dev Rate is in basis points per annum
     uint16 minRate;
-
     /// @notice The maximum duration of any delegation locking in seconds.
     /// @dev If 0 there is no maximum duration.
     uint256 maxDuration;
-
     /// @notice The timestamp at which the coverage position expires.
     /// @dev If 0 there is no expiry block.
     uint256 expiryTimestamp;
-
     /// @notice The asset that the coverage position is denominated in.
     address asset;
-
     /// @notice The refund policy if the coverage agent cannot meet its obligations.
     /// @dev The coverage provider must provide contingencies based on the refund policy:
     /// - None: No refund required
     /// - TimeWeighted: Refund proportional to remaining duration (e.g., 50% refund if 6 months remain of 12 month position)
     /// - Full: Complete refund of reward to allow coverage agent to purchase coverage for remaining duration
     Refundable refundable;
-
     /// @notice The address of the slash coordinator for the coverage position.
     /// @dev The slash coordinator is responsible for initiating the slashing process for the coverage position.
     /// If no slash coordinator is set, the coverage provider will instantly slash the coverage position.
     address slashCoordinator;
+    /// @notice The maximum amount of time in seconds that a reservation is valid for since it was created.
+    /// @dev If 0 there is no maximum reservation time (reservations are not allowed).
+    uint256 maxReservationTime;
 }
 
 enum CoverageClaimStatus {
@@ -48,7 +45,8 @@ enum CoverageClaimStatus {
     Liquidated,
     Completed,
     PendingSlash,
-    Slashed
+    Slashed,
+    Reserved
 }
 
 struct CoverageClaim {
@@ -67,8 +65,9 @@ interface ICoverageProvider {
     event PositionCreated(uint256 indexed positionId);
     event PositionClosed(uint256 indexed positionId);
     event ClaimIssued(uint256 indexed positionId, uint256 indexed claimId, uint256 amount, uint256 duration);
+    event ClaimReserved(uint256 indexed positionId, uint256 indexed claimId, uint256 amount, uint256 duration);
+    event ClaimClosed(uint256 indexed claimId);
     event Liquidated(uint256 indexed claimId);
-    event ClaimCompleted(uint256 indexed claimId);
     event ClaimSlashed(uint256 indexed claimId, uint256 amount);
     event ClaimSlashPending(uint256 indexed claimId, address slashCoordinator);
 
@@ -85,6 +84,12 @@ interface ICoverageProvider {
     error InvalidClaim(uint256 claimId);
     error SlashFailed(uint256 claimId);
     error SlashAmountExceedsClaim(uint256 claimId, uint256 slash, uint256 claim);
+    error ReservationNotAllowed(uint256 positionId);
+    error ReservationExpired(uint256 claimId);
+    error AmountExceedsReserved(uint256 claimId, uint256 amount, uint256 reserved);
+    error DurationExceedsReserved(uint256 claimId, uint256 duration, uint256 reserved);
+    error ClaimNotReserved(uint256 claimId);
+    error ClaimNotExpired(uint256 claimId);
 
     /// ============ Hooks ============
 
@@ -117,20 +122,42 @@ interface ICoverageProvider {
     /// @param duration The duration of the coverage to claim.
     /// @param reward The amount of the coverage reward to pay.
     /// @return claimId ID of the coverage claim on success.
-    function claimCoverage(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
+    function issueClaim(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
         external
         returns (uint256 claimId);
+
+    /// @notice Reserve coverage for a coverage position.
+    /// @dev Reserves coverage without immediately requiring the full reward payment.
+    /// The reservation can be converted to an issued claim within the maxReservationTime.
+    /// @param positionId ID of the coverage position to reserve coverage from.
+    /// @param amount The amount of coverage to reserve.
+    /// @param duration The duration of the coverage to reserve.
+    /// @param reward The amount of the coverage reward that will be paid on conversion.
+    /// @return claimId ID of the reserved coverage claim on success.
+    function reserveClaim(uint256 positionId, uint256 amount, uint256 duration, uint256 reward)
+        external
+        returns (uint256 claimId);
+
+    /// @notice Convert a reserved claim to an issued claim.
+    /// @dev Can only be called by the coverage agent that created the reservation.
+    /// The amount and duration can be less than or equal to the reserved amounts.
+    /// @param claimId The ID of the reserved claim to convert.
+    /// @param amount The amount of coverage to claim (must be <= reserved amount).
+    /// @param duration The duration of the coverage (must be <= reserved duration).
+    /// @param reward The reward to pay (must be adequate pro-rata based on amount and duration).
+    function convertReservedClaim(uint256 claimId, uint256 amount, uint256 duration, uint256 reward) external;
+
+    /// @notice Close a coverage claim.
+    /// @dev Can be called by anyone if the reservation has expired (createdAt + maxReservationTime < block.timestamp).
+    /// @dev Can be called by anyone if an issued claim's duration has elapsed (createdAt + duration <= block.timestamp).
+    /// @dev Can be called by the coverage agent that made the claim to close their own claim early.
+    /// @param claimId The ID of the claim to close.
+    function closeClaim(uint256 claimId) external;
 
     /// @notice Liquidate a coverage claim if it doesn't meet its obligations.
     /// @dev This should be called by the coverage agent if the coverage position doesn't meet its obligations.
     /// @param claimId The id of the coverage position to liquidate.
     function liquidateClaim(uint256 claimId) external;
-
-    /// @notice Complete a coverage claim.
-    /// @dev This can be called by anyone if the coverage claim is completed and should be removed from coverage tracking.
-    /// If a claim is in the pending slash state, it can only be completed as a result of the slashing process.
-    /// @param claimId The id of the coverage claim to complete.
-    function completeClaims(uint256 claimId) external;
 
     /// @notice Slash on coverage claims.
     /// @dev Can only be called by a coverage agent. Should take a slash coordinator into account if set.

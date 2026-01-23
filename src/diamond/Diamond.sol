@@ -55,4 +55,3 @@ abstract contract Diamond {
     /// @dev Allows the diamond to receive ETH directly
     receive() external payable {}
 }
-

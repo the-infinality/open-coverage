@@ -14,6 +14,8 @@ export default defineConfig({
                 "IAssetPriceOracleAndSwapper.sol/IAssetPriceOracleAndSwapper.json",
                 "IEigenOperatorProxy.sol/IEigenOperatorProxy.json",
                 "IDiamondOwner.sol/IDiamondOwner.json",
+                "IExampleCoverageAgent.sol/IExampleCoverageAgent.json",
+                "IERC165.sol/IERC165.json",
             ],
         }),
     ],

@@ -74,19 +74,21 @@ library EigenFacetsDeployer {
     /// @notice Gets function selectors for EigenCoverageProviderFacet
     /// @return selectors Array of function selectors
     function getEigenCoverageProviderSelectors() internal pure returns (bytes4[] memory selectors) {
-        selectors = new bytes4[](12);
+        selectors = new bytes4[](14);
         selectors[0] = ICoverageProvider.onIsRegistered.selector;
         selectors[1] = ICoverageProvider.createPosition.selector;
         selectors[2] = ICoverageProvider.closePosition.selector;
-        selectors[3] = ICoverageProvider.claimCoverage.selector;
+        selectors[3] = ICoverageProvider.issueClaim.selector;
         selectors[4] = ICoverageProvider.liquidateClaim.selector;
-        selectors[5] = ICoverageProvider.completeClaims.selector;
-        selectors[6] = ICoverageProvider.slashClaims.selector;
-        selectors[7] = ICoverageProvider.completeSlash.selector;
-        selectors[8] = ICoverageProvider.position.selector;
-        selectors[9] = ICoverageProvider.positionMaxAmount.selector;
-        selectors[10] = ICoverageProvider.claim.selector;
-        selectors[11] = ICoverageProvider.claimBacking.selector;
+        selectors[5] = ICoverageProvider.closeClaim.selector;
+        selectors[6] = ICoverageProvider.reserveClaim.selector;
+        selectors[7] = ICoverageProvider.convertReservedClaim.selector;
+        selectors[8] = ICoverageProvider.slashClaims.selector;
+        selectors[9] = ICoverageProvider.completeSlash.selector;
+        selectors[10] = ICoverageProvider.position.selector;
+        selectors[11] = ICoverageProvider.positionMaxAmount.selector;
+        selectors[12] = ICoverageProvider.claim.selector;
+        selectors[13] = ICoverageProvider.claimBacking.selector;
     }
 }
 

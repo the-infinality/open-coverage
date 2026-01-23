@@ -383,4 +383,3 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         IAllocationManager(_eigenAddresses.allocationManager).updateAVSMetadataURI(address(this), metadataURI);
     }
 }
-

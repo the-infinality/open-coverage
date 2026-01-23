@@ -3,12 +3,8 @@ import { toast } from "sonner"
 import { useAccount, useWalletClient } from "wagmi"
 import { type AbiFunction } from "viem"
 import { getPublicClientForChain } from "@/lib/wagmi"
-import {
-    getAbisForContractType,
-    getAbisForCoverageProviderWithInterfaces,
-    type NamedAbi,
-} from "@/lib/abi"
-import { useCheckCoverageProviderSupport } from "@/hooks/use-interface-support"
+import type { NamedAbi } from "@/lib/abi"
+import { useInterfaceSupport } from "@/hooks/use-interface-support"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -478,31 +474,14 @@ interface FunctionCardProps {
 }
 
 export function FunctionCard({ contract }: FunctionCardProps) {
-    // For CoverageProvider contracts, query interface support via ERC-165
-    const { isLoading: isLoadingInterfaces, supports } = useCheckCoverageProviderSupport(
-        contract.address,
-        contract.chainId,
-        contract.type === "CoverageProvider"
-            ? [
-                  "IEigenServiceManager",
-                  "IAssetPriceOracleAndSwapper",
-                  "IDiamondOwner",
-                  "ICoverageProvider",
-              ]
-            : []
-    )
-
-    const namedAbis = useMemo(() => {
-        // For CoverageProvider, use detected interfaces instead of additionalFields
-        if (contract.type === "CoverageProvider") {
-            return getAbisForCoverageProviderWithInterfaces(supports)
-        }
-        // For other contract types, use the standard method
-        return getAbisForContractType(contract.type)
-    }, [contract.type, supports])
+    const {
+        isLoading: isLoadingInterfaces,
+        supportedInterfaces,
+        abis: namedAbis,
+    } = useInterfaceSupport(contract.address, contract.chainId)
 
     // Show loading state while detecting interfaces for CoverageProvider
-    if (contract.type === "CoverageProvider" && isLoadingInterfaces) {
+    if (isLoadingInterfaces) {
         return (
             <Card className="h-fit">
                 <CardHeader>
@@ -526,12 +505,7 @@ export function FunctionCard({ contract }: FunctionCardProps) {
                     Read and write functions for {contract.name}
                     {contract.type === "CoverageProvider" && (
                         <span className="ml-2 text-xs">
-                            (Detected:{" "}
-                            {Object.entries(supports)
-                                .filter(([, v]) => v)
-                                .map(([k]) => k)
-                                .join(", ") || "Base interfaces"}
-                            )
+                            (Detected: {supportedInterfaces.join(", ") || "Base interfaces"})
                         </span>
                     )}
                 </CardDescription>

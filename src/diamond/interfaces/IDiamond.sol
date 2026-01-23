@@ -37,4 +37,3 @@ interface IDiamond {
     /// @param _calldata The calldata to execute on _init (can be empty)
     event DiamondCut(FacetCut[] _diamondCut, address _init, bytes _calldata);
 }
-

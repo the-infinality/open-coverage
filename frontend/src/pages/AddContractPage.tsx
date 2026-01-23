@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod/v4"
@@ -36,7 +36,8 @@ import type { ContractType, ProviderType } from "@/types/contracts"
 import eigenlayerLogo from "@/assets/eigenlayer.jpg"
 import catalysisLogo from "@/assets/catalysis.jpg"
 import symbioticLogo from "@/assets/symbiotic.png"
-import { useCheckCoverageProvider } from "@/hooks/use-interface-support"
+import { useInterfaceSupport, useCheckCoverageProvider } from "@/hooks/use-interface-support"
+import type { InterfaceName } from "@/lib/interface-ids"
 
 // Get supported chain IDs for validation
 const supportedChainIds = getSupportedChainsInfo().map((c) => c.id)
@@ -96,10 +97,11 @@ const providerTypes: {
     },
 ]
 
-interface ContractValidationState {
-    isValidating: boolean
-    hasCode: boolean | null
-    error: string | null
+// Mapping from contract type to required interface
+const CONTRACT_TYPE_INTERFACES: Record<ContractType, InterfaceName> = {
+    CoverageAgent: "ICoverageAgent",
+    CoverageProvider: "ICoverageProvider",
+    EigenOperatorProxy: "IEigenOperatorProxy",
 }
 
 export function AddContractPage() {
@@ -108,11 +110,9 @@ export function AddContractPage() {
     const { addContract, contracts } = useContracts()
     const supportedChains = getSupportedChainsInfo()
 
-    const [validation, setValidation] = useState<ContractValidationState>({
-        isValidating: false,
-        hasCode: null,
-        error: null,
-    })
+    // Contract existence check state
+    const [contractExists, setContractExists] = useState<boolean | null>(null)
+    const [isCheckingExists, setIsCheckingExists] = useState(false)
 
     const form = useForm<FormData>({
         resolver: zodResolver(formSchema) as unknown as undefined,
@@ -129,70 +129,62 @@ export function AddContractPage() {
     const watchedChainId = useWatch({ control: form.control, name: "chainId" })
     const watchedAddress = useWatch({ control: form.control, name: "address" })
 
-    const { coverageProvider } = useCheckCoverageProvider(
-        watchedType === "CoverageProvider" ? (watchedAddress as `0x${string}`) : undefined,
-        watchedChainId
-    )
+    // Get the required interface for the selected contract type
+    const requiredInterface = CONTRACT_TYPE_INTERFACES[watchedType]
+    const isAddressValid = isValidAddressFormat(watchedAddress)
 
-    // Validate contract address when it changes
+    // Check if contract exists at the address
     useEffect(() => {
-        const validateContract = async () => {
-            if (!watchedAddress || !isValidAddressFormat(watchedAddress)) {
-                setValidation({ isValidating: false, hasCode: null, error: null })
+        const checkContractExists = async () => {
+            if (!isAddressValid || !watchedChainId) {
+                setContractExists(null)
+                setIsCheckingExists(false)
                 return
             }
 
-            if (!watchedChainId) {
-                setValidation({
-                    isValidating: false,
-                    hasCode: null,
-                    error: "Please select a chain",
-                })
-                return
-            }
-
-            // Get public client for the selected chain
             const chainPublicClient = getPublicClientForChain(watchedChainId)
             if (!chainPublicClient) {
-                setValidation({ isValidating: false, hasCode: null, error: "Invalid chain" })
+                setContractExists(null)
+                setIsCheckingExists(false)
                 return
             }
 
-            setValidation({ isValidating: true, hasCode: null, error: null })
-
+            setIsCheckingExists(true)
             try {
-                // Check if there's code at the address
                 const code = await chainPublicClient.getBytecode({
                     address: getAddress(watchedAddress),
                 })
                 const hasCode = code !== undefined && code !== "0x"
-
-                if (!hasCode) {
-                    setValidation({
-                        isValidating: false,
-                        hasCode: false,
-                        error: "No contract found at this address",
-                    })
-                    return
-                }
-
-                setValidation({
-                    isValidating: false,
-                    hasCode: true,
-                    error: null,
-                })
+                setContractExists(hasCode)
             } catch {
-                setValidation({
-                    isValidating: false,
-                    hasCode: null,
-                    error: "Failed to validate contract",
-                })
+                setContractExists(null)
+            } finally {
+                setIsCheckingExists(false)
             }
         }
 
-        const timeoutId = setTimeout(validateContract, 500)
+        const timeoutId = setTimeout(checkContractExists, 500)
         return () => clearTimeout(timeoutId)
-    }, [watchedAddress, watchedChainId, watchedType])
+    }, [watchedAddress, watchedChainId, isAddressValid])
+
+    // Check if the contract supports the required interface (only if contract exists)
+    const { isLoading: isCheckingInterface, supportedInterfaces } = useInterfaceSupport(
+        isAddressValid && contractExists ? (watchedAddress as `0x${string}`) : "0x0000000000000000000000000000000000000000",
+        watchedChainId,
+        [requiredInterface]
+    )
+
+    // Combined validation status
+    const isValidating = isCheckingExists || (contractExists === true && isCheckingInterface)
+    const supportsRequiredInterface = useMemo(
+        () => contractExists === true && supportedInterfaces.includes(requiredInterface),
+        [contractExists, supportedInterfaces, requiredInterface]
+    )
+
+    const { coverageProvider } = useCheckCoverageProvider(
+        watchedType === "CoverageProvider" ? (watchedAddress as `0x${string}`) : undefined,
+        watchedChainId
+    )
 
     // Reset provider type when contract type changes
     useEffect(() => {
@@ -366,28 +358,43 @@ export function AddContractPage() {
                                                     className="pr-10"
                                                 />
                                                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                                    {validation.isValidating && (
+                                                    {isAddressValid && isValidating && (
                                                         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                                                     )}
-                                                    {!validation.isValidating &&
-                                                        validation.hasCode === true && (
+                                                    {isAddressValid &&
+                                                        !isValidating &&
+                                                        supportsRequiredInterface && (
                                                             <CheckCircle2 className="h-4 w-4 text-green-500" />
                                                         )}
-                                                    {!validation.isValidating &&
-                                                        validation.hasCode === false && (
+                                                    {isAddressValid &&
+                                                        !isValidating &&
+                                                        (contractExists === false ||
+                                                            !supportsRequiredInterface) && (
                                                             <AlertCircle className="h-4 w-4 text-destructive" />
                                                         )}
                                                 </div>
                                             </div>
                                         </FormControl>
                                         <FormDescription>
-                                            {validation.error ? (
+                                            {isAddressValid &&
+                                            !isValidating &&
+                                            contractExists === false ? (
                                                 <span className="text-destructive">
-                                                    {validation.error}
+                                                    Contract does not exist
                                                 </span>
-                                            ) : validation.hasCode ? (
+                                            ) : isAddressValid &&
+                                              !isValidating &&
+                                              contractExists === true &&
+                                              !supportsRequiredInterface ? (
+                                                <span className="text-destructive">
+                                                    Contract not verified: does not support{" "}
+                                                    {requiredInterface}
+                                                </span>
+                                            ) : isAddressValid &&
+                                              !isValidating &&
+                                              supportsRequiredInterface ? (
                                                 <span className="text-green-600 dark:text-green-400">
-                                                    Contract found
+                                                    Contract verified
                                                 </span>
                                             ) : (
                                                 "The Ethereum address of the contract"
@@ -474,13 +481,15 @@ export function AddContractPage() {
                             <Button
                                 type="submit"
                                 className="w-full"
-                                disabled={!validation.hasCode || validation.isValidating}
+                                disabled={
+                                    !isAddressValid || isValidating || !supportsRequiredInterface
+                                }
                                 size="lg"
                             >
-                                {validation.isValidating ? (
+                                {isValidating ? (
                                     <>
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Verifying Contract...
+                                        Checking contract...
                                     </>
                                 ) : (
                                     "Add Contract"

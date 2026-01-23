@@ -42,4 +42,3 @@ abstract contract AssetPriceOracleAndSwapperStorage {
         ds.swapSlippage = 100; // Default 1%
     }
 }
-

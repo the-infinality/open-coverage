@@ -1,5 +1,5 @@
 import { Loader2, AlertCircle } from "lucide-react"
-import { useAccount, useSwitchChain, useChainId } from "wagmi"
+import { useAccount, useConnect, useSwitchChain, useChainId } from "wagmi"
 import { supportedChains } from "@/lib/wagmi"
 import { Button } from "@/components/ui/button"
 
@@ -12,6 +12,7 @@ interface WalletRequirementProps {
 
 export function WalletRequirement({ requiredChainId, children }: WalletRequirementProps) {
     const { isConnected } = useAccount()
+    const { connect, connectors, isPending: isConnecting } = useConnect()
     const currentChainId = useChainId()
     const { switchChain, isPending: isSwitching } = useSwitchChain()
 
@@ -22,12 +23,29 @@ export function WalletRequirement({ requiredChainId, children }: WalletRequireme
     if (!isConnected) {
         return (
             <div className="rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-4">
-                <div className="flex items-center gap-2 text-yellow-600 dark:text-yellow-500">
-                    <AlertCircle className="size-4" />
-                    <span className="text-sm font-medium">Wallet not connected</span>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-yellow-600 dark:text-yellow-500">
+                        <AlertCircle className="size-4" />
+                        <span className="text-sm font-medium">Wallet not connected</span>
+                    </div>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="mt-1 flex flex-col items-start justify-center gap-2.5 text-xs text-muted-foreground">
                     Please connect your wallet to interact with this contract.
+                    <Button
+                        size="lg"
+                        className="w-[200px]"
+                        onClick={() => connect({ connector: connectors[0] })}
+                        disabled={isConnecting}
+                    >
+                        {isConnecting ? (
+                            <>
+                                <Loader2 className="mr-2 size-3 animate-spin" />
+                                Connecting...
+                            </>
+                        ) : (
+                            "Connect Wallet"
+                        )}
+                    </Button>
                 </p>
             </div>
         )

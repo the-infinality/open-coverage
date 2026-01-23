@@ -55,4 +55,3 @@ contract DiamondLoupeFacet is IDiamondLoupe, IERC165 {
         return ds.supportedInterfaces[_interfaceId];
     }
 }
-

@@ -42,4 +42,3 @@ interface IDiamondLoupe {
     /// @return facetAddress_ The facet address that implements the selector, or address(0) if not found
     function facetAddress(bytes4 _functionSelector) external view returns (address facetAddress_);
 }
-

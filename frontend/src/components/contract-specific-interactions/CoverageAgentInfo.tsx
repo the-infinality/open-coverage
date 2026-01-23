@@ -14,7 +14,7 @@ import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useCon
 import { readContract } from "wagmi/actions"
 import { toast } from "sonner"
 import type { CoverageContract } from "@/types/contracts"
-import { iCoverageAgentAbi, iCoverageProviderAbi } from "@/generated/abis"
+import { iCoverageAgentAbi, iCoverageProviderAbi, iExampleCoverageAgentAbi } from "@/generated/abis"
 import { ierc20Abi } from "@/generated/eigen-abis"
 import { ContractCard } from "@/components/ContractCard"
 import { CoverageProviderSelect } from "@/components/ContractSelects"
@@ -41,6 +41,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { WalletRequirement } from "@/components/WalletRequirement"
 
 type SupportedChainId = (typeof supportedChains)[number]["id"]
 
@@ -58,6 +59,7 @@ const CLAIM_STATUS_LABELS: Record<
     2: { label: "Completed", variant: "secondary" },
     3: { label: "Pending Slash", variant: "outline" },
     4: { label: "Slashed", variant: "destructive" },
+    5: { label: "Reserved", variant: "outline" },
 }
 
 interface CoverageClaimData {
@@ -430,6 +432,7 @@ function CoverageClaimsManagement({
     const [claimReward, setClaimReward] = useState("")
     const [positionMaxAmount, setPositionMaxAmount] = useState<bigint | null>(null)
     const [isLoadingMaxAmount, setIsLoadingMaxAmount] = useState(false)
+    const [isReservation, setIsReservation] = useState(false)
 
     // Claims viewing state
     const [loadedClaims, setLoadedClaims] = useState<LoadedClaimData[]>([])
@@ -639,6 +642,7 @@ function CoverageClaimsManagement({
                                                 coverageProvider: Address
                                                 claimId: bigint
                                             }>
+                                            reservation: boolean
                                         }
                                         for (const claim of coverage.claims) {
                                             loadClaim(Number(claim.claimId), claim.coverageProvider)
@@ -721,7 +725,7 @@ function CoverageClaimsManagement({
         const duration = BigInt(Number(claimDuration) * 24 * 60 * 60) // days to seconds
         const reward = BigInt(Math.floor(parseFloat(claimReward) * 10 ** tokenDecimals))
 
-        // Create the ClaimCoverageRequest struct for purchaseCoverage
+        // Create the ClaimCoverageRequest struct
         const request = {
             coverageProvider: selectedProviderAddress as Address,
             positionId: BigInt(positionId),
@@ -730,17 +734,22 @@ function CoverageClaimsManagement({
             duration,
         }
 
+        // Use reserveCoverage if isReservation is true, otherwise use purchaseCoverage
+        const successMessage = isReservation
+            ? "Coverage reservation submitted"
+            : "Coverage purchase submitted"
+
         writeContract(
             {
                 address: contract.address,
-                abi: iCoverageAgentAbi,
-                functionName: "purchaseCoverage",
+                abi: iExampleCoverageAgentAbi,
+                functionName: isReservation ? "reserveCoverage" : "purchaseCoverage",
                 args: [[request]],
                 chainId,
             },
             {
                 onSuccess: (hash) => {
-                    toast.success(`Transaction submitted: ${hash.slice(0, 10)}...`)
+                    toast.success(`${successMessage}: ${hash.slice(0, 10)}...`)
                 },
                 onError: (error) => {
                     toast.error(error.message.slice(0, 100))
@@ -814,161 +823,41 @@ function CoverageClaimsManagement({
                 </div>
             </CardHeader>
             <CardContent className="space-y-6">
-                {/* Create Claim Section */}
-                <div className="space-y-4">
-                    <div className="rounded-lg bg-muted/50 p-3">
-                        <h4 className="text-sm font-medium">Create New Claim</h4>
-                        <p className="text-xs text-muted-foreground mt-1">
-                            Claim coverage from a registered provider position
-                        </p>
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label>Coverage Provider</Label>
-                        <CoverageProviderSelect
-                            selectedContractId={selectedProviderId}
-                            onSelectedContractIdChange={setSelectedProviderId}
-                            contracts={registeredProviderContracts}
-                            disabled={isPending || isConfirming}
-                            placeholder="Select registered coverage provider..."
-                            emptyMessage={
-                                <>
-                                    No coverage providers registered yet.
-                                    <br />
-                                    Register a coverage provider first.
-                                </>
-                            }
-                        />
-                        <p className="text-xs text-muted-foreground">
-                            Select a coverage provider registered with this agent
-                        </p>
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label htmlFor="positionId">Position ID</Label>
-                        <Input
-                            id="positionId"
-                            type="number"
-                            placeholder="Enter position ID..."
-                            value={positionId}
-                            onChange={(e) => setPositionId(e.target.value)}
-                            className="font-mono"
-                            disabled={isPending || isConfirming || !selectedProviderAddress}
-                        />
-                        {isLoadingMaxAmount && (
-                            <p className="text-xs text-muted-foreground flex items-center gap-2">
-                                <Loader2 className="size-3 animate-spin" />
-                                Loading position max amount...
+                <WalletRequirement requiredChainId={contract.chainId}>
+                    {/* Create Claim Section */}
+                    <div className="space-y-4">
+                        <div className="rounded-lg bg-muted/50 p-3">
+                            <h4 className="text-sm font-medium">Create New Coverage</h4>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                {isReservation
+                                    ? "Reserve coverage without immediate payment (can be converted later)"
+                                    : "Purchase coverage from a registered provider position"}
                             </p>
-                        )}
-                        {positionMaxAmount !== null && (
-                            <p className="text-xs text-muted-foreground">
-                                Max available:{" "}
-                                <span className="font-mono">
-                                    {formatUnits(positionMaxAmount, tokenDecimals)} {tokenSymbol}
-                                </span>
-                            </p>
-                        )}
-                    </div>
+                        </div>
 
-                    <div className="grid gap-4 md:grid-cols-3">
-                        <div className="space-y-2">
-                            <Label htmlFor="claimAmount">Amount ({tokenSymbol})</Label>
-                            <Input
-                                id="claimAmount"
-                                type="number"
-                                step="any"
-                                placeholder="0.0"
-                                value={claimAmount}
-                                onChange={(e) => setClaimAmount(e.target.value)}
-                                className="font-mono"
-                                disabled={isPending || isConfirming || !selectedProviderAddress}
+                        {/* Reservation Toggle */}
+                        <div className="flex items-center space-x-2">
+                            <Checkbox
+                                id="reservationMode"
+                                checked={isReservation}
+                                onChange={(e) => setIsReservation(e.target.checked)}
+                                disabled={isPending || isConfirming}
                             />
-                            {positionMaxAmount !== null &&
-                                claimAmount &&
-                                BigInt(Math.floor(parseFloat(claimAmount) * 10 ** tokenDecimals)) >
-                                    positionMaxAmount && (
-                                    <p className="text-xs text-destructive flex items-center gap-1">
-                                        <AlertTriangle className="size-3" />
-                                        Exceeds max amount
-                                    </p>
-                                )}
+                            <Label
+                                htmlFor="reservationMode"
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                            >
+                                Reserve coverage (no immediate payment)
+                            </Label>
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="claimDuration">Duration (days)</Label>
-                            <Input
-                                id="claimDuration"
-                                type="number"
-                                placeholder="30"
-                                value={claimDuration}
-                                onChange={(e) => setClaimDuration(e.target.value)}
-                                className="font-mono"
-                                disabled={isPending || isConfirming || !selectedProviderAddress}
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="claimReward">Reward ({tokenSymbol})</Label>
-                            <Input
-                                id="claimReward"
-                                type="number"
-                                step="any"
-                                placeholder="0.0"
-                                value={claimReward}
-                                onChange={(e) => setClaimReward(e.target.value)}
-                                className="font-mono"
-                                disabled={isPending || isConfirming || !selectedProviderAddress}
-                            />
-                        </div>
-                    </div>
-
-                    <Button
-                        onClick={handleCreateClaim}
-                        disabled={!isValidClaimForm || isPending || isConfirming}
-                        className="w-full"
-                    >
-                        {isPending || isConfirming ? (
-                            <Loader2 className="mr-2 size-4 animate-spin" />
-                        ) : (
-                            <Plus className="mr-2 size-4" />
-                        )}
-                        {isPending
-                            ? "Confirm in wallet..."
-                            : isConfirming
-                              ? "Creating..."
-                              : "Create Claim"}
-                    </Button>
-
-                    {isSuccess && (
-                        <p className="flex items-center gap-2 text-sm text-green-600">
-                            <CheckCircle2 className="size-4" />
-                            Claim created successfully!
-                        </p>
-                    )}
-                </div>
-
-                <Separator />
-
-                {/* View Claims Section */}
-                <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-medium">View Claims</h4>
-                        <div className="flex items-center gap-2">
-                            <Badge variant="secondary">{loadedClaims.length} loaded</Badge>
-                            {selectedClaimIds.size > 0 && (
-                                <Badge variant="outline">{selectedClaimIds.size} selected</Badge>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                        <div className="flex-1">
+                            <Label>Coverage Provider</Label>
                             <CoverageProviderSelect
-                                selectedContractId={loadClaimProviderId}
-                                onSelectedContractIdChange={setLoadClaimProviderId}
+                                selectedContractId={selectedProviderId}
+                                onSelectedContractIdChange={setSelectedProviderId}
                                 contracts={registeredProviderContracts}
-                                disabled={isLoadingClaim}
+                                disabled={isPending || isConfirming}
                                 placeholder="Select registered coverage provider..."
                                 emptyMessage={
                                     <>
@@ -978,97 +867,248 @@ function CoverageClaimsManagement({
                                     </>
                                 }
                             />
+                            <p className="text-xs text-muted-foreground">
+                                Select a coverage provider registered with this agent
+                            </p>
                         </div>
-                        <div className="flex gap-2 items-center">
+
+                        <div className="space-y-2">
+                            <Label htmlFor="positionId">Position ID</Label>
                             <Input
-                                placeholder="Claim ID..."
-                                value={newClaimId}
-                                onChange={(e) => setNewClaimId(e.target.value)}
-                                className="font-mono w-32"
+                                id="positionId"
                                 type="number"
+                                placeholder="Enter position ID..."
+                                value={positionId}
+                                onChange={(e) => setPositionId(e.target.value)}
+                                className="font-mono"
+                                disabled={isPending || isConfirming || !selectedProviderAddress}
                             />
-                            <Button
-                                variant="outline"
-                                onClick={handleAddClaim}
-                                disabled={
-                                    !newClaimId ||
-                                    !loadClaimProviderId ||
-                                    isNaN(Number(newClaimId)) ||
-                                    isLoadingClaim
-                                }
-                            >
-                                {isLoadingClaim ? (
-                                    <Loader2 className="mr-2 size-4 animate-spin" />
-                                ) : (
-                                    <Plus className="mr-2 size-4" />
-                                )}
-                                {isLoadingClaim ? "Loading..." : "Load"}
-                            </Button>
+                            {isLoadingMaxAmount && (
+                                <p className="text-xs text-muted-foreground flex items-center gap-2">
+                                    <Loader2 className="size-3 animate-spin" />
+                                    Loading position max amount...
+                                </p>
+                            )}
+                            {positionMaxAmount !== null && (
+                                <p className="text-xs text-muted-foreground">
+                                    Max available:{" "}
+                                    <span className="font-mono">
+                                        {formatUnits(positionMaxAmount, tokenDecimals)}{" "}
+                                        {tokenSymbol}
+                                    </span>
+                                </p>
+                            )}
                         </div>
+
+                        <div className="grid gap-4 md:grid-cols-3">
+                            <div className="space-y-2">
+                                <Label htmlFor="claimAmount">Amount ({tokenSymbol})</Label>
+                                <Input
+                                    id="claimAmount"
+                                    type="number"
+                                    step="any"
+                                    placeholder="0.0"
+                                    value={claimAmount}
+                                    onChange={(e) => setClaimAmount(e.target.value)}
+                                    className="font-mono"
+                                    disabled={isPending || isConfirming || !selectedProviderAddress}
+                                />
+                                {positionMaxAmount !== null &&
+                                    claimAmount &&
+                                    BigInt(
+                                        Math.floor(parseFloat(claimAmount) * 10 ** tokenDecimals)
+                                    ) > positionMaxAmount && (
+                                        <p className="text-xs text-destructive flex items-center gap-1">
+                                            <AlertTriangle className="size-3" />
+                                            Exceeds max amount
+                                        </p>
+                                    )}
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="claimDuration">Duration (days)</Label>
+                                <Input
+                                    id="claimDuration"
+                                    type="number"
+                                    placeholder="30"
+                                    value={claimDuration}
+                                    onChange={(e) => setClaimDuration(e.target.value)}
+                                    className="font-mono"
+                                    disabled={isPending || isConfirming || !selectedProviderAddress}
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="claimReward">Reward ({tokenSymbol})</Label>
+                                <Input
+                                    id="claimReward"
+                                    type="number"
+                                    step="any"
+                                    placeholder="0.0"
+                                    value={claimReward}
+                                    onChange={(e) => setClaimReward(e.target.value)}
+                                    className="font-mono"
+                                    disabled={isPending || isConfirming || !selectedProviderAddress}
+                                />
+                            </div>
+                        </div>
+
+                        <Button
+                            onClick={handleCreateClaim}
+                            disabled={!isValidClaimForm || isPending || isConfirming}
+                            className="w-full"
+                            variant={isReservation ? "outline" : "default"}
+                        >
+                            {isPending || isConfirming ? (
+                                <Loader2 className="mr-2 size-4 animate-spin" />
+                            ) : (
+                                <Plus className="mr-2 size-4" />
+                            )}
+                            {isPending
+                                ? "Confirm in wallet..."
+                                : isConfirming
+                                  ? isReservation
+                                      ? "Reserving..."
+                                      : "Creating..."
+                                  : isReservation
+                                    ? "Reserve Coverage"
+                                    : "Purchase Coverage"}
+                        </Button>
+
+                        {isSuccess && (
+                            <p className="flex items-center gap-2 text-sm text-green-600">
+                                <CheckCircle2 className="size-4" />
+                                {isReservation
+                                    ? "Coverage reserved successfully!"
+                                    : "Coverage purchased successfully!"}
+                            </p>
+                        )}
                     </div>
 
-                    {loadedClaims.length === 0 ? (
-                        <div className="py-8 text-center text-sm text-muted-foreground">
-                            Select a provider and enter a claim ID to view details
+                    <Separator />
+
+                    {/* View Claims Section */}
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-medium">View Claims</h4>
+                            <div className="flex items-center gap-2">
+                                <Badge variant="secondary">{loadedClaims.length} loaded</Badge>
+                                {selectedClaimIds.size > 0 && (
+                                    <Badge variant="outline">
+                                        {selectedClaimIds.size} selected
+                                    </Badge>
+                                )}
+                            </div>
                         </div>
-                    ) : (
-                        <>
-                            <ScrollArea className="h-fit">
-                                <div className="space-y-3 max-h-[500px]">
-                                    {loadedClaims.map((claimData) => (
-                                        <ClaimItem
-                                            key={`${claimData.providerAddress}-${claimData.claimId}`}
-                                            claimData={claimData}
-                                            isSelected={selectedClaimIds.has(claimData.claimId)}
-                                            onSelect={(selected) =>
-                                                handleToggleClaimSelection(
-                                                    claimData.claimId,
-                                                    selected
-                                                )
-                                            }
-                                            onRemove={() =>
-                                                handleRemoveClaim(
-                                                    claimData.claimId,
-                                                    claimData.providerAddress
-                                                )
-                                            }
-                                            tokenDecimals={tokenDecimals}
-                                            tokenSymbol={tokenSymbol}
-                                        />
-                                    ))}
-                                </div>
-                            </ScrollArea>
 
-                            {/* Slash Button */}
-                            {selectedClaimsForSlash.length > 0 && (
-                                <div className="flex justify-end">
-                                    <Button
-                                        variant="destructive"
-                                        onClick={() => setSlashDialogOpen(true)}
-                                    >
-                                        <Zap className="mr-2 size-4" />
-                                        Slash {selectedClaimsForSlash.length} Claim
-                                        {selectedClaimsForSlash.length > 1 ? "s" : ""}
-                                    </Button>
-                                </div>
-                            )}
-                        </>
-                    )}
-                </div>
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                            <div className="flex-1">
+                                <CoverageProviderSelect
+                                    selectedContractId={loadClaimProviderId}
+                                    onSelectedContractIdChange={setLoadClaimProviderId}
+                                    contracts={registeredProviderContracts}
+                                    disabled={isLoadingClaim}
+                                    placeholder="Select registered coverage provider..."
+                                    emptyMessage={
+                                        <>
+                                            No coverage providers registered yet.
+                                            <br />
+                                            Register a coverage provider first.
+                                        </>
+                                    }
+                                />
+                            </div>
+                            <div className="flex gap-2 items-center">
+                                <Input
+                                    placeholder="Claim ID..."
+                                    value={newClaimId}
+                                    onChange={(e) => setNewClaimId(e.target.value)}
+                                    className="font-mono w-32"
+                                    type="number"
+                                />
+                                <Button
+                                    variant="outline"
+                                    onClick={handleAddClaim}
+                                    disabled={
+                                        !newClaimId ||
+                                        !loadClaimProviderId ||
+                                        isNaN(Number(newClaimId)) ||
+                                        isLoadingClaim
+                                    }
+                                >
+                                    {isLoadingClaim ? (
+                                        <Loader2 className="mr-2 size-4 animate-spin" />
+                                    ) : (
+                                        <Plus className="mr-2 size-4" />
+                                    )}
+                                    {isLoadingClaim ? "Loading..." : "Load"}
+                                </Button>
+                            </div>
+                        </div>
 
-                {/* Slash Dialog */}
-                <SlashClaimsDialog
-                    open={slashDialogOpen}
-                    onOpenChange={setSlashDialogOpen}
-                    selectedClaims={selectedClaimsForSlash}
-                    providerAddress={
-                        selectedClaimsForSlash[0]?.providerAddress || ("0x" as Address)
-                    }
-                    chainId={chainId}
-                    tokenDecimals={tokenDecimals}
-                    tokenSymbol={tokenSymbol}
-                    onSuccess={handleSlashSuccess}
-                />
+                        {loadedClaims.length === 0 ? (
+                            <div className="py-8 text-center text-sm text-muted-foreground">
+                                Select a provider and enter a claim ID to view details
+                            </div>
+                        ) : (
+                            <>
+                                <ScrollArea className="h-fit">
+                                    <div className="space-y-3 max-h-[500px]">
+                                        {loadedClaims.map((claimData) => (
+                                            <ClaimItem
+                                                key={`${claimData.providerAddress}-${claimData.claimId}`}
+                                                claimData={claimData}
+                                                isSelected={selectedClaimIds.has(claimData.claimId)}
+                                                onSelect={(selected) =>
+                                                    handleToggleClaimSelection(
+                                                        claimData.claimId,
+                                                        selected
+                                                    )
+                                                }
+                                                onRemove={() =>
+                                                    handleRemoveClaim(
+                                                        claimData.claimId,
+                                                        claimData.providerAddress
+                                                    )
+                                                }
+                                                tokenDecimals={tokenDecimals}
+                                                tokenSymbol={tokenSymbol}
+                                            />
+                                        ))}
+                                    </div>
+                                </ScrollArea>
+
+                                {/* Slash Button */}
+                                {selectedClaimsForSlash.length > 0 && (
+                                    <div className="flex justify-end">
+                                        <Button
+                                            variant="destructive"
+                                            onClick={() => setSlashDialogOpen(true)}
+                                        >
+                                            <Zap className="mr-2 size-4" />
+                                            Slash {selectedClaimsForSlash.length} Claim
+                                            {selectedClaimsForSlash.length > 1 ? "s" : ""}
+                                        </Button>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+
+                    {/* Slash Dialog */}
+                    <SlashClaimsDialog
+                        open={slashDialogOpen}
+                        onOpenChange={setSlashDialogOpen}
+                        selectedClaims={selectedClaimsForSlash}
+                        providerAddress={
+                            selectedClaimsForSlash[0]?.providerAddress || ("0x" as Address)
+                        }
+                        chainId={chainId}
+                        tokenDecimals={tokenDecimals}
+                        tokenSymbol={tokenSymbol}
+                        onSuccess={handleSlashSuccess}
+                    />
+                </WalletRequirement>
             </CardContent>
         </Card>
     )
@@ -1211,68 +1251,70 @@ export function CoverageAgentInfo({ contract }: CoverageAgentInfoProps) {
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                    {/* Registration Section */}
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-                        <div className="flex-1">
-                            <CoverageProviderSelect
-                                selectedContractId={selectedProviderId}
-                                onSelectedContractIdChange={setSelectedProviderId}
-                                contracts={availableProviders}
-                                disabled={isPending || isConfirming}
-                            />
-                        </div>
-                        <Button
-                            onClick={handleRegisterProvider}
-                            disabled={
-                                !selectedProvider ||
-                                isPending ||
-                                isConfirming ||
-                                availableProviders.length === 0
-                            }
-                            size="lg"
-                        >
-                            {isPending || isConfirming ? (
-                                <Loader2 className="mr-2 size-4 animate-spin" />
-                            ) : (
-                                <Plus className="mr-2 size-4" />
-                            )}
-                            {isPending
-                                ? "Confirming..."
-                                : isConfirming
-                                  ? "Registering..."
-                                  : "Register"}
-                        </Button>
-                    </div>
-
-                    {isSuccess && (
-                        <p className="flex items-center gap-2 text-sm text-green-600">
-                            <CheckCircle2 className="size-4" />
-                            Coverage provider registered successfully!
-                        </p>
-                    )}
-
-                    {/* Providers List */}
-                    {isLoading && registeredProviders.length === 0 ? (
-                        <div className="flex items-center justify-center py-8">
-                            <Loader2 className="size-6 animate-spin text-muted-foreground" />
-                        </div>
-                    ) : isError ? (
-                        <div className="py-8 text-center text-sm text-destructive">
-                            Failed to fetch coverage providers
-                        </div>
-                    ) : registeredProviders.length === 0 ? (
-                        <div className="py-8 text-center text-sm text-muted-foreground">
-                            No coverage providers registered yet
-                        </div>
-                    ) : (
-                        <ScrollArea className="h-fit max-h-[400px]">
-                            <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-                                {registeredProviders.map((provider) => (
-                                    <ContractCard key={provider.id} contract={provider} />
-                                ))}
+                    <WalletRequirement requiredChainId={contract.chainId}>
+                        {/* Registration Section */}
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+                            <div className="flex-1">
+                                <CoverageProviderSelect
+                                    selectedContractId={selectedProviderId}
+                                    onSelectedContractIdChange={setSelectedProviderId}
+                                    contracts={availableProviders}
+                                    disabled={isPending || isConfirming}
+                                />
                             </div>
-                        </ScrollArea>
-                    )}
+                            <Button
+                                onClick={handleRegisterProvider}
+                                disabled={
+                                    !selectedProvider ||
+                                    isPending ||
+                                    isConfirming ||
+                                    availableProviders.length === 0
+                                }
+                                size="lg"
+                            >
+                                {isPending || isConfirming ? (
+                                    <Loader2 className="mr-2 size-4 animate-spin" />
+                                ) : (
+                                    <Plus className="mr-2 size-4" />
+                                )}
+                                {isPending
+                                    ? "Confirming..."
+                                    : isConfirming
+                                      ? "Registering..."
+                                      : "Register"}
+                            </Button>
+                        </div>
+
+                        {isSuccess && (
+                            <p className="flex items-center gap-2 text-sm text-green-600">
+                                <CheckCircle2 className="size-4" />
+                                Coverage provider registered successfully!
+                            </p>
+                        )}
+
+                        {/* Providers List */}
+                        {isLoading && registeredProviders.length === 0 ? (
+                            <div className="flex items-center justify-center py-8">
+                                <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : isError ? (
+                            <div className="py-8 text-center text-sm text-destructive">
+                                Failed to fetch coverage providers
+                            </div>
+                        ) : registeredProviders.length === 0 ? (
+                            <div className="py-8 text-center text-sm text-muted-foreground">
+                                No coverage providers registered yet
+                            </div>
+                        ) : (
+                            <ScrollArea className="h-fit max-h-[400px]">
+                                <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+                                    {registeredProviders.map((provider) => (
+                                        <ContractCard key={provider.id} contract={provider} />
+                                    ))}
+                                </div>
+                            </ScrollArea>
+                        )}
+                    </WalletRequirement>
                 </CardContent>
             </Card>
 
