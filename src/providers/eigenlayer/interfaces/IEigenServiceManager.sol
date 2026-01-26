@@ -4,18 +4,6 @@ pragma solidity ^0.8.24;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
 import {EigenAddresses} from "../Types.sol";
-import {CoveragePosition} from "../../../interfaces/ICoverageProvider.sol";
-
-struct CreatePositionAddtionalData {
-    address operator;
-    address strategy;
-}
-
-struct EigenCoveragePosition {
-    CoveragePosition data;
-    address operator;
-    address strategy;
-}
 
 /// @notice An interface for the Eigen coverage provider.
 interface IEigenServiceManager {

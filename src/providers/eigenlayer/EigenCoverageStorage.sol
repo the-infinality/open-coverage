@@ -3,8 +3,7 @@ pragma solidity ^0.8.24;
 
 import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/EnumerableMap.sol";
 import {EigenAddresses} from "./Types.sol";
-import {EigenCoveragePosition} from "./interfaces/IEigenServiceManager.sol";
-import {CoverageClaim} from "../../interfaces/ICoverageProvider.sol";
+import {CoveragePosition, CoverageClaim} from "../../interfaces/ICoverageProvider.sol";
 
 /// @notice Data structure tracking an operator's coverage allocations
 struct OperatorData {
@@ -35,7 +34,7 @@ abstract contract EigenCoverageStorage {
     uint32 internal _operatorSetCount;
 
     /// @notice Array of all coverage positions created
-    EigenCoveragePosition[] public positions;
+    CoveragePosition[] public positions;
 
     /// @notice Array of all coverage claims
     CoverageClaim[] public claims;

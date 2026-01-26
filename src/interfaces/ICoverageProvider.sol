@@ -12,19 +12,25 @@ enum Refundable {
 }
 
 struct CoveragePosition {
+
     /// @notice The address of the coverage agent that this position will cover.
     address coverageAgent;
+
     /// @notice The minimum rate for any delegation locking.
     /// @dev Rate is in basis points per annum
     uint16 minRate;
+
     /// @notice The maximum duration of any delegation locking in seconds.
     /// @dev If 0 there is no maximum duration.
     uint256 maxDuration;
+
     /// @notice The timestamp at which the coverage position expires.
     /// @dev If 0 there is no expiry block.
     uint256 expiryTimestamp;
-    /// @notice The asset that the coverage position is denominated in.
+
+    /// @notice The asset used for coverage of the position.
     address asset;
+
     /// @notice The refund policy if the coverage agent cannot meet its obligations.
     /// @dev The coverage provider must provide contingencies based on the refund policy:
     /// - None: No refund required
@@ -35,9 +41,14 @@ struct CoveragePosition {
     /// @dev The slash coordinator is responsible for initiating the slashing process for the coverage position.
     /// If no slash coordinator is set, the coverage provider will instantly slash the coverage position.
     address slashCoordinator;
+
     /// @notice The maximum amount of time in seconds that a reservation is valid for since it was created.
     /// @dev If 0 there is no maximum reservation time (reservations are not allowed).
     uint256 maxReservationTime;
+
+    /// @notice The ID representing the operator that will cover the coverage position.
+    /// @dev This is an optional field that should be used if a Coverage Provider has multiple operators.
+    bytes32 operatorId;
 }
 
 enum CoverageClaimStatus {

@@ -287,7 +287,8 @@ contract ExampleCoverageAgentTest is TestDeployer {
             asset: USDC,
             refundable: Refundable.None,
             slashCoordinator: address(0),
-            maxReservationTime: 0
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
         });
 
         // Expect PositionRegistered event from agent
@@ -313,7 +314,8 @@ contract ExampleCoverageAgentTest is TestDeployer {
             asset: WETH,
             refundable: Refundable.None,
             slashCoordinator: address(0),
-            maxReservationTime: 0
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -376,7 +378,8 @@ contract ExampleCoverageAgentTest is TestDeployer {
             asset: USDC,
             refundable: Refundable.None,
             slashCoordinator: address(0),
-            maxReservationTime: 0
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -414,7 +417,8 @@ contract ExampleCoverageAgentTest is TestDeployer {
             asset: USDC,
             refundable: Refundable.None,
             slashCoordinator: address(0),
-            maxReservationTime: 0
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -478,7 +482,8 @@ contract ExampleCoverageAgentTest is TestDeployer {
             asset: USDC,
             refundable: Refundable.None,
             slashCoordinator: address(0),
-            maxReservationTime: 0
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -529,7 +534,8 @@ contract ExampleCoverageAgentTest is TestDeployer {
             asset: USDC,
             refundable: Refundable.None,
             slashCoordinator: address(0),
-            maxReservationTime: 0
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -598,7 +604,8 @@ contract ExampleCoverageAgentTest is TestDeployer {
             asset: USDC,
             refundable: Refundable.None,
             slashCoordinator: address(0),
-            maxReservationTime: 0
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
         });
         CoveragePosition memory position2 = CoveragePosition({
             coverageAgent: address(coverageAgent),
@@ -608,7 +615,8 @@ contract ExampleCoverageAgentTest is TestDeployer {
             asset: USDC,
             refundable: Refundable.None,
             slashCoordinator: address(0),
-            maxReservationTime: 0
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
         });
         uint256 positionId1 = mockProvider.createPosition(position1, "");
         uint256 positionId2 = provider2.createPosition(position2, "");
@@ -664,7 +672,8 @@ contract ExampleCoverageAgentTest is TestDeployer {
             asset: USDC,
             refundable: Refundable.None,
             slashCoordinator: address(0),
-            maxReservationTime: 0
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -710,7 +719,8 @@ contract ExampleCoverageAgentTest is TestDeployer {
             asset: USDC,
             refundable: Refundable.None,
             slashCoordinator: address(0),
-            maxReservationTime: 0
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -748,7 +758,8 @@ contract ExampleCoverageAgentTest is TestDeployer {
             asset: USDC,
             refundable: Refundable.None,
             slashCoordinator: address(0),
-            maxReservationTime: 0
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 
@@ -818,7 +829,8 @@ contract ExampleCoverageAgentTest is TestDeployer {
             asset: USDC,
             refundable: Refundable.None,
             slashCoordinator: slashCoordinator,
-            maxReservationTime: 0
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
         });
         uint256 positionId = mockProvider.createPosition(position, "");
 

@@ -9,10 +9,10 @@ import {IStrategyManager} from "eigenlayer-contracts/interfaces/IStrategyManager
 import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
 import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
 import {IRewardsCoordinatorTypes} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
-import {Refundable, CoverageClaimStatus} from "src/interfaces/ICoverageProvider.sol";
+import {Refundable, CoverageClaimStatus, CoveragePosition} from "src/interfaces/ICoverageProvider.sol";
 import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
 import {EigenAddresses} from "../Types.sol";
-import {IEigenServiceManager, EigenCoveragePosition} from "../interfaces/IEigenServiceManager.sol";
+import {IEigenServiceManager} from "../interfaces/IEigenServiceManager.sol";
 import {CoverageClaim, ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
 import {ICoverageAgent} from "src/interfaces/ICoverageAgent.sol";
 import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
@@ -44,13 +44,14 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         address underlyingToken = address(IStrategy(strategyAddress).underlyingToken());
 
         if (whitelisted) {
-            if (assetToStrategy[underlyingToken] != address(0)) {
+            address existingStrategy = assetToStrategy[underlyingToken];
+            if (existingStrategy != address(0) && _strategyWhitelist.contains(existingStrategy)) {
                 revert StrategyAssetAlreadyRegistered(underlyingToken);
             }
             assetToStrategy[underlyingToken] = strategyAddress;
             _strategyWhitelist.set(strategyAddress, 1);
         } else {
-            delete assetToStrategy[underlyingToken];
+            // Do not remove it from the assetToStrategy mapping because existing claims may still reference it
             _strategyWhitelist.remove(strategyAddress);
         }
     }
@@ -89,8 +90,10 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         returns (uint256 amount, uint32 resolvedDuration, uint32 resolvedDistributionStartTime)
     {
         CoverageClaim memory _claim = claims[claimId];
-        EigenCoveragePosition memory _position = positions[_claim.positionId];
+        CoveragePosition memory _position = positions[_claim.positionId];
         ClaimRewardDistribution memory _claimRewardDistribution = claimRewardDistributions[claimId];
+        address operator = address(uint160(uint256(_position.operatorId)));
+        address strategy = assetToStrategy[_position.asset];
 
         uint32 distributionStartTime = _claimRewardDistribution.lastDistributedTimestamp;
 
@@ -103,23 +106,23 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
             return (0, 0, distributionStartTime);
         }
 
-        if (_position.data.refundable == Refundable.TimeWeighted || _position.data.refundable == Refundable.None) {
+        if (_position.refundable == Refundable.TimeWeighted || _position.refundable == Refundable.None) {
             uint256 claimableReward =
                 _min(block.timestamp - _claim.createdAt, _claim.duration) * _claim.reward / _claim.duration;
             amount = claimableReward - _claimRewardDistribution.amount;
             claimRewardDistributions[claimId].amount += amount;
             claimRewardDistributions[claimId].lastDistributedTimestamp = uint32(block.timestamp);
-        } else if (_position.data.refundable == Refundable.Full && _claim.status == CoverageClaimStatus.Completed) {
+        } else if (_position.refundable == Refundable.Full && _claim.status == CoverageClaimStatus.Completed) {
             amount = _claim.reward;
         } else {
             return (0, 0, distributionStartTime);
         }
 
-        IERC20 coverageAsset = IERC20(ICoverageAgent(_position.data.coverageAgent).asset());
+        IERC20 coverageAsset = IERC20(ICoverageAgent(_position.coverageAgent).asset());
 
         (resolvedDistributionStartTime, resolvedDuration) = _submitOperatorReward(
-            _position.operator,
-            IStrategy(_position.strategy),
+            operator,
+            IStrategy(strategy),
             coverageAsset,
             amount,
             distributionStartTime,

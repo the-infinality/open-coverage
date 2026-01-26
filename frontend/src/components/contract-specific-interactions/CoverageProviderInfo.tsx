@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from "react"
-import { type Address, isAddress, encodeAbiParameters, formatUnits, decodeEventLog } from "viem"
+import { type Address, isAddress, formatUnits, decodeEventLog } from "viem"
 import { RefreshCw, Loader2, Plus, CheckCircle2, Trash2, X, Layers } from "lucide-react"
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useConfig } from "wagmi"
 import { readContract } from "wagmi/actions"
@@ -669,19 +669,12 @@ function OperatorPositionManagement({
             Math.floor(Date.now() / 1000) + Number(expiryDays) * 24 * 60 * 60
         )
 
-        // Encode additional data for EigenLayer providers
-        // This matches the CreatePositionAddtionalData struct: { address operator; address strategy; }
+        // Convert operator address to bytes32 operatorId
         // The operator is the EigenOperatorProxy contract address that acts as the operator in EigenLayer
-        // The strategy is the selected whitelisted strategy address
-        const additionalData = encodeAbiParameters(
-            [
-                { type: "address", name: "operator" },
-                { type: "address", name: "strategy" },
-            ],
-            [selectedOperator.address, selectedStrategyAddress as Address]
-        )
+        const operatorId = `0x${selectedOperator.address.slice(2).padStart(64, "0")}` as `0x${string}`
 
         // CoveragePosition struct
+        // The strategy is derived from assetToStrategy mapping using the asset address
         const positionData = {
             coverageAgent: selectedCoverageAgent.address,
             minRate: Number(minRate),
@@ -692,15 +685,16 @@ function OperatorPositionManagement({
             slashCoordinator: (slashCoordinator ||
                 "0x0000000000000000000000000000000000000000") as Address,
             maxReservationTime: 0n, // No reservation time limit by default
+            operatorId,
         }
 
-        console.log("Creating position with data:", [positionData, additionalData])
+        console.log("Creating position with data:", [positionData, "0x"])
         writeContract(
             {
                 address: contract.address,
                 abi: iCoverageProviderAbi,
                 functionName: "createPosition",
-                args: [positionData, additionalData],
+                args: [positionData, "0x"],
                 chainId,
             },
             {
