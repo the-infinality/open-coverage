@@ -384,6 +384,11 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         return claimSlashAmounts[claimId];
     }
 
+    /// @inheritdoc ICoverageProvider
+    function providerTypeId() external pure returns (uint256) {
+        return 20;
+    }
+
     /// ============ Internal functions ============ //
 
     /// @notice Validates the claim parameters meet the position requirements

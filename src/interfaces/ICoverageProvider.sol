@@ -199,4 +199,9 @@ interface ICoverageProvider {
     /// @param claimId The claim id to get the total slash amount for.
     /// @return slashAmount The total amount slashed for the claim.
     function claimTotalSlashAmount(uint256 claimId) external view returns (uint256 slashAmount);
+
+    /// @notice Get the ID representing the type of coverage provider
+    /// @dev This is similar to a chain ID in blockchain nomenclature.
+    /// @return providerTypeId The ID representing the type of coverage provider.
+    function providerTypeId() external view returns (uint256 providerTypeId);
 }

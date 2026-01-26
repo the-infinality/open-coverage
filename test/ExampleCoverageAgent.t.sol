@@ -161,6 +161,10 @@ contract MockCoverageProvider is ICoverageProvider {
     function claimTotalSlashAmount(uint256 claimId) external view override returns (uint256) {
         return _claimSlashAmounts[claimId];
     }
+
+    function providerTypeId() external pure override returns (uint256) {
+        return 1;
+    }
 }
 
 /// @notice Test suite for ExampleCoverageAgent

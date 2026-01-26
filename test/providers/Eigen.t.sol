@@ -407,6 +407,12 @@ contract EigenTest is EigenTestDeployer {
         assertTrue(eigenServiceManager.isStrategyWhitelisted(address(_getTestStrategy())));
     }
 
+    function test_providerTypeId() public view {
+        // Should return the correct provider type ID (20 for Eigen coverage provider)
+        uint256 typeId = eigenCoverageProvider.providerTypeId();
+        assertEq(typeId, 20);
+    }
+
     function test_whitelistedStrategies_afterRemoval() public {
         // Remove the strategy from whitelist
         eigenServiceManager.setStrategyWhitelist(address(_getTestStrategy()), false);
