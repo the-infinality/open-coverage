@@ -18,6 +18,7 @@ import {
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useAccount, useConfig } from "wagmi"
 import { readContract } from "wagmi/actions"
 import { toast } from "sonner"
+import { decodeErrorResult, type Abi, BaseError } from "viem"
 import type { CoverageContract } from "@/types/contracts"
 import { iEigenOperatorProxyAbi, iEigenServiceManagerAbi } from "@/generated/abis"
 import {
@@ -52,7 +53,148 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { CopyableAddress } from "@/components/ui/copyable-address"
+
+// Combined ABI for error decoding - includes errors from all relevant contracts
+const combinedErrorAbi = [
+    // IEigenOperatorProxy errors
+    { type: "error", inputs: [], name: "AlreadyAllocated" },
+    { type: "error", inputs: [], name: "AlreadyRegistered" },
+    { type: "error", inputs: [{ name: "rewardsSplit", type: "uint16" }], name: "InvalidRewardsSplit" },
+    { type: "error", inputs: [], name: "NotHandler" },
+    { type: "error", inputs: [], name: "NotOperator" },
+    { type: "error", inputs: [], name: "NotRestaker" },
+    { type: "error", inputs: [], name: "NotServiceManager" },
+    { type: "error", inputs: [{ name: "strategy", type: "address" }], name: "StrategyNotWhitelisted" },
+    { type: "error", inputs: [], name: "ZeroAddress" },
+    // IAllocationManager errors
+    { type: "error", inputs: [], name: "InvalidOperator" },
+    { type: "error", inputs: [], name: "InvalidOperatorSet" },
+    { type: "error", inputs: [], name: "InvalidStrategy" },
+    { type: "error", inputs: [], name: "InsufficientMagnitude" },
+    { type: "error", inputs: [], name: "ModificationAlreadyPending" },
+    { type: "error", inputs: [], name: "AllocationDelayNotSet" },
+    { type: "error", inputs: [{ name: "operator", type: "address" }], name: "OperatorNotSlashable" },
+    { type: "error", inputs: [], name: "OperatorNotRegistered" },
+    // IPermissionController errors
+    { type: "error", inputs: [], name: "NotAdmin" },
+    { type: "error", inputs: [], name: "AdminNotSet" },
+    { type: "error", inputs: [], name: "AdminAlreadySet" },
+    { type: "error", inputs: [], name: "AdminNotPending" },
+    { type: "error", inputs: [], name: "AdminAlreadyPending" },
+    { type: "error", inputs: [], name: "CannotHaveZeroAdmins" },
+] as const
+
+// Human-readable error messages
+const errorMessages: Record<string, string> = {
+    AlreadyAllocated: "Allocation already exists for this strategy. Modify your existing allocation instead.",
+    AlreadyRegistered: "Operator is already registered to this coverage agent.",
+    InvalidRewardsSplit: "Invalid rewards split percentage. Must be between 0 and 10000 basis points.",
+    NotHandler: "Only the handler can perform this action. Ensure you're using the correct wallet.",
+    NotOperator: "This address is not a registered operator.",
+    NotRestaker: "This address is not a restaker.",
+    NotServiceManager: "Invalid service manager address.",
+    StrategyNotWhitelisted: "This strategy is not whitelisted by the service manager.",
+    ZeroAddress: "Cannot use zero address.",
+    InvalidOperator: "Invalid operator address.",
+    InvalidOperatorSet: "Invalid operator set configuration.",
+    InvalidStrategy: "Invalid strategy address.",
+    InsufficientMagnitude: "Insufficient magnitude for allocation. You may not have enough stake.",
+    ModificationAlreadyPending: "There is already a pending modification. Wait for it to complete before making changes.",
+    AllocationDelayNotSet: "Allocation delay has not been set. This is required before making allocations (~17.5 days after registering as operator).",
+    OperatorNotSlashable: "Operator is not slashable in this operator set.",
+    OperatorNotRegistered: "Operator is not registered to this operator set. Register first before allocating.",
+    NotAdmin: "Only admins can perform this action.",
+    AdminNotSet: "Admin has not been set.",
+    AdminAlreadySet: "Admin is already set.",
+    AdminNotPending: "Admin is not in the pending list.",
+    AdminAlreadyPending: "Admin is already pending.",
+    CannotHaveZeroAdmins: "Cannot remove the last admin.",
+}
+
+/**
+ * Decodes a contract error and returns a human-readable message
+ */
+function decodeContractError(error: unknown): string {
+    // Check if it's a BaseError from viem (which includes ContractFunctionRevertedError)
+    if (error instanceof BaseError) {
+        // Try to extract the raw error data from the cause chain
+        let currentError: unknown = error
+        while (currentError) {
+            // Check if we can find error data to decode
+            if (
+                typeof currentError === "object" &&
+                currentError !== null &&
+                "data" in currentError &&
+                typeof (currentError as { data?: unknown }).data === "string"
+            ) {
+                const errorData = (currentError as { data: string }).data
+                if (errorData && errorData.startsWith("0x") && errorData.length >= 10) {
+                    try {
+                        const decoded = decodeErrorResult({
+                            abi: combinedErrorAbi as Abi,
+                            data: errorData as `0x${string}`,
+                        })
+                        
+                        const friendlyMessage = errorMessages[decoded.errorName]
+                        if (friendlyMessage) {
+                            // Include args if present
+                            if (decoded.args && decoded.args.length > 0) {
+                                return `${friendlyMessage} (${decoded.args.join(", ")})`
+                            }
+                            return friendlyMessage
+                        }
+                        
+                        // Return the error name if no friendly message
+                        return `Contract error: ${decoded.errorName}`
+                    } catch {
+                        // Could not decode, continue checking
+                    }
+                }
+            }
+            
+            // Move to the cause
+            currentError =
+                typeof currentError === "object" && currentError !== null && "cause" in currentError
+                    ? (currentError as { cause?: unknown }).cause
+                    : null
+        }
+        
+        // Check for common error patterns in the message
+        const errorMessage = error.message || ""
+        
+        // Look for revert reason in the message
+        const revertMatch = errorMessage.match(/reverted with reason string '([^']+)'/)
+        if (revertMatch) {
+            return revertMatch[1]
+        }
+        
+        // Look for custom error name in the message
+        const customErrorMatch = errorMessage.match(/reverted with custom error '([^'(]+)/)
+        if (customErrorMatch) {
+            const errorName = customErrorMatch[1]
+            return errorMessages[errorName] || `Contract error: ${errorName}`
+        }
+        
+        // Check for specific error selectors in the message
+        for (const [errorName, message] of Object.entries(errorMessages)) {
+            if (errorMessage.includes(errorName)) {
+                return message
+            }
+        }
+    }
+    
+    // Fallback: extract first meaningful part of the error message
+    const message = error instanceof Error ? error.message : String(error)
+    
+    // Truncate very long messages
+    if (message.length > 200) {
+        return message.slice(0, 200) + "..."
+    }
+    
+    return message
+}
 
 // EigenAddresses type matching the contract struct
 interface EigenAddresses {
@@ -528,9 +670,48 @@ function OperatorSetCard({
                         </div>
                     </div>
                 </div>
-                <Badge variant="secondary" className="text-xs">
-                    {allocatedStrategies?.length ?? 0} / {strategies?.length ?? 0} allocated
-                </Badge>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Badge variant="secondary" className="text-xs cursor-help">
+                            {allocatedStrategies?.length ?? 0} / {strategies?.length ?? 0} allocated
+                        </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent side="left" className="max-w-sm">
+                        <div className="space-y-2">
+                            <p className="font-medium">Strategy Allocation Status</p>
+                            <div className="text-xs space-y-1">
+                                <p>
+                                    <span className="text-muted-foreground">Allocated strategies:</span>{" "}
+                                    <span className="font-mono">{allocatedStrategies?.length ?? 0}</span>
+                                </p>
+                                <p>
+                                    <span className="text-muted-foreground">Total in operator set:</span>{" "}
+                                    <span className="font-mono">{strategies?.length ?? 0}</span>
+                                </p>
+                            </div>
+                            {(allocatedStrategies?.length ?? 0) > (strategies?.length ?? 0) && (
+                                <p className="text-xs text-amber-500">
+                                    ⚠️ More allocations than strategies in set. This may indicate stale data or a modified operator set.
+                                </p>
+                            )}
+                            {(strategies?.length ?? 0) === 0 && (allocatedStrategies?.length ?? 0) === 0 && (
+                                <p className="text-xs text-muted-foreground">
+                                    No strategies configured in this operator set yet.
+                                </p>
+                            )}
+                            {(strategies?.length ?? 0) > 0 && (allocatedStrategies?.length ?? 0) === 0 && (
+                                <p className="text-xs text-muted-foreground">
+                                    Strategies available but none allocated. Use "Allocate to Strategies" to allocate.
+                                </p>
+                            )}
+                            {(allocatedStrategies?.length ?? 0) > 0 && (allocatedStrategies?.length ?? 0) === (strategies?.length ?? 0) && (
+                                <p className="text-xs text-green-500">
+                                    ✓ All available strategies are allocated.
+                                </p>
+                            )}
+                        </div>
+                    </TooltipContent>
+                </Tooltip>
             </div>
 
             {allocatedStrategies && allocatedStrategies.length > 0 && (
@@ -1481,7 +1662,8 @@ function CoverageAgentRewardsForm({
     }, [currentRewardsSplitPercentage, operatorSetKey])
 
     const { writeContract, isPending, data: hash } = useWriteContract()
-    const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+    const { isLoading: isConfirming, isSuccess, isError: isReceiptError, error: receiptError } = useWaitForTransactionReceipt({ hash })
+    const hasShownReceiptError = useRef<string>("")
 
     useEffect(() => {
         if (isSuccess) {
@@ -1489,6 +1671,17 @@ function CoverageAgentRewardsForm({
             refetchRewardsSplit()
         }
     }, [isSuccess, refetchIsRegistered, refetchRewardsSplit])
+
+    // Handle transaction receipt errors (transaction was mined but reverted)
+    useEffect(() => {
+        if (isReceiptError && receiptError && hash && hasShownReceiptError.current !== hash) {
+            hasShownReceiptError.current = hash
+            const decodedError = decodeContractError(receiptError)
+            toast.error(`Transaction failed: ${decodedError}`, {
+                duration: 10000,
+            })
+        }
+    }, [isReceiptError, receiptError, hash])
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
@@ -1520,7 +1713,10 @@ function CoverageAgentRewardsForm({
                     toast.success(`Transaction submitted: ${hash.slice(0, 10)}...`)
                 },
                 onError: (error) => {
-                    toast.error(error.message.slice(0, 100))
+                    const decodedError = decodeContractError(error)
+                    toast.error(decodedError, {
+                        duration: 8000,
+                    })
                 },
             }
         )
@@ -1702,8 +1898,9 @@ function AllocateForm({
 
     const wagmiConfig = useConfig()
     const { writeContract, isPending, data: hash } = useWriteContract()
-    const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+    const { isLoading: isConfirming, isSuccess, isError: isReceiptError, error: receiptError } = useWaitForTransactionReceipt({ hash })
     const hasLoadedAllocations = useRef<string>("")
+    const hasShownReceiptError = useRef<string>("")
 
     // Generate a unique key for the current operator set
     const currentOperatorSetKey = useMemo(() => {
@@ -1799,6 +1996,17 @@ function AllocateForm({
         }
     }, [isSuccess, refetchAllocations])
 
+    // Handle transaction receipt errors (transaction was mined but reverted)
+    useEffect(() => {
+        if (isReceiptError && receiptError && hash && hasShownReceiptError.current !== hash) {
+            hasShownReceiptError.current = hash
+            const decodedError = decodeContractError(receiptError)
+            toast.error(`Transaction failed: ${decodedError}`, {
+                duration: 10000,
+            })
+        }
+    }, [isReceiptError, receiptError, hash])
+
     const addStrategy = () => {
         setStrategies([...strategies, { address: "", magnitude: 0 }])
     }
@@ -1834,9 +2042,9 @@ function AllocateForm({
             return
         }
 
-        const validStrategies = strategies.filter((s) => s.address && s.magnitude > 0)
+        const validStrategies = strategies.filter((s) => s.address && s.magnitude >= 0)
         if (validStrategies.length === 0) {
-            toast.error("Please add at least one strategy allocation with magnitude > 0")
+            toast.error("Please add at least one strategy allocation")
             return
         }
 
@@ -1861,7 +2069,10 @@ function AllocateForm({
                     toast.success(`Transaction submitted: ${hash.slice(0, 10)}...`)
                 },
                 onError: (error) => {
-                    toast.error(error.message.slice(0, 100))
+                    const decodedError = decodeContractError(error)
+                    toast.error(decodedError, {
+                        duration: 8000, // Show error longer for better readability
+                    })
                 },
             }
         )
@@ -1994,7 +2205,19 @@ function UpdateMetadataForm({
     const [metadataUri, setMetadataUri] = useState("")
 
     const { writeContract, isPending, data: hash } = useWriteContract()
-    const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+    const { isLoading: isConfirming, isSuccess, isError: isReceiptError, error: receiptError } = useWaitForTransactionReceipt({ hash })
+    const hasShownReceiptError = useRef<string>("")
+
+    // Handle transaction receipt errors (transaction was mined but reverted)
+    useEffect(() => {
+        if (isReceiptError && receiptError && hash && hasShownReceiptError.current !== hash) {
+            hasShownReceiptError.current = hash
+            const decodedError = decodeContractError(receiptError)
+            toast.error(`Transaction failed: ${decodedError}`, {
+                duration: 10000,
+            })
+        }
+    }, [isReceiptError, receiptError, hash])
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
@@ -2017,7 +2240,10 @@ function UpdateMetadataForm({
                     toast.success(`Transaction submitted: ${hash.slice(0, 10)}...`)
                 },
                 onError: (error) => {
-                    toast.error(error.message.slice(0, 100))
+                    const decodedError = decodeContractError(error)
+                    toast.error(decodedError, {
+                        duration: 8000,
+                    })
                 },
             }
         )

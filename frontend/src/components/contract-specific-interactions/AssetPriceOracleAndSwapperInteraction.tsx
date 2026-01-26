@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react"
-import { type Address, isAddress, parseUnits, formatUnits } from "viem"
+import { type Address, type Abi, isAddress, parseUnits, formatUnits, decodeErrorResult, BaseError } from "viem"
 import {
     RefreshCw,
     Loader2,
@@ -34,6 +34,96 @@ import {
 import { CopyableAddress } from "@/components/ui/copyable-address"
 
 type SupportedChainId = (typeof supportedChains)[number]["id"]
+
+// Combined ABI for error decoding
+const combinedErrorAbi = [
+    // IAssetPriceOracleAndSwapper errors
+    { type: "error", inputs: [{ name: "assetA", type: "address" }, { name: "assetB", type: "address" }], name: "AssetPairAlreadyRegistered" },
+    { type: "error", inputs: [{ name: "assetA", type: "address" }, { name: "assetB", type: "address" }], name: "AssetPairNotRegistered" },
+    { type: "error", inputs: [], name: "InvalidSlippage" },
+    { type: "error", inputs: [], name: "InvalidPriceStrategy" },
+    { type: "error", inputs: [], name: "InvalidSwapEngine" },
+    { type: "error", inputs: [], name: "OracleRequired" },
+    { type: "error", inputs: [], name: "SwapFailed" },
+    { type: "error", inputs: [], name: "SlippageExceeded" },
+    // Diamond errors
+    { type: "error", inputs: [], name: "NotContractOwner" },
+    // Common errors
+    { type: "error", inputs: [], name: "ZeroAddress" },
+] as const
+
+// Human-readable error messages
+const errorMessages: Record<string, string> = {
+    AssetPairAlreadyRegistered: "This asset pair is already registered.",
+    AssetPairNotRegistered: "This asset pair is not registered.",
+    InvalidSlippage: "The slippage value is invalid. Must be between 0.01% and 20%.",
+    InvalidPriceStrategy: "Invalid price strategy selected.",
+    InvalidSwapEngine: "Invalid swap engine address.",
+    OracleRequired: "A price oracle is required for this price strategy.",
+    SwapFailed: "The swap operation failed.",
+    SlippageExceeded: "The swap would exceed the maximum slippage tolerance.",
+    NotContractOwner: "Only the contract owner can perform this action.",
+    ZeroAddress: "Cannot use zero address.",
+}
+
+/**
+ * Decodes a contract error and returns a human-readable message
+ */
+function decodeContractError(error: unknown): string {
+    if (error instanceof BaseError) {
+        let currentError: unknown = error
+        while (currentError) {
+            if (
+                typeof currentError === "object" &&
+                currentError !== null &&
+                "data" in currentError &&
+                typeof (currentError as { data?: unknown }).data === "string"
+            ) {
+                const errorData = (currentError as { data: string }).data
+                if (errorData && errorData.startsWith("0x") && errorData.length >= 10) {
+                    try {
+                        const decoded = decodeErrorResult({
+                            abi: combinedErrorAbi as Abi,
+                            data: errorData as `0x${string}`,
+                        })
+                        
+                        const friendlyMessage = errorMessages[decoded.errorName]
+                        if (friendlyMessage) {
+                            if (decoded.args && decoded.args.length > 0) {
+                                return `${friendlyMessage} (${decoded.args.join(", ")})`
+                            }
+                            return friendlyMessage
+                        }
+                        return `Contract error: ${decoded.errorName}`
+                    } catch {
+                        // Could not decode, continue
+                    }
+                }
+            }
+            currentError =
+                typeof currentError === "object" && currentError !== null && "cause" in currentError
+                    ? (currentError as { cause?: unknown }).cause
+                    : null
+        }
+        
+        const errorMessage = error.message || ""
+        const revertMatch = errorMessage.match(/reverted with reason string '([^']+)'/)
+        if (revertMatch) return revertMatch[1]
+        
+        const customErrorMatch = errorMessage.match(/reverted with custom error '([^'(]+)/)
+        if (customErrorMatch) {
+            const errorName = customErrorMatch[1]
+            return errorMessages[errorName] || `Contract error: ${errorName}`
+        }
+        
+        for (const [errorName, message] of Object.entries(errorMessages)) {
+            if (errorMessage.includes(errorName)) return message
+        }
+    }
+    
+    const message = error instanceof Error ? error.message : String(error)
+    return message.length > 200 ? message.slice(0, 200) + "..." : message
+}
 
 // Price strategy enum options
 const PRICE_STRATEGY_OPTIONS = [
@@ -712,7 +802,7 @@ function WriteSection({
         isPending: isSlippagePending,
         data: slippageHash,
     } = useWriteContract()
-    const { isLoading: isSlippageConfirming, isSuccess: isSlippageSuccess } =
+    const { isLoading: isSlippageConfirming, isSuccess: isSlippageSuccess, isError: isSlippageReceiptError, error: slippageReceiptError } =
         useWaitForTransactionReceipt({ hash: slippageHash })
 
     // Write contract hooks for register
@@ -721,11 +811,14 @@ function WriteSection({
         isPending: isRegisterPending,
         data: registerHash,
     } = useWriteContract()
-    const { isLoading: isRegisterConfirming, isSuccess: isRegisterSuccess } =
+    const { isLoading: isRegisterConfirming, isSuccess: isRegisterSuccess, isError: isRegisterReceiptError, error: registerReceiptError } =
         useWaitForTransactionReceipt({ hash: registerHash })
 
     // Track slippage success for refetch
     const prevSlippageSuccessRef = useRef(false)
+    const hasShownSlippageReceiptError = useRef<string>("")
+    const hasShownRegisterReceiptError = useRef<string>("")
+
     useEffect(() => {
         if (isSlippageSuccess && !prevSlippageSuccessRef.current) {
             refetchSlippage()
@@ -733,6 +826,28 @@ function WriteSection({
         }
         prevSlippageSuccessRef.current = isSlippageSuccess
     }, [isSlippageSuccess, refetchSlippage])
+
+    // Handle slippage transaction receipt errors
+    useEffect(() => {
+        if (isSlippageReceiptError && slippageReceiptError && slippageHash && hasShownSlippageReceiptError.current !== slippageHash) {
+            hasShownSlippageReceiptError.current = slippageHash
+            const decodedError = decodeContractError(slippageReceiptError)
+            toast.error(`Transaction failed: ${decodedError}`, {
+                duration: 10000,
+            })
+        }
+    }, [isSlippageReceiptError, slippageReceiptError, slippageHash])
+
+    // Handle register transaction receipt errors
+    useEffect(() => {
+        if (isRegisterReceiptError && registerReceiptError && registerHash && hasShownRegisterReceiptError.current !== registerHash) {
+            hasShownRegisterReceiptError.current = registerHash
+            const decodedError = decodeContractError(registerReceiptError)
+            toast.error(`Transaction failed: ${decodedError}`, {
+                duration: 10000,
+            })
+        }
+    }, [isRegisterReceiptError, registerReceiptError, registerHash])
 
     // Handle slider change
     const handleSliderChange = useCallback((values: number[]) => {
@@ -765,7 +880,10 @@ function WriteSection({
                     toast.success(`Transaction submitted: ${hash.slice(0, 10)}...`)
                 },
                 onError: (error) => {
-                    toast.error(error.message.slice(0, 100))
+                    const decodedError = decodeContractError(error)
+                    toast.error(decodedError, {
+                        duration: 8000,
+                    })
                 },
             }
         )
@@ -801,7 +919,10 @@ function WriteSection({
                     toast.success(`Transaction submitted: ${hash.slice(0, 10)}...`)
                 },
                 onError: (error) => {
-                    toast.error(error.message.slice(0, 100))
+                    const decodedError = decodeContractError(error)
+                    toast.error(decodedError, {
+                        duration: 8000,
+                    })
                 },
             }
         )

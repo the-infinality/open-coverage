@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from "react"
-import { type Address, formatUnits, decodeEventLog } from "viem"
+import { type Address, type Abi, formatUnits, decodeEventLog, decodeErrorResult, BaseError } from "viem"
 import {
     RefreshCw,
     Loader2,
@@ -44,6 +44,123 @@ import {
 import { WalletRequirement } from "@/components/WalletRequirement"
 
 type SupportedChainId = (typeof supportedChains)[number]["id"]
+
+// Combined ABI for error decoding
+const combinedErrorAbi = [
+    // ICoverageProvider errors
+    { type: "error", inputs: [{ name: "claimId", type: "uint256" }, { name: "amount", type: "uint256" }, { name: "reserved", type: "uint256" }], name: "AmountExceedsReserved" },
+    { type: "error", inputs: [{ name: "claimId", type: "uint256" }], name: "ClaimNotExpired" },
+    { type: "error", inputs: [{ name: "claimId", type: "uint256" }], name: "ClaimNotReserved" },
+    { type: "error", inputs: [{ name: "expiryTimestamp", type: "uint256" }, { name: "completionTimestamp", type: "uint256" }], name: "DurationExceedsExpiry" },
+    { type: "error", inputs: [{ name: "maxDuration", type: "uint256" }, { name: "duration", type: "uint256" }], name: "DurationExceedsMax" },
+    { type: "error", inputs: [{ name: "deficit", type: "uint256" }], name: "InsufficientCoverageAvailable" },
+    { type: "error", inputs: [{ name: "minimumReward", type: "uint256" }, { name: "reward", type: "uint256" }], name: "InsufficientReward" },
+    { type: "error", inputs: [], name: "InvalidAmount" },
+    { type: "error", inputs: [{ name: "claimId", type: "uint256" }], name: "InvalidClaim" },
+    { type: "error", inputs: [{ name: "minRate", type: "uint16" }], name: "MinRateInvalid" },
+    { type: "error", inputs: [{ name: "caller", type: "address" }, { name: "required", type: "address" }], name: "NotCoverageAgent" },
+    { type: "error", inputs: [{ name: "positionId", type: "uint256" }], name: "PositionExpired" },
+    { type: "error", inputs: [{ name: "claimId", type: "uint256" }], name: "ReservationExpired" },
+    { type: "error", inputs: [{ name: "positionId", type: "uint256" }], name: "ReservationNotAllowed" },
+    { type: "error", inputs: [], name: "RewardTransferFailed" },
+    // ICoverageAgent errors
+    { type: "error", inputs: [], name: "CoverageProviderAlreadyRegistered" },
+    { type: "error", inputs: [], name: "CoverageProviderNotRegistered" },
+    { type: "error", inputs: [], name: "InvalidClaimStatus" },
+    { type: "error", inputs: [], name: "SlashAmountExceedsClaimAmount" },
+    { type: "error", inputs: [], name: "ClaimAlreadySlashed" },
+    { type: "error", inputs: [], name: "ClaimNotActive" },
+    // Diamond errors
+    { type: "error", inputs: [], name: "NotContractOwner" },
+    // Common errors
+    { type: "error", inputs: [], name: "ZeroAddress" },
+] as const
+
+// Human-readable error messages
+const errorMessages: Record<string, string> = {
+    AmountExceedsReserved: "Amount exceeds the reserved amount for this claim.",
+    ClaimNotExpired: "Claim has not expired yet.",
+    ClaimNotReserved: "Claim is not in reserved state.",
+    DurationExceedsExpiry: "The coverage duration would exceed the position expiry.",
+    DurationExceedsMax: "The requested duration exceeds the maximum allowed.",
+    InsufficientCoverageAvailable: "Not enough coverage available. The operator may not have sufficient allocation.",
+    InsufficientReward: "The reward amount is less than the minimum required for this coverage.",
+    InvalidAmount: "Invalid amount specified.",
+    InvalidClaim: "The claim does not exist or is invalid.",
+    MinRateInvalid: "The minimum rate is invalid.",
+    NotCoverageAgent: "Only the coverage agent can perform this action.",
+    PositionExpired: "The position has expired.",
+    ReservationExpired: "The reservation has expired.",
+    ReservationNotAllowed: "Reservations are not allowed for this position.",
+    RewardTransferFailed: "Failed to transfer the reward.",
+    CoverageProviderAlreadyRegistered: "This coverage provider is already registered.",
+    CoverageProviderNotRegistered: "This coverage provider is not registered.",
+    InvalidClaimStatus: "Invalid claim status for this operation.",
+    SlashAmountExceedsClaimAmount: "Slash amount exceeds the claim amount.",
+    ClaimAlreadySlashed: "This claim has already been slashed.",
+    ClaimNotActive: "The claim is not active.",
+    NotContractOwner: "Only the contract owner can perform this action.",
+    ZeroAddress: "Cannot use zero address.",
+}
+
+/**
+ * Decodes a contract error and returns a human-readable message
+ */
+function decodeContractError(error: unknown): string {
+    if (error instanceof BaseError) {
+        let currentError: unknown = error
+        while (currentError) {
+            if (
+                typeof currentError === "object" &&
+                currentError !== null &&
+                "data" in currentError &&
+                typeof (currentError as { data?: unknown }).data === "string"
+            ) {
+                const errorData = (currentError as { data: string }).data
+                if (errorData && errorData.startsWith("0x") && errorData.length >= 10) {
+                    try {
+                        const decoded = decodeErrorResult({
+                            abi: combinedErrorAbi as Abi,
+                            data: errorData as `0x${string}`,
+                        })
+                        
+                        const friendlyMessage = errorMessages[decoded.errorName]
+                        if (friendlyMessage) {
+                            if (decoded.args && decoded.args.length > 0) {
+                                return `${friendlyMessage} (${decoded.args.join(", ")})`
+                            }
+                            return friendlyMessage
+                        }
+                        return `Contract error: ${decoded.errorName}`
+                    } catch {
+                        // Could not decode, continue
+                    }
+                }
+            }
+            currentError =
+                typeof currentError === "object" && currentError !== null && "cause" in currentError
+                    ? (currentError as { cause?: unknown }).cause
+                    : null
+        }
+        
+        const errorMessage = error.message || ""
+        const revertMatch = errorMessage.match(/reverted with reason string '([^']+)'/)
+        if (revertMatch) return revertMatch[1]
+        
+        const customErrorMatch = errorMessage.match(/reverted with custom error '([^'(]+)/)
+        if (customErrorMatch) {
+            const errorName = customErrorMatch[1]
+            return errorMessages[errorName] || `Contract error: ${errorName}`
+        }
+        
+        for (const [errorName, message] of Object.entries(errorMessages)) {
+            if (errorMessage.includes(errorName)) return message
+        }
+    }
+    
+    const message = error instanceof Error ? error.message : String(error)
+    return message.length > 200 ? message.slice(0, 200) + "..." : message
+}
 
 interface CoverageAgentInfoProps {
     contract: CoverageContract
@@ -211,9 +328,10 @@ function SlashClaimsDialog({
 }) {
     const [slashAmounts, setSlashAmounts] = useState<Record<number, string>>({})
     const { writeContract, isPending, data: hash } = useWriteContract()
-    const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+    const { isLoading: isConfirming, isSuccess, isError: isReceiptError, error: receiptError } = useWaitForTransactionReceipt({ hash })
 
     const prevSuccessRef = useRef(false)
+    const hasShownReceiptError = useRef<string>("")
 
     // Initialize slash amounts when claims change
     useEffect(() => {
@@ -233,6 +351,17 @@ function SlashClaimsDialog({
         }
         prevSuccessRef.current = isSuccess
     }, [isSuccess, onSuccess, onOpenChange])
+
+    // Handle transaction receipt errors (transaction was mined but reverted)
+    useEffect(() => {
+        if (isReceiptError && receiptError && hash && hasShownReceiptError.current !== hash) {
+            hasShownReceiptError.current = hash
+            const decodedError = decodeContractError(receiptError)
+            toast.error(`Transaction failed: ${decodedError}`, {
+                duration: 10000,
+            })
+        }
+    }, [isReceiptError, receiptError, hash])
 
     const handleSlash = () => {
         const claimIds: bigint[] = []
@@ -266,7 +395,10 @@ function SlashClaimsDialog({
                     toast.success(`Transaction submitted: ${hash.slice(0, 10)}...`)
                 },
                 onError: (error) => {
-                    toast.error(error.message.slice(0, 100))
+                    const decodedError = decodeContractError(error)
+                    toast.error(decodedError, {
+                        duration: 8000,
+                    })
                 },
             }
         )
@@ -501,9 +633,23 @@ function CoverageClaimsManagement({
         isLoading: isConfirming,
         isSuccess,
         data: receipt,
+        isError: isReceiptError,
+        error: receiptError,
     } = useWaitForTransactionReceipt({ hash })
 
     const prevCreateSuccessRef = useRef(false)
+    const hasShownReceiptError = useRef<string>("")
+
+    // Handle transaction receipt errors (transaction was mined but reverted)
+    useEffect(() => {
+        if (isReceiptError && receiptError && hash && hasShownReceiptError.current !== hash) {
+            hasShownReceiptError.current = hash
+            const decodedError = decodeContractError(receiptError)
+            toast.error(`Transaction failed: ${decodedError}`, {
+                duration: 10000,
+            })
+        }
+    }, [isReceiptError, receiptError, hash])
 
     // Load claim function wrapped in useCallback for use in effects
     const loadClaim = useCallback(
@@ -752,7 +898,10 @@ function CoverageClaimsManagement({
                     toast.success(`${successMessage}: ${hash.slice(0, 10)}...`)
                 },
                 onError: (error) => {
-                    toast.error(error.message.slice(0, 100))
+                    const decodedError = decodeContractError(error)
+                    toast.error(decodedError, {
+                        duration: 8000,
+                    })
                 },
             }
         )
@@ -1139,10 +1288,11 @@ export function CoverageAgentInfo({ contract }: CoverageAgentInfoProps) {
 
     // Write contract hook for registering providers
     const { writeContract, isPending, data: hash } = useWriteContract()
-    const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+    const { isLoading: isConfirming, isSuccess, isError: isReceiptError, error: receiptError } = useWaitForTransactionReceipt({ hash })
 
     // Track previous success state to detect new success
     const prevSuccessRef = useRef(false)
+    const hasShownReceiptError = useRef<string>("")
 
     // Refetch providers after successful registration
     useEffect(() => {
@@ -1157,6 +1307,17 @@ export function CoverageAgentInfo({ contract }: CoverageAgentInfoProps) {
         }
         prevSuccessRef.current = isSuccess
     }, [isSuccess, refetch])
+
+    // Handle transaction receipt errors (transaction was mined but reverted)
+    useEffect(() => {
+        if (isReceiptError && receiptError && hash && hasShownReceiptError.current !== hash) {
+            hasShownReceiptError.current = hash
+            const decodedError = decodeContractError(receiptError)
+            toast.error(`Transaction failed: ${decodedError}`, {
+                duration: 10000,
+            })
+        }
+    }, [isReceiptError, receiptError, hash])
 
     // Create a map of saved contracts by address for quick lookup
     const savedContractsMap = useMemo(() => {
@@ -1218,7 +1379,10 @@ export function CoverageAgentInfo({ contract }: CoverageAgentInfoProps) {
                     toast.success(`Transaction submitted: ${hash.slice(0, 10)}...`)
                 },
                 onError: (error) => {
-                    toast.error(error.message.slice(0, 100))
+                    const decodedError = decodeContractError(error)
+                    toast.error(decodedError, {
+                        duration: 8000,
+                    })
                 },
             }
         )

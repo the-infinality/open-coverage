@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { type Address, encodeDeployData, getContractAddress } from "viem"
+import { type Address, encodeDeployData, getContractAddress, BaseError } from "viem"
 import {
     useAccount,
     useSendTransaction,
@@ -38,6 +38,25 @@ import { generateContractName } from "@/lib/utils"
 import { ContractCard } from "@/components/ContractCard"
 
 type SupportedChainId = (typeof supportedChains)[number]["id"]
+
+/**
+ * Decodes a contract error and returns a human-readable message
+ */
+function decodeContractError(error: unknown): string {
+    if (error instanceof BaseError) {
+        const errorMessage = error.message || ""
+        const revertMatch = errorMessage.match(/reverted with reason string '([^']+)'/)
+        if (revertMatch) return revertMatch[1]
+        
+        // Return shortMessage if available
+        if (error.shortMessage) {
+            return error.shortMessage
+        }
+    }
+    
+    const message = error instanceof Error ? error.message : String(error)
+    return message.length > 200 ? message.slice(0, 200) + "..." : message
+}
 
 interface OperatorProxiesManagementProps {
     contract: CoverageContract
@@ -82,12 +101,15 @@ function DeployOperatorProxyForm({
     const [metadataUri, setMetadataUri] = useState("https://coverage.example.com/operator.json")
 
     const successHandledRef = useRef(false)
+    const hasShownReceiptError = useRef<string>("")
 
     const { mutate, isPending, data: hash } = useSendTransaction()
     const {
         isLoading: isConfirming,
         isSuccess,
         data: receipt,
+        isError: isReceiptError,
+        error: receiptError,
     } = useWaitForTransactionReceipt({ hash })
 
     // Compute the deployed address from the receipt
@@ -136,6 +158,17 @@ function DeployOperatorProxyForm({
         }
     }, [isSuccess, receipt, deployedAddress, onSuccess, operatorName])
 
+    // Handle transaction receipt errors (transaction was mined but reverted)
+    useEffect(() => {
+        if (isReceiptError && receiptError && hash && hasShownReceiptError.current !== hash) {
+            hasShownReceiptError.current = hash
+            const decodedError = decodeContractError(receiptError)
+            toast.error(`Deployment failed: ${decodedError}`, {
+                duration: 10000,
+            })
+        }
+    }, [isReceiptError, receiptError, hash])
+
     const handleDeploy = () => {
         if (!handlerAddress) {
             toast.error("Please enter a handler address")
@@ -169,7 +202,10 @@ function DeployOperatorProxyForm({
                     toast.success(`Deployment transaction submitted: ${hash.slice(0, 10)}...`)
                 },
                 onError: (error) => {
-                    toast.error(error.message.slice(0, 100))
+                    const decodedError = decodeContractError(error)
+                    toast.error(decodedError, {
+                        duration: 8000,
+                    })
                 },
             }
         )
