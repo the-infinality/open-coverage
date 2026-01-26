@@ -388,13 +388,11 @@ function PositionItem({
     positionId,
     providerAddress,
     chainId,
-    onCloseSuccess,
     onRemove,
 }: {
     positionId: number
     providerAddress: Address
     chainId: SupportedChainId | undefined
-    onCloseSuccess: () => void
     onRemove: () => void
 }) {
     const { data: position, isLoading } = useReadContract({
@@ -418,10 +416,10 @@ function PositionItem({
     useEffect(() => {
         if (isSuccess && !prevSuccessRef.current) {
             toast.success("Position closed successfully")
-            onCloseSuccess()
+            // Position remains in the list after closing
         }
         prevSuccessRef.current = isSuccess
-    }, [isSuccess, onCloseSuccess])
+    }, [isSuccess])
 
     const handleClose = () => {
         writeContract(
@@ -1039,7 +1037,6 @@ function OperatorPositionManagement({
                                         positionId={positionId}
                                         providerAddress={contract.address}
                                         chainId={chainId}
-                                        onCloseSuccess={() => handleRemovePositionId(positionId)}
                                         onRemove={() => handleRemovePositionId(positionId)}
                                     />
                                 ))}

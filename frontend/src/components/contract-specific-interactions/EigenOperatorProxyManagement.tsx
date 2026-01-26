@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react"
+import { useMemo, useState, useEffect, useRef } from "react"
 import {
     RefreshCw,
     Loader2,
@@ -15,7 +15,8 @@ import {
     CheckCircle,
     AlertCircle,
 } from "lucide-react"
-import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useAccount } from "wagmi"
+import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useAccount, useConfig } from "wagmi"
+import { readContract } from "wagmi/actions"
 import { toast } from "sonner"
 import type { CoverageContract } from "@/types/contracts"
 import { iEigenOperatorProxyAbi, iEigenServiceManagerAbi } from "@/generated/abis"
@@ -41,7 +42,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { Slider } from "@/components/ui/slider"
 import {
@@ -442,6 +442,29 @@ function OperatorStrategiesCard({
                                 </p>
                             )}
                         </div>
+
+                        <Separator />
+
+                        {/* Allocate Form */}
+                        <WalletRequirement requiredChainId={contract.chainId}>
+                            <div className="space-y-4">
+                                <div className="rounded-lg bg-muted/50 p-3">
+                                    <h4 className="text-sm font-medium">
+                                        Allocate to Strategies
+                                    </h4>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        Allocate stake to strategies for a coverage agent. This
+                                        can only be called after the allocation delay period
+                                        (~17.5 days).
+                                    </p>
+                                </div>
+                                <AllocateForm
+                                    contract={contract}
+                                    chainId={chainId}
+                                    eigenAddresses={eigenAddresses}
+                                />
+                            </div>
+                        </WalletRequirement>
                     </>
                 )}
             </CardContent>
@@ -1327,12 +1350,14 @@ function StakingCard({
     )
 }
 
-function RegisterCoverageAgentForm({
+function CoverageAgentRewardsForm({
     contract,
     chainId,
+    eigenAddresses,
 }: {
     contract: CoverageContract
     chainId: SupportedChainId | undefined
+    eigenAddresses: EigenAddresses | undefined
 }) {
     const [serviceManagerId, setServiceManagerId] = useState("")
     const [coverageAgentId, setCoverageAgentId] = useState("")
@@ -1346,8 +1371,124 @@ function RegisterCoverageAgentForm({
     const selectedServiceManager = getSelectedProvider(serviceManagerId, availableProviders)
     const selectedCoverageAgent = getSelectedCoverageAgent(coverageAgentId, coverageAgents)
 
+    // Get operator set ID from service manager
+    const { data: operatorSetId } = useReadContract({
+        address: selectedServiceManager?.address,
+        abi: iEigenServiceManagerAbi,
+        functionName: "getOperatorSetId",
+        args: [selectedCoverageAgent?.address as `0x${string}`],
+        chainId,
+        query: {
+            enabled: !!selectedServiceManager && !!selectedCoverageAgent && !!chainId,
+        },
+    })
+
+    // Check if operator is registered to the operator set
+    const { data: isRegistered, refetch: refetchIsRegistered } = useReadContract({
+        address: eigenAddresses?.allocationManager,
+        abi: iAllocationManagerAbi,
+        functionName: "isMemberOfOperatorSet",
+        args: [
+            contract.address,
+            {
+                avs: selectedServiceManager?.address as `0x${string}`,
+                id: operatorSetId as number,
+            },
+        ],
+        chainId,
+        query: {
+            enabled:
+                !!eigenAddresses &&
+                !!selectedServiceManager &&
+                operatorSetId !== undefined &&
+                !!chainId,
+        },
+    })
+
+    // Get current rewards split from RewardsCoordinator
+    const { data: currentRewardsSplitBps, refetch: refetchRewardsSplit } = useReadContract({
+        address: eigenAddresses?.rewardsCoordinator,
+        abi: [
+            {
+                type: "function",
+                name: "getOperatorSetSplit",
+                inputs: [
+                    { name: "operator", type: "address", internalType: "address" },
+                    {
+                        name: "operatorSet",
+                        type: "tuple",
+                        internalType: "struct OperatorSet",
+                        components: [
+                            { name: "avs", type: "address", internalType: "address" },
+                            { name: "id", type: "uint32", internalType: "uint32" },
+                        ],
+                    },
+                ],
+                outputs: [{ name: "", type: "uint16", internalType: "uint16" }],
+                stateMutability: "view",
+            },
+        ] as const,
+        functionName: "getOperatorSetSplit",
+        args: [
+            contract.address,
+            {
+                avs: selectedServiceManager?.address as `0x${string}`,
+                id: operatorSetId as number,
+            },
+        ],
+        chainId,
+        query: {
+            enabled:
+                !!eigenAddresses &&
+                !!selectedServiceManager &&
+                operatorSetId !== undefined &&
+                !!chainId &&
+                isRegistered === true, // Only fetch if registered
+        },
+    })
+
+    // Update rewards split when fetched - use derived value
+    const currentRewardsSplitPercentage = useMemo(() => {
+        if (currentRewardsSplitBps !== undefined) {
+            // Convert basis points (0-10000) to percentage (0-100)
+            return Number(currentRewardsSplitBps) / 100
+        }
+        return null
+    }, [currentRewardsSplitBps])
+
+    const hasLoadedRewardsSplit = useRef<string>("")
+    const operatorSetKey = useMemo(() => {
+        if (selectedServiceManager && operatorSetId !== undefined) {
+            return `${selectedServiceManager.address}-${operatorSetId}`
+        }
+        return ""
+    }, [selectedServiceManager, operatorSetId])
+
+    // Update rewards split when fetched and operator set changes
+    useEffect(() => {
+        if (
+            currentRewardsSplitPercentage !== null &&
+            hasLoadedRewardsSplit.current !== operatorSetKey &&
+            operatorSetKey
+        ) {
+            // Use setTimeout to avoid synchronous setState in effect
+            const timeoutId = setTimeout(() => {
+                setRewardsSplit(currentRewardsSplitPercentage)
+                hasLoadedRewardsSplit.current = operatorSetKey
+            }, 0)
+            return () => clearTimeout(timeoutId)
+        }
+    }, [currentRewardsSplitPercentage, operatorSetKey])
+
     const { writeContract, isPending, data: hash } = useWriteContract()
     const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+
+    useEffect(() => {
+        if (isSuccess) {
+            refetchIsRegistered()
+            refetchRewardsSplit()
+        }
+    }, [isSuccess, refetchIsRegistered, refetchRewardsSplit])
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
@@ -1360,11 +1501,13 @@ function RegisterCoverageAgentForm({
         // Convert percentage (0-100) to basis points (0-10000)
         const rewardsSplitBps = Math.floor(rewardsSplit * 100)
 
+        const functionName = isRegistered ? "setRewardsSplit" : "registerCoverageAgent"
+
         writeContract(
             {
                 address: contract.address,
                 abi: iEigenOperatorProxyAbi,
-                functionName: "registerCoverageAgent",
+                functionName,
                 args: [
                     selectedServiceManager.address as `0x${string}`,
                     selectedCoverageAgent.address as `0x${string}`,
@@ -1383,13 +1526,20 @@ function RegisterCoverageAgentForm({
         )
     }
 
+    const showStatus = selectedServiceManager && selectedCoverageAgent && operatorSetId !== undefined
+
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
                 <Label>Service Manager</Label>
                 <CoverageProviderSelect
                     selectedContractId={serviceManagerId}
-                    onSelectedContractIdChange={setServiceManagerId}
+                    onSelectedContractIdChange={(value) => {
+                        setServiceManagerId(value)
+                        setCoverageAgentId("") // Reset coverage agent when service manager changes
+                        setRewardsSplit(0) // Reset rewards split
+                        hasLoadedRewardsSplit.current = "" // Reset loaded flag
+                    }}
                     contracts={availableProviders}
                 />
                 <p className="text-xs text-muted-foreground">
@@ -1401,13 +1551,44 @@ function RegisterCoverageAgentForm({
                 <Label>Coverage Agent</Label>
                 <CoverageAgentSelect
                     selectedContractId={coverageAgentId}
-                    onSelectedContractIdChange={setCoverageAgentId}
+                    onSelectedContractIdChange={(value) => {
+                        setCoverageAgentId(value)
+                        setRewardsSplit(0) // Reset rewards split
+                        hasLoadedRewardsSplit.current = "" // Reset loaded flag
+                    }}
                     contracts={coverageAgents}
                 />
                 <p className="text-xs text-muted-foreground">
-                    The coverage agent contract to register with
+                    The coverage agent contract to register or update rewards for
                 </p>
             </div>
+
+            {/* Operator Status */}
+            {showStatus && (
+                <div className="rounded-lg border p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Operator Status</span>
+                        {isRegistered === undefined ? (
+                            <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                        ) : isRegistered ? (
+                            <Badge className="bg-green-500">
+                                <CheckCircle className="mr-1 size-3" />
+                                Registered
+                            </Badge>
+                        ) : (
+                            <Badge variant="outline">
+                                <AlertCircle className="mr-1 size-3" />
+                                Not Registered
+                            </Badge>
+                        )}
+                    </div>
+                    {operatorSetId !== undefined && (
+                        <div className="text-xs text-muted-foreground">
+                            Operator Set ID: {operatorSetId.toString()}
+                        </div>
+                    )}
+                </div>
+            )}
 
             <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -1438,6 +1619,11 @@ function RegisterCoverageAgentForm({
                         <Loader2 className="mr-2 size-4 animate-spin" />
                         Confirming...
                     </>
+                ) : isRegistered ? (
+                    <>
+                        <Settings className="mr-2 size-4" />
+                        Update Rewards Split
+                    </>
                 ) : (
                     <>
                         <UserPlus className="mr-2 size-4" />
@@ -1448,7 +1634,9 @@ function RegisterCoverageAgentForm({
 
             {isSuccess && (
                 <p className="text-sm text-green-600 text-center">
-                    Coverage agent registered successfully!
+                    {isRegistered
+                        ? "Rewards split updated successfully!"
+                        : "Coverage agent registered successfully!"}
                 </p>
             )}
         </form>
@@ -1458,9 +1646,11 @@ function RegisterCoverageAgentForm({
 function AllocateForm({
     contract,
     chainId,
+    eigenAddresses,
 }: {
     contract: CoverageContract
     chainId: SupportedChainId | undefined
+    eigenAddresses: EigenAddresses | undefined
 }) {
     const [serviceManagerId, setServiceManagerId] = useState("")
     const [coverageAgentId, setCoverageAgentId] = useState("")
@@ -1476,8 +1666,138 @@ function AllocateForm({
     const selectedServiceManager = getSelectedProvider(serviceManagerId, availableProviders)
     const selectedCoverageAgent = getSelectedCoverageAgent(coverageAgentId, coverageAgents)
 
+    // Get operator set ID from service manager
+    const { data: operatorSetId } = useReadContract({
+        address: selectedServiceManager?.address,
+        abi: iEigenServiceManagerAbi,
+        functionName: "getOperatorSetId",
+        args: [selectedCoverageAgent?.address as `0x${string}`],
+        chainId,
+        query: {
+            enabled: !!selectedServiceManager && !!selectedCoverageAgent && !!chainId,
+        },
+    })
+
+    // Get allocated strategies for this operator set
+    const { data: allocatedStrategies, refetch: refetchAllocations } = useReadContract({
+        address: eigenAddresses?.allocationManager,
+        abi: iAllocationManagerAbi,
+        functionName: "getAllocatedStrategies",
+        args: [
+            contract.address,
+            {
+                avs: selectedServiceManager?.address as `0x${string}`,
+                id: operatorSetId as number,
+            },
+        ],
+        chainId,
+        query: {
+            enabled:
+                !!eigenAddresses &&
+                !!selectedServiceManager &&
+                operatorSetId !== undefined &&
+                !!chainId,
+        },
+    })
+
+    const wagmiConfig = useConfig()
     const { writeContract, isPending, data: hash } = useWriteContract()
     const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+    const hasLoadedAllocations = useRef<string>("")
+
+    // Generate a unique key for the current operator set
+    const currentOperatorSetKey = useMemo(() => {
+        if (selectedServiceManager && operatorSetId !== undefined) {
+            return `${selectedServiceManager.address}-${operatorSetId}`
+        }
+        return ""
+    }, [selectedServiceManager, operatorSetId])
+
+    // Load allocations when strategies are available
+    useEffect(() => {
+        if (
+            allocatedStrategies &&
+            allocatedStrategies.length > 0 &&
+            eigenAddresses &&
+            selectedServiceManager &&
+            operatorSetId !== undefined &&
+            hasLoadedAllocations.current !== currentOperatorSetKey &&
+            wagmiConfig &&
+            currentOperatorSetKey
+        ) {
+            hasLoadedAllocations.current = currentOperatorSetKey
+
+            // Fetch allocations for each strategy
+            const loadAllocations = async () => {
+                const operatorSet = {
+                    avs: selectedServiceManager.address as `0x${string}`,
+                    id: operatorSetId as number,
+                }
+
+                try {
+                    const allocationPromises = allocatedStrategies.map(async (strategy) => {
+                        try {
+                            const allocation = await readContract(wagmiConfig, {
+                                address: eigenAddresses.allocationManager,
+                                abi: iAllocationManagerAbi,
+                                functionName: "getAllocation",
+                                args: [contract.address, operatorSet, strategy],
+                                chainId,
+                            })
+                            // Convert WAD (1e18 = 100%) to percentage
+                            const magnitude = Number(allocation.currentMagnitude)
+                            const percentage = magnitude / 1e16
+                            // Keep address in original format to match Select component values
+                            return {
+                                address: strategy as string,
+                                magnitude: Math.round(percentage * 100) / 100, // Round to 2 decimals
+                            }
+                        } catch (error) {
+                            console.error("Error loading allocation:", error)
+                            return null
+                        }
+                    })
+
+                    const loadedAllocations = (await Promise.all(allocationPromises)).filter(
+                        (a): a is StrategyAllocation => a !== null
+                    )
+
+                    if (loadedAllocations.length > 0) {
+                        setStrategies(loadedAllocations)
+                    }
+                } catch (error) {
+                    console.error("Error loading allocations:", error)
+                    hasLoadedAllocations.current = ""
+                }
+            }
+
+            loadAllocations()
+        } else if (
+            allocatedStrategies &&
+            allocatedStrategies.length === 0 &&
+            currentOperatorSetKey &&
+            hasLoadedAllocations.current !== currentOperatorSetKey
+        ) {
+            // Mark as loaded even if empty to avoid repeated checks
+            hasLoadedAllocations.current = currentOperatorSetKey
+        }
+    }, [
+        allocatedStrategies,
+        eigenAddresses,
+        selectedServiceManager,
+        operatorSetId,
+        chainId,
+        contract.address,
+        wagmiConfig,
+        currentOperatorSetKey,
+    ])
+
+    useEffect(() => {
+        if (isSuccess) {
+            refetchAllocations()
+            hasLoadedAllocations.current = "" // Reset to reload after update
+        }
+    }, [isSuccess, refetchAllocations])
 
     const addStrategy = () => {
         setStrategies([...strategies, { address: "", magnitude: 0 }])
@@ -1553,7 +1873,11 @@ function AllocateForm({
                 <Label>Service Manager</Label>
                 <CoverageProviderSelect
                     selectedContractId={serviceManagerId}
-                    onSelectedContractIdChange={setServiceManagerId}
+                    onSelectedContractIdChange={(value) => {
+                        setServiceManagerId(value)
+                        setCoverageAgentId("") // Reset coverage agent when service manager changes
+                        hasLoadedAllocations.current = "" // Reset loaded flag
+                    }}
                     contracts={availableProviders}
                 />
             </div>
@@ -1562,7 +1886,10 @@ function AllocateForm({
                 <Label>Coverage Agent</Label>
                 <CoverageAgentSelect
                     selectedContractId={coverageAgentId}
-                    onSelectedContractIdChange={setCoverageAgentId}
+                    onSelectedContractIdChange={(value) => {
+                        setCoverageAgentId(value)
+                        hasLoadedAllocations.current = "" // Reset loaded flag
+                    }}
                     contracts={coverageAgents}
                 />
             </div>
@@ -1860,83 +2187,63 @@ export function EigenOperatorProxyManagement({ contract }: EigenOperatorProxyMan
                 />
             )}
 
-            {/* Management Actions Card */}
+            {/* Operator Rewards Card */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Management Actions</CardTitle>
+                    <CardTitle>Operator Rewards</CardTitle>
                     <CardDescription>
                         Execute write operations on the operator proxy
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <WalletRequirement requiredChainId={contract.chainId}>
-                        <Tabs defaultValue="register" className="w-full">
-                            <TabsList className="grid w-full grid-cols-3">
-                                <TabsTrigger value="register" className="text-xs sm:text-sm">
-                                    <UserPlus className="mr-1 size-3 hidden sm:inline" />
-                                    Register
-                                </TabsTrigger>
-                                <TabsTrigger value="allocate" className="text-xs sm:text-sm">
-                                    <Layers className="mr-1 size-3 hidden sm:inline" />
-                                    Allocate
-                                </TabsTrigger>
-                                <TabsTrigger value="metadata" className="text-xs sm:text-sm">
-                                    <Settings className="mr-1 size-3 hidden sm:inline" />
-                                    Metadata
-                                </TabsTrigger>
-                            </TabsList>
+                        <div className="space-y-4">
+                            <div className="rounded-lg bg-muted/50 p-3">
+                                <h4 className="text-sm font-medium">
+                                    Register or Update Coverage Agent Rewards
+                                </h4>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Register this operator to provide coverage for a coverage agent
+                                    or update the rewards split for an already registered coverage
+                                    agent. The form will automatically detect if the operator is
+                                    already registered.
+                                </p>
+                            </div>
+                            {eigenAddresses && (
+                                <CoverageAgentRewardsForm
+                                    contract={contract}
+                                    chainId={chainId}
+                                    eigenAddresses={eigenAddresses}
+                                />
+                            )}
+                        </div>
+                    </WalletRequirement>
+                </CardContent>
+            </Card>
 
-                            <TabsContent value="register" className="mt-4">
-                                <div className="space-y-4">
-                                    <div className="rounded-lg bg-muted/50 p-3">
-                                        <h4 className="text-sm font-medium">
-                                            Register Coverage Agent
-                                        </h4>
-                                        <p className="text-xs text-muted-foreground mt-1">
-                                            Register this operator to provide coverage for a
-                                            specific coverage agent through an EigenLayer service
-                                            manager.
-                                        </p>
-                                    </div>
-                                    <RegisterCoverageAgentForm
-                                        contract={contract}
-                                        chainId={chainId}
-                                    />
-                                </div>
-                            </TabsContent>
-
-                            <TabsContent value="allocate" className="mt-4">
-                                <div className="space-y-4">
-                                    <div className="rounded-lg bg-muted/50 p-3">
-                                        <h4 className="text-sm font-medium">
-                                            Allocate to Strategies
-                                        </h4>
-                                        <p className="text-xs text-muted-foreground mt-1">
-                                            Allocate stake to strategies for a coverage agent. This
-                                            can only be called after the allocation delay period
-                                            (~17.5 days).
-                                        </p>
-                                    </div>
-                                    <AllocateForm contract={contract} chainId={chainId} />
-                                </div>
-                            </TabsContent>
-
-                            <TabsContent value="metadata" className="mt-4">
-                                <div className="space-y-4">
-                                    <div className="rounded-lg bg-muted/50 p-3">
-                                        <h4 className="text-sm font-medium">
-                                            Update Operator Metadata
-                                        </h4>
-                                        <p className="text-xs text-muted-foreground mt-1">
-                                            Update the metadata URI for this operator. The URI
-                                            should point to a JSON file containing operator
-                                            information.
-                                        </p>
-                                    </div>
-                                    <UpdateMetadataForm contract={contract} chainId={chainId} />
-                                </div>
-                            </TabsContent>
-                        </Tabs>
+            {/* Metadata Management Card */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Operator Metadata</CardTitle>
+                    <CardDescription>
+                        Update the metadata URI for this operator
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <WalletRequirement requiredChainId={contract.chainId}>
+                        <div className="space-y-4">
+                            <div className="rounded-lg bg-muted/50 p-3">
+                                <h4 className="text-sm font-medium">
+                                    Update Operator Metadata
+                                </h4>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Update the metadata URI for this operator. The URI
+                                    should point to a JSON file containing operator
+                                    information.
+                                </p>
+                            </div>
+                            <UpdateMetadataForm contract={contract} chainId={chainId} />
+                        </div>
                     </WalletRequirement>
                 </CardContent>
             </Card>
