@@ -69,7 +69,7 @@ function encodeUniswapV3Path(path: PathHop[]): string {
  * A visual path builder for Uniswap V3 swap paths.
  * Allows users to add token addresses and pool fees to build multi-hop swap routes.
  */
-export function UniswapV3PoolInput({ value, onChange, disabled = false }: UniswapV3PoolInputProps) {
+export function UniswapV3PoolInput({ onChange, disabled = false }: UniswapV3PoolInputProps) {
     const [path, setPath] = useState<PathHop[]>([
         { token: "", fee: "3000" },
         { token: "", fee: "" },
