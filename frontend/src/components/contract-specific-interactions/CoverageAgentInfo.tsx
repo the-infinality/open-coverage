@@ -1230,11 +1230,11 @@ function CoverageClaimsManagement({
 
     // Load coverage and all its claims
     const loadCoverage = useCallback(
-        async (coverageId: number) => {
+        async (coverageId: number, forceReload = false) => {
             if (!chainId) return
 
-            // Check if already loaded
-            if (loadedCoverageIds.has(coverageId)) {
+            // Check if already loaded (skip check if forceReload is true)
+            if (!forceReload && loadedCoverageIds.has(coverageId)) {
                 toast.error(`Coverage #${coverageId} is already loaded`)
                 return
             }
@@ -1338,7 +1338,7 @@ function CoverageClaimsManagement({
             
             const loadCoverageClaimsAsync = async () => {
                 try {
-                    // Find the CoverageClaimed event in the logs
+                    // Find the CoverageClaimed or CoverageReserved event in the logs
                     for (const log of receipt.logs) {
                         try {
                             const decoded = decodeEventLog({
@@ -1356,6 +1356,19 @@ function CoverageClaimsManagement({
                                 toast.success(`Coverage #${coverageId} purchased successfully!`)
 
                                 // Load the coverage and its claims
+                                await loadCoverage(coverageId)
+                                break
+                            }
+
+                            if (
+                                decoded.eventName === "CoverageReserved" &&
+                                decoded.args &&
+                                "coverageId" in decoded.args
+                            ) {
+                                const coverageId = Number(decoded.args.coverageId)
+                                toast.success(`Coverage #${coverageId} reserved successfully!`)
+
+                                // Load the reserved coverage and its claims
                                 await loadCoverage(coverageId)
                                 break
                             }
@@ -1560,37 +1573,36 @@ function CoverageClaimsManagement({
     const handleSlashSuccess = () => {
         if (slashCoverageId === null) return
         
-        // Refresh claims for the slashed coverage
-        const claimsToRefresh = loadedClaims.filter((c) => c.coverageId === slashCoverageId)
-        claimsToRefresh.forEach((claimData) => {
-            handleRemoveClaim(claimData.claimId, claimData.providerAddress, claimData.coverageId)
-        })
+        const coverageIdToReload = slashCoverageId
         
-        // Reload the coverage
-        loadCoverage(slashCoverageId)
+        // Remove claims for this coverage from state so they can be reloaded with fresh data
+        setLoadedClaims((prev) => prev.filter((c) => c.coverageId !== coverageIdToReload))
+        
         setSlashCoverageId(null)
+        
+        // Reload the coverage with forceReload=true to bypass the duplicate check
+        loadCoverage(coverageIdToReload, true)
     }
 
     const handleConvertSuccess = () => {
         if (convertCoverageId === null) return
         
-        // Remove coverage from reservation set
+        const coverageIdToReload = convertCoverageId
+        
+        // Remove coverage from reservation set (it's no longer a reservation after conversion)
         setReservationCoverageIds((prev) => {
             const next = new Set(prev)
-            next.delete(convertCoverageId)
+            next.delete(coverageIdToReload)
             return next
         })
         
-        // Refresh claim data for this coverage
-        const claimsToRefresh = loadedClaims.filter((c) => c.coverageId === convertCoverageId)
-        claimsToRefresh.forEach((claimData) => {
-            handleRemoveClaim(claimData.claimId, claimData.providerAddress, claimData.coverageId)
-        })
-        
-        // Reload the coverage
-        loadCoverage(convertCoverageId)
+        // Remove claims for this coverage from state so they can be reloaded with fresh data
+        setLoadedClaims((prev) => prev.filter((c) => c.coverageId !== coverageIdToReload))
         
         setConvertCoverageId(null)
+        
+        // Reload the coverage with forceReload=true to bypass the duplicate check
+        loadCoverage(coverageIdToReload, true)
     }
 
     const isValidClaimForm = useMemo(() => {
@@ -2028,7 +2040,8 @@ function CoverageClaimsManagement({
                                                                 Convert
                                                             </Button>
                                                         )}
-                                                        {!reservationCoverageIds.has(coverageId) && (
+                                                        {!reservationCoverageIds.has(coverageId) &&
+                                                            claims.some((c) => c.claim.status !== 4) && (
                                                             <Button
                                                                 variant="ghost"
                                                                 size="sm"
