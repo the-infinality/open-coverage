@@ -52,7 +52,6 @@ export function getAbisForContractType(contractType: ContractType): NamedAbi[] {
  * @returns Array of named ABIs based on supported interfaces
  */
 export function getAbisForSupportedInterfaces(supportedInterfaces: InterfaceName[]): NamedAbi[] {
-    console.log("supportedInterfaces", supportedInterfaces)
     return supportedInterfaces.map((interfaceName) => ({
         name: interfaceName,
         abi: INTERFACE_ABIS[interfaceName],

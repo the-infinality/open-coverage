@@ -262,7 +262,13 @@ function FunctionMethod({ fn, contractAddress, chainId }: FunctionMethodProps) {
     const formatResult = (value: unknown): string => {
         if (value === null || value === undefined) return "null"
         if (typeof value === "bigint") return value.toString()
-        if (typeof value === "object") return JSON.stringify(value, null, 2)
+        if (typeof value === "object") {
+            return JSON.stringify(
+                value,
+                (_, v) => (typeof v === "bigint" ? v.toString() : v),
+                2
+            )
+        }
         return String(value)
     }
 

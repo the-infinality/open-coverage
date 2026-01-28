@@ -32,6 +32,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { CopyableAddress } from "@/components/ui/copyable-address"
+import { UniswapV3PoolInput } from "./UniswapV3PoolInput"
 
 type SupportedChainId = (typeof supportedChains)[number]["id"]
 
@@ -235,26 +236,26 @@ function StrategyAssetOption({
 
     if (isLoadingToken || isLoadingInfo) {
         return (
-            <span className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
                 <Loader2 className="size-3 animate-spin" />
                 Loading...
-            </span>
+            </div>
         )
     }
 
     return (
-        <span className="flex flex-col gap-0.5">
-            <span className="font-medium">
+        <div className="flex flex-col gap-0.5">
+            <div className="font-medium">
                 {tokenName && tokenSymbol
                     ? `${tokenName} (${tokenSymbol})`
                     : underlyingToken
                       ? `${underlyingToken.slice(0, 10)}...${underlyingToken.slice(-8)}`
                       : "Unknown Asset"}
-            </span>
-            <span className="text-xs text-muted-foreground">
+            </div>
+            <div className="text-xs text-muted-foreground">
                 Strategy: {strategyAddress.slice(0, 10)}...{strategyAddress.slice(-8)}
-            </span>
-        </span>
+            </div>
+        </div>
     )
 }
 
@@ -267,18 +268,14 @@ function QuoteResults({
     minAmountOut,
     maxAmountIn,
     assetASymbol,
-    assetBSymbol,
     assetADecimals,
-    assetBDecimals,
 }: {
     quote?: bigint
     verified?: boolean
     minAmountOut?: bigint
     maxAmountIn?: bigint
     assetASymbol?: string
-    assetBSymbol?: string
     assetADecimals?: number
-    assetBDecimals?: number
 }) {
     return (
         <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
@@ -302,7 +299,7 @@ function QuoteResults({
                 )}
                 {minAmountOut !== undefined && (
                     <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Min Amount Out (swap input)</span>
+                        <span className="text-muted-foreground">Min Amount Out</span>
                         <span className="font-mono">
                             {formatUnits(minAmountOut, assetADecimals || 18)}{" "}
                             {assetASymbol || "tokens"}
@@ -311,10 +308,10 @@ function QuoteResults({
                 )}
                 {maxAmountIn !== undefined && (
                     <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Max Amount In (swap output)</span>
+                        <span className="text-muted-foreground">Max Amount In</span>
                         <span className="font-mono">
-                            {formatUnits(maxAmountIn, assetBDecimals || 18)}{" "}
-                            {assetBSymbol || "tokens"}
+                            {formatUnits(maxAmountIn, assetADecimals || 18)}{" "}
+                            {assetASymbol || "tokens"}
                         </span>
                     </div>
                 )}
@@ -378,6 +375,158 @@ function AssetPairInfo({
 }
 
 /**
+ * Asset Input Component - Reusable component for selecting assets via strategy or manual input
+ * Manages all internal state and returns the resolved address via onChange
+ */
+function AssetInput({
+    strategies,
+    isLoadingStrategies,
+    chainId,
+    onChange,
+    disabled,
+    label,
+    showStrategyOption = true,
+}: {
+    strategies: Address[]
+    isLoadingStrategies: boolean
+    chainId: SupportedChainId | undefined
+    onChange: (address: Address | undefined) => void
+    disabled?: boolean
+    label?: string
+    showStrategyOption?: boolean
+}) {
+    // Internal state management
+    const [mode, setMode] = useState<"strategy" | "manual">(showStrategyOption ? "strategy" : "manual")
+    const [selectedStrategy, setSelectedStrategy] = useState("")
+    const [manualInput, setManualInput] = useState("")
+    
+    // Determine effective mode (always manual if strategy option is hidden)
+    const effectiveMode = showStrategyOption ? mode : "manual"
+    
+    // Get underlying token for selected strategy (only when in strategy mode)
+    const { underlyingToken: strategyAsset } = useStrategyUnderlyingToken(
+        effectiveMode === "strategy" && selectedStrategy ? (selectedStrategy as Address) : undefined,
+        chainId
+    )
+    
+    // Compute the resolved address based on mode
+    const resolvedAddress = useMemo(() => {
+        if (effectiveMode === "strategy") {
+            return strategyAsset
+        } else {
+            return isAddress(manualInput) ? (manualInput as Address) : undefined
+        }
+    }, [effectiveMode, strategyAsset, manualInput])
+
+    // Get token info for resolved address
+    const assetInfo = useTokenInfo(resolvedAddress, chainId)
+    
+    // Notify parent when resolved address changes
+    useEffect(() => {
+        onChange(resolvedAddress)
+    }, [resolvedAddress, onChange])
+    
+    // Handle mode change
+    const handleModeChange = (newMode: "strategy" | "manual") => {
+        setMode(newMode)
+        // Clear the other mode's state when switching
+        if (newMode === "strategy") {
+            setManualInput("")
+        } else {
+            setSelectedStrategy("")
+        }
+    }
+
+    return (
+        <div className="space-y-2">
+            <div className="flex items-center justify-between">
+                <Label>{label || "Asset"}</Label>
+                {showStrategyOption && (
+                    <Tabs
+                        value={mode}
+                        onValueChange={(v) => handleModeChange(v as "strategy" | "manual")}
+                        className="w-auto"
+                    >
+                        <TabsList className="h-8">
+                            <TabsTrigger value="strategy" className="text-xs px-2" disabled={disabled}>
+                                Strategy
+                            </TabsTrigger>
+                            <TabsTrigger value="manual" className="text-xs px-2" disabled={disabled}>
+                                Manual
+                            </TabsTrigger>
+                        </TabsList>
+                    </Tabs>
+                )}
+            </div>
+            {effectiveMode === "strategy" ? (
+                <>
+                    {isLoadingStrategies ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Loader2 className="size-4 animate-spin" />
+                            Loading strategies...
+                        </div>
+                    ) : (
+                        <Select
+                            value={selectedStrategy}
+                            onValueChange={setSelectedStrategy}
+                            disabled={disabled}
+                        >
+                            <SelectTrigger className="font-mono">
+                                <SelectValue placeholder="Select strategy asset..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {strategies.length === 0 ? (
+                                    <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+                                        No whitelisted strategies available.
+                                    </div>
+                                ) : (
+                                    strategies.map((strategyAddr) => (
+                                        <SelectItem
+                                            key={strategyAddr}
+                                            value={strategyAddr}
+                                            className="font-mono"
+                                        >
+                                            <StrategyAssetOption
+                                                strategyAddress={strategyAddr}
+                                                chainId={chainId}
+                                            />
+                                        </SelectItem>
+                                    ))
+                                )}
+                            </SelectContent>
+                        </Select>
+                    )}
+                    {resolvedAddress && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>Underlying:</span>
+                            <CopyableAddress address={resolvedAddress} />
+                        </div>
+                    )}
+                </>
+            ) : (
+                <>
+                    <Input
+                        placeholder="0x..."
+                        value={manualInput}
+                        onChange={(e) => setManualInput(e.target.value)}
+                        className="font-mono"
+                        disabled={disabled}
+                    />
+                    {manualInput && !isAddress(manualInput) && (
+                        <p className="text-xs text-destructive">Invalid address</p>
+                    )}
+                    {assetInfo.tokenSymbol && (
+                        <p className="text-xs text-muted-foreground">
+                            Token: {assetInfo.tokenName} ({assetInfo.tokenSymbol})
+                        </p>
+                    )}
+                </>
+            )}
+        </div>
+    )
+}
+
+/**
  * Read functionality section - Quote operations
  */
 function ReadSection({
@@ -398,39 +547,34 @@ function ReadSection({
     refetchSlippage: () => void
 }) {
     // State for asset selection
-    const [selectedStrategy, setSelectedStrategy] = useState("")
-    const [assetBInput, setAssetBInput] = useState("")
+    const [assetA, setAssetA] = useState<Address | undefined>()
+    const [assetB, setAssetB] = useState<Address | undefined>()
     const [amountInput, setAmountInput] = useState("")
     const [quoteType, setQuoteType] = useState<"getQuote" | "swapForInput" | "swapForOutput">(
         "getQuote"
     )
 
-    // Get underlying token for selected strategy (this will be Asset A)
-    const { underlyingToken: assetA } = useStrategyUnderlyingToken(
-        selectedStrategy ? (selectedStrategy as Address) : undefined,
-        chainId
-    )
-
-    // Validate asset B
-    const assetB = isAddress(assetBInput) ? (assetBInput as Address) : undefined
-
     // Get token info for both assets
     const assetAInfo = useTokenInfo(assetA, chainId)
     const assetBInfo = useTokenInfo(assetB, chainId)
 
-    // Parse amount based on quote type (input vs output)
+    // Parse amount based on quote type
+    // All quote types take Asset B amount (what you spend/output from wallet)
     const parsedAmount = useMemo(() => {
-        if (!amountInput) return undefined
+        if (!amountInput || amountInput.trim() === "") return undefined
         try {
-            const decimals =
-                quoteType === "swapForOutput"
-                    ? assetAInfo.tokenDecimals || 18
-                    : assetBInfo.tokenDecimals || 18
+            const decimals = assetBInfo.tokenDecimals || 18
             return parseUnits(amountInput, decimals)
         } catch {
             return undefined
         }
-    }, [amountInput, quoteType, assetAInfo.tokenDecimals, assetBInfo.tokenDecimals])
+    }, [amountInput, assetBInfo.tokenDecimals])
+    
+    // Check if input is valid
+    const isValidAmount = useMemo(() => {
+        if (!amountInput || amountInput.trim() === "") return true // Empty is valid
+        return parsedAmount !== undefined
+    }, [amountInput, parsedAmount])
 
     // Get asset pair info
     const {
@@ -503,6 +647,9 @@ function ReadSection({
         },
     })
 
+    console.log("parsedAmount", parsedAmount)
+    console.log("input amount", amountInput)
+
     const handleRefresh = () => {
         refetchSlippage()
         if (assetA && assetB) {
@@ -561,67 +708,24 @@ function ReadSection({
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
-                    {/* Asset A - from strategy */}
-                    <div className="space-y-2">
-                        <Label>Asset A (Output/Base) - From Strategy</Label>
-                        {isLoadingStrategies ? (
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <Loader2 className="size-4 animate-spin" />
-                                Loading strategies...
-                            </div>
-                        ) : (
-                            <Select value={selectedStrategy} onValueChange={setSelectedStrategy}>
-                                <SelectTrigger className="font-mono">
-                                    <SelectValue placeholder="Select strategy asset..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {strategies.length === 0 ? (
-                                        <div className="px-2 py-4 text-center text-sm text-muted-foreground">
-                                            No whitelisted strategies available.
-                                        </div>
-                                    ) : (
-                                        strategies.map((strategyAddr) => (
-                                            <SelectItem
-                                                key={strategyAddr}
-                                                value={strategyAddr}
-                                                className="font-mono"
-                                            >
-                                                <StrategyAssetOption
-                                                    strategyAddress={strategyAddr}
-                                                    chainId={chainId}
-                                                />
-                                            </SelectItem>
-                                        ))
-                                    )}
-                                </SelectContent>
-                            </Select>
-                        )}
-                        {assetA && (
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <span>Underlying:</span>
-                                <CopyableAddress address={assetA} />
-                            </div>
-                        )}
-                    </div>
+                    {/* Asset A - from strategy or manual input */}
+                    <AssetInput
+                        strategies={strategies}
+                        isLoadingStrategies={isLoadingStrategies}
+                        chainId={chainId}
+                        onChange={setAssetA}
+                        label="Asset A (Output/Base)"
+                    />
 
-                    {/* Asset B - manual input */}
-                    <div className="space-y-2">
-                        <Label>Asset B (Input/Swap)</Label>
-                        <Input
-                            placeholder="0x..."
-                            value={assetBInput}
-                            onChange={(e) => setAssetBInput(e.target.value)}
-                            className="font-mono"
-                        />
-                        {assetBInput && !isAddress(assetBInput) && (
-                            <p className="text-xs text-destructive">Invalid address</p>
-                        )}
-                        {assetBInfo.tokenSymbol && (
-                            <p className="text-xs text-muted-foreground">
-                                Token: {assetBInfo.tokenName} ({assetBInfo.tokenSymbol})
-                            </p>
-                        )}
-                    </div>
+                    {/* Asset B - manual input only */}
+                    <AssetInput
+                        strategies={strategies}
+                        isLoadingStrategies={isLoadingStrategies}
+                        chainId={chainId}
+                        onChange={setAssetB}
+                        label="Asset B (Input/Swap)"
+                        showStrategyOption={true}
+                    />
                 </div>
 
                 {/* Quote Type Selection */}
@@ -654,8 +758,8 @@ function ReadSection({
                         </TabsContent>
                         <TabsContent value="swapForOutput" className="mt-4">
                             <p className="text-xs text-muted-foreground">
-                                Get the maximum amount of Asset B tokens needed to receive an exact
-                                output of Asset A
+                                Enter the amount of Asset B you want to spend (output from wallet)
+                                to see the minimum Asset A you will receive
                             </p>
                         </TabsContent>
                     </Tabs>
@@ -665,17 +769,37 @@ function ReadSection({
                 <div className="space-y-2">
                     <Label>
                         {quoteType === "swapForOutput"
-                            ? `Amount Out (${assetAInfo.tokenSymbol || "Asset A"})`
+                            ? `Amount Out (${assetBInfo.tokenSymbol || "Asset B"})`
                             : `Amount In (${assetBInfo.tokenSymbol || "Asset B"})`}
                     </Label>
                     <div className="flex gap-2">
                         <Input
                             type="text"
+                            inputMode="decimal"
                             placeholder="0.0"
                             value={amountInput}
-                            onChange={(e) => setAmountInput(e.target.value)}
+                            onChange={(e) => {
+                                // Allow decimal input (e.g., "1.5", "0.1")
+                                const value = e.target.value
+                                // Allow empty, numbers, and single decimal point
+                                if (value === "" || /^\d*\.?\d*$/.test(value)) {
+                                    setAmountInput(value)
+                                }
+                            }}
                             className="font-mono"
+                            aria-invalid={!isValidAmount}
                         />
+                        {!isValidAmount && amountInput && (
+                            <p className="text-xs text-destructive">
+                                Invalid amount. Please enter a valid number.
+                            </p>
+                        )}
+                        {isValidAmount && amountInput && (
+                            <p className="text-xs text-muted-foreground">
+                                Enter amount in {assetBInfo.tokenSymbol || "Asset B"} units
+                                {` (${assetBInfo.tokenDecimals || 18} decimals)`}
+                            </p>
+                        )}
                         <Button
                             variant="outline"
                             onClick={handleRefresh}
@@ -732,9 +856,7 @@ function ReadSection({
                                 : undefined
                         }
                         assetASymbol={assetAInfo.tokenSymbol}
-                        assetBSymbol={assetBInfo.tokenSymbol}
                         assetADecimals={assetAInfo.tokenDecimals}
-                        assetBDecimals={assetBInfo.tokenDecimals}
                     />
                 )}
             </div>
@@ -767,24 +889,27 @@ function WriteSection({
     )
 
     // Register form state
-    const [selectedStrategyA, setSelectedStrategyA] = useState("")
-    const [assetBInput, setAssetBInput] = useState("")
+    const [assetA, setAssetA] = useState<Address | undefined>()
+    const [assetB, setAssetB] = useState<Address | undefined>()
     const [swapEngine, setSwapEngine] = useState("")
     const [poolInfo, setPoolInfo] = useState("")
+    const [poolInfoMode, setPoolInfoMode] = useState<"custom" | "uniswapV3">("custom")
+    const [uniswapV3PoolInfo, setUniswapV3PoolInfo] = useState("")
     const [priceStrategy, setPriceStrategy] = useState("1") // Default: Swapper Only
     const [swapperAccuracy, setSwapperAccuracy] = useState("100") // Default: 1%
     const [priceOracle, setPriceOracle] = useState("")
 
-    // Get underlying token for selected strategy
-    const { underlyingToken: assetA } = useStrategyUnderlyingToken(
-        selectedStrategyA ? (selectedStrategyA as Address) : undefined,
-        chainId
-    )
+    // Compute pool info based on mode
+    const computedPoolInfo = useMemo(() => {
+        if (poolInfoMode === "custom") {
+            return poolInfo
+        }
+        return uniswapV3PoolInfo
+    }, [poolInfoMode, poolInfo, uniswapV3PoolInfo])
 
     // Validate inputs
-    const assetB = isAddress(assetBInput) ? (assetBInput as Address) : undefined
     const isValidSwapEngine = isAddress(swapEngine)
-    const isValidPoolInfo = poolInfo.startsWith("0x") || poolInfo === ""
+    const isValidPoolInfo = computedPoolInfo.startsWith("0x") || computedPoolInfo === ""
     const isValidPriceOracle = priceOracle === "" || isAddress(priceOracle)
 
     // Update slippage when contract value changes
@@ -900,11 +1025,13 @@ function WriteSection({
             assetA,
             assetB,
             swapEngine: swapEngine as Address,
-            poolInfo: (poolInfo || "0x") as `0x${string}`,
+            poolInfo: (computedPoolInfo || "0x") as `0x${string}`,
             priceStrategy: Number(priceStrategy),
             swapperAccuracy: Number(swapperAccuracy),
             priceOracle: (priceOracle || "0x0000000000000000000000000000000000000000") as Address,
         }
+
+        console.log("assetPair", assetPair)
 
         writeRegister(
             {
@@ -1043,67 +1170,26 @@ function WriteSection({
 
                 {/* Asset Selection */}
                 <div className="grid gap-4 md:grid-cols-2">
-                    {/* Asset A - from strategy */}
-                    <div className="space-y-2">
-                        <Label>Asset A (Output/Base) - From Strategy</Label>
-                        {isLoadingStrategies ? (
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <Loader2 className="size-4 animate-spin" />
-                                Loading strategies...
-                            </div>
-                        ) : (
-                            <Select
-                                value={selectedStrategyA}
-                                onValueChange={setSelectedStrategyA}
-                                disabled={isRegisterPending || isRegisterConfirming}
-                            >
-                                <SelectTrigger className="font-mono">
-                                    <SelectValue placeholder="Select strategy asset..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {strategies.length === 0 ? (
-                                        <div className="px-2 py-4 text-center text-sm text-muted-foreground">
-                                            No whitelisted strategies available.
-                                        </div>
-                                    ) : (
-                                        strategies.map((strategyAddr) => (
-                                            <SelectItem
-                                                key={strategyAddr}
-                                                value={strategyAddr}
-                                                className="font-mono"
-                                            >
-                                                <StrategyAssetOption
-                                                    strategyAddress={strategyAddr}
-                                                    chainId={chainId}
-                                                />
-                                            </SelectItem>
-                                        ))
-                                    )}
-                                </SelectContent>
-                            </Select>
-                        )}
-                        {assetA && (
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <span>Underlying:</span>
-                                <CopyableAddress address={assetA} />
-                            </div>
-                        )}
-                    </div>
+                    {/* Asset A - from strategy or manual input */}
+                    <AssetInput
+                        strategies={strategies}
+                        isLoadingStrategies={isLoadingStrategies}
+                        chainId={chainId}
+                        onChange={setAssetA}
+                        label="Asset A (Output/Base)"
+                        disabled={isRegisterPending || isRegisterConfirming}
+                    />
 
-                    {/* Asset B - manual input */}
-                    <div className="space-y-2">
-                        <Label>Asset B (Input/Swap)</Label>
-                        <Input
-                            placeholder="0x..."
-                            value={assetBInput}
-                            onChange={(e) => setAssetBInput(e.target.value)}
-                            className="font-mono"
-                            disabled={isRegisterPending || isRegisterConfirming}
-                        />
-                        {assetBInput && !isAddress(assetBInput) && (
-                            <p className="text-xs text-destructive">Invalid address</p>
-                        )}
-                    </div>
+                    {/* Asset B - manual input only */}
+                    <AssetInput
+                        strategies={strategies}
+                        isLoadingStrategies={isLoadingStrategies}
+                        chainId={chainId}
+                        onChange={setAssetB}
+                        label="Asset B (Input/Swap)"
+                        showStrategyOption={false}
+                        disabled={isRegisterPending || isRegisterConfirming}
+                    />
                 </div>
 
                 {/* Swap Engine */}
@@ -1126,22 +1212,47 @@ function WriteSection({
                 </div>
 
                 {/* Pool Info */}
-                <div className="space-y-2">
-                    <Label>Pool Info (bytes)</Label>
-                    <Input
-                        placeholder="0x... (optional)"
-                        value={poolInfo}
-                        onChange={(e) => setPoolInfo(e.target.value)}
-                        className="font-mono"
-                        disabled={isRegisterPending || isRegisterConfirming}
-                    />
-                    {poolInfo && !isValidPoolInfo && (
-                        <p className="text-xs text-destructive">Must start with 0x</p>
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                        <Label>Pool Info</Label>
+                        <Select
+                            value={poolInfoMode}
+                            onValueChange={(v) => setPoolInfoMode(v as "custom" | "uniswapV3")}
+                            disabled={isRegisterPending || isRegisterConfirming}
+                        >
+                            <SelectTrigger className="w-[200px] h-8">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="custom">Custom (bytes)</SelectItem>
+                                <SelectItem value="uniswapV3">Uniswap V3 Path</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {poolInfoMode === "custom" ? (
+                        <div className="space-y-2">
+                            <Input
+                                placeholder="0x... (optional)"
+                                value={poolInfo}
+                                onChange={(e) => setPoolInfo(e.target.value)}
+                                className="font-mono"
+                                disabled={isRegisterPending || isRegisterConfirming}
+                            />
+                            {poolInfo && !isValidPoolInfo && (
+                                <p className="text-xs text-destructive">Must start with 0x</p>
+                            )}
+                            <p className="text-xs text-muted-foreground">
+                                Raw pool information bytes for the swap engine
+                            </p>
+                        </div>
+                    ) : (
+                        <UniswapV3PoolInput
+                            value={uniswapV3PoolInfo}
+                            onChange={setUniswapV3PoolInfo}
+                            disabled={isRegisterPending || isRegisterConfirming}
+                        />
                     )}
-                    <p className="text-xs text-muted-foreground">
-                        Pool-specific information for the swap engine (e.g., encoded pool fee for
-                        Uniswap)
-                    </p>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
@@ -1284,11 +1395,11 @@ export function AssetPriceOracleAndSwapperInteraction({
                     <TabsList className="grid w-full grid-cols-2">
                         <TabsTrigger value="read">
                             <Calculator className="mr-2 size-4" />
-                            Read (Quotes)
+                            Quotes
                         </TabsTrigger>
                         <TabsTrigger value="write">
                             <Settings className="mr-2 size-4" />
-                            Write (Configure)
+                            Configure
                         </TabsTrigger>
                     </TabsList>
 

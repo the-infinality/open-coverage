@@ -56,10 +56,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     /// @dev The caller must have the `modifyAllocations` permission for the operator.
     /// @dev The operator address must be set in data.operatorId (as bytes32).
     /// @dev The strategy is derived from assetToStrategy[data.asset].
-    function createPosition(CoveragePosition memory data, bytes calldata)
-        external
-        returns (uint256 positionId)
-    {
+    function createPosition(CoveragePosition memory data, bytes calldata) external returns (uint256 positionId) {
         if (data.expiryTimestamp < block.timestamp) revert TimestampInvalid(data.expiryTimestamp);
         if (data.minRate > 10000) revert MinRateInvalid(data.minRate);
 
@@ -92,9 +89,12 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         address operator = address(uint160(uint256(positionData.operatorId)));
         address strategy = assetToStrategy[positionData.asset];
 
-        if (_strategyWhitelist.contains(strategy) && !_checkOperatorPermissions(
-                operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector
-            )) revert IEigenServiceManager.NotOperatorAuthorized(operator, msg.sender);
+        if (
+            _strategyWhitelist.contains(strategy)
+                && !_checkOperatorPermissions(
+                    operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector
+                )
+        ) revert IEigenServiceManager.NotOperatorAuthorized(operator, msg.sender);
 
         require(positionData.expiryTimestamp >= block.timestamp, PositionExpired(positionId));
         positions[positionId].expiryTimestamp = block.timestamp;
@@ -116,8 +116,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         _validatePosition(positionData, amount, duration, reward);
 
         // Capture rewards funds from coverage agent
-        bool success = IERC20(ICoverageAgent(positionData.coverageAgent).asset())
-            .transferFrom(msg.sender, address(this), reward);
+        bool success =
+            IERC20(ICoverageAgent(positionData.coverageAgent).asset()).transferFrom(msg.sender, address(this), reward);
         if (!success) revert RewardTransferFailed();
 
         address operator = address(uint160(uint256(positionData.operatorId)));
@@ -232,8 +232,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         }
 
         // Capture rewards funds from coverage agent
-        bool success = IERC20(ICoverageAgent(positionData.coverageAgent).asset())
-            .transferFrom(msg.sender, address(this), reward);
+        bool success =
+            IERC20(ICoverageAgent(positionData.coverageAgent).asset()).transferFrom(msg.sender, address(this), reward);
         if (!success) revert RewardTransferFailed();
 
         // Update claim to Issued status with new values
@@ -339,9 +339,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     function completeSlash(uint256 claimId) external {
         CoverageClaim storage _claim = claims[claimId];
         if (_claim.status != CoverageClaimStatus.PendingSlash) revert InvalidClaim(claimId);
-        if (
-            ISlashCoordinator(positions[_claim.positionId].slashCoordinator).status(claimId) != SlashStatus.Completed
-        ) {
+        if (ISlashCoordinator(positions[_claim.positionId].slashCoordinator).status(claimId) != SlashStatus.Completed) {
             revert SlashFailed(claimId);
         }
         _initiateSlash(claimId, claimSlashAmounts[claimId]);
@@ -545,15 +543,16 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
             uint32 calculationInterval = rewardsCoordinator.CALCULATION_INTERVAL_SECONDS();
 
             // Pass 0 for startTimestamp to auto-calculate using the next interval
-            IEigenServiceManager(address(this)).submitOperatorReward(
-                operator,
-                IStrategy(strategy),
-                IERC20(strategyAsset),
-                difference,
-                0, // Auto-calculate startTimestamp
-                calculationInterval,
-                "Slash Refund"
-            );
+            IEigenServiceManager(address(this))
+                .submitOperatorReward(
+                    operator,
+                    IStrategy(strategy),
+                    IERC20(strategyAsset),
+                    difference,
+                    0, // Auto-calculate startTimestamp
+                    calculationInterval,
+                    "Slash Refund"
+                );
         }
     }
 

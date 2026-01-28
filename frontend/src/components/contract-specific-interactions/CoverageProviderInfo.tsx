@@ -663,6 +663,14 @@ function PositionItem({
                             {REFUNDABLE_OPTIONS[positionData.refundable]?.label || "Unknown"}
                         </span>
                     </div>
+                    <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Max Reservation Time</span>
+                        <span className="font-mono">
+                            {Number(positionData.maxReservationTime) === 0
+                                ? "Not allowed"
+                                : `${formatUnits(BigInt(positionData.maxReservationTime), 0)} seconds`}
+                        </span>
+                    </div>
                 </div>
             )}
         </div>
@@ -688,6 +696,7 @@ function OperatorPositionManagement({
     const [selectedStrategyAddress, setSelectedStrategyAddress] = useState("")
     const [refundable, setRefundable] = useState("0")
     const [slashCoordinator, setSlashCoordinator] = useState("")
+    const [maxReservationTime, setMaxReservationTime] = useState("0") // 0 = reservations not allowed
     const [positionIds, setPositionIds] = useState<number[]>([])
     const [newPositionId, setNewPositionId] = useState("")
     const [isCheckingPosition, setIsCheckingPosition] = useState(false)
@@ -796,6 +805,7 @@ function OperatorPositionManagement({
         setSelectedStrategyAddress("")
         setRefundable("0")
         setSlashCoordinator("")
+        setMaxReservationTime("0")
     }
 
     const isValidForm = useMemo(() => {
@@ -847,7 +857,7 @@ function OperatorPositionManagement({
             refundable: Number(refundable),
             slashCoordinator: (slashCoordinator ||
                 "0x0000000000000000000000000000000000000000") as Address,
-            maxReservationTime: 0n, // No reservation time limit by default
+            maxReservationTime: BigInt(maxReservationTime || "0"),
             operatorId,
         }
 
@@ -1124,6 +1134,25 @@ function OperatorPositionManagement({
                                 <p className="text-xs text-destructive">Invalid address</p>
                             )}
                         </div>
+                    </div>
+
+                    {/* Max Reservation Time */}
+                    <div className="space-y-2">
+                        <Label htmlFor="maxReservationTime">Max Reservation Time (seconds)</Label>
+                        <Input
+                            id="maxReservationTime"
+                            type="number"
+                            placeholder="0"
+                            value={maxReservationTime}
+                            onChange={(e) => setMaxReservationTime(e.target.value)}
+                            className="font-mono"
+                            disabled={isPending || isConfirming}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            {Number(maxReservationTime) === 0
+                                ? "Reservations not allowed (set > 0 to enable)"
+                                : `${Math.round(Number(maxReservationTime) / 60)} minutes / ${Math.round(Number(maxReservationTime) / 3600)} hours / ${(Number(maxReservationTime) / 86400).toFixed(2)} days`}
+                        </p>
                     </div>
 
                     <Button

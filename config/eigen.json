@@ -18,9 +18,9 @@
         "rewardsCoordinator": "0x5ae8152fb88c26ff9ca5C014c94fca3c68029349",
         "permissionsController": "0x44632dfBdCb6D3E21EF613B0ca8A6A0c618F5a37",
         "strategyFactory": "0x066cF95c1bf0927124DFB8B02B401bc23A79730D",
-        "testStrategy": "0x424246eF71b01ee33aA33aC590fd9a0855F5eFbc",
+        "testStrategy": "0xD3a54A9E02016491dad36601f40493A8D7168980",
         "strategies": {
-            "WETH": "0x424246eF71b01ee33aA33aC590fd9a0855F5eFbc"
+            "WETH": "0xD3a54A9E02016491dad36601f40493A8D7168980"
         }
     },
     "31337": {
@@ -30,9 +30,9 @@
         "rewardsCoordinator": "0x5ae8152fb88c26ff9ca5C014c94fca3c68029349",
         "permissionsController": "0x44632dfBdCb6D3E21EF613B0ca8A6A0c618F5a37",
         "strategyFactory": "0x066cF95c1bf0927124DFB8B02B401bc23A79730D",
-        "testStrategy": "0x424246eF71b01ee33aA33aC590fd9a0855F5eFbc",
+        "testStrategy": "0xD3a54A9E02016491dad36601f40493A8D7168980",
         "strategies": {
-            "WETH": "0x424246eF71b01ee33aA33aC590fd9a0855F5eFbc"
+            "WETH": "0xD3a54A9E02016491dad36601f40493A8D7168980"
         }
     }
 }

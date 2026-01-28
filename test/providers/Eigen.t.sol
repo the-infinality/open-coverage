@@ -112,7 +112,6 @@ contract EigenTest is EigenTestDeployer {
             USDC
         );
 
-        // SwapParams memory swapParams = SwapParams({swapEngine: SwapEngine.UNISWAP_V3, poolInfo: poolInfo});
         eigenPriceOracle.register(
             AssetPair({
                 assetA: rETH,
@@ -2232,6 +2231,148 @@ contract EigenTest is EigenTestDeployer {
         // forge-lint: disable-next-line(unsafe-typecast)
         int256 expectedBacking = int256(allocatedAfterDeallocation) - int256(claimAmount);
         assertEq(backingAfter, expectedBacking, "Backing should match expected");
+    }
+
+    // ============ claimTotalSlashAmount Tests ============
+
+    /// @notice Test claimTotalSlashAmount returns correct amount after slashing
+    function test_claimTotalSlashAmount() public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        uint256 slashAmount = 500e6;
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, slashAmount);
+
+        _executeSlash(claimIds, amounts);
+
+        // Verify claimTotalSlashAmount returns the correct amount
+        assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId), slashAmount);
+    }
+
+    /// @notice Test claimTotalSlashAmount returns 0 for non-existent claim
+    function test_claimTotalSlashAmount_nonExistentClaim() public view {
+        // Query slash amount for a claim ID that doesn't exist
+        uint256 nonExistentClaimId = 999;
+        assertEq(eigenCoverageProvider.claimTotalSlashAmount(nonExistentClaimId), 0);
+    }
+
+    /// @notice Test claimTotalSlashAmount returns 0 for claim that hasn't been slashed
+    function test_claimTotalSlashAmount_notSlashed() public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        // Verify claimTotalSlashAmount returns 0 before any slashing
+        assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId), 0);
+    }
+
+    /// @notice Test claimTotalSlashAmount returns correct amount for partial slash
+    function test_claimTotalSlashAmount_partialSlash() public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        // Slash only 25% of the claim amount
+        uint256 slashAmount = 250e6;
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, slashAmount);
+
+        _executeSlash(claimIds, amounts);
+
+        // Verify claimTotalSlashAmount returns exactly the partial amount
+        assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId), slashAmount);
+    }
+
+    /// @notice Test claimTotalSlashAmount returns correct amount for exact (full) slash
+    function test_claimTotalSlashAmount_exactAmount() public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        uint256 claimAmount = 1000e6;
+        uint256 claimId = _createAndApproveClaim(positionId, claimAmount, 10e6);
+
+        // Slash the full claim amount
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, claimAmount);
+
+        _executeSlash(claimIds, amounts);
+
+        // Verify claimTotalSlashAmount returns the full claim amount
+        assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId), claimAmount);
+    }
+
+    /// @notice Test claimTotalSlashAmount returns correct amounts for multiple claims
+    function test_claimTotalSlashAmount_multipleClaims() public {
+        deal(rETH, staker, 2000e18);
+        uint256 positionId = _setupSlashingPosition(2000e18);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 20e6);
+        uint256 claimId1 = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
+        uint256 claimId2 = eigenCoverageProvider.issueClaim(positionId, 500e6, 30 days, 5e6);
+        vm.stopPrank();
+
+        // Verify both claims have 0 slash amount before slashing
+        assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId1), 0);
+        assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId2), 0);
+
+        uint256 slashAmount1 = 750e6;
+        uint256 slashAmount2 = 300e6;
+
+        uint256[] memory claimIds = new uint256[](2);
+        uint256[] memory amounts = new uint256[](2);
+        claimIds[0] = claimId1;
+        claimIds[1] = claimId2;
+        amounts[0] = slashAmount1;
+        amounts[1] = slashAmount2;
+
+        _executeSlash(claimIds, amounts);
+
+        // Verify each claim has its correct slash amount
+        assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId1), slashAmount1);
+        assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId2), slashAmount2);
+    }
+
+    /// @notice Test claimTotalSlashAmount with slash coordinator (PendingSlash state)
+    function test_claimTotalSlashAmount_withSlashCoordinator() public {
+        MockSlashCoordinator mockCoordinator = new MockSlashCoordinator();
+        uint256 positionId = _setupSlashingPosition(1000e18, address(mockCoordinator), Refundable.None);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        uint256 slashAmount = 500e6;
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, slashAmount);
+
+        vm.startPrank(address(coverageAgent));
+        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts);
+        vm.stopPrank();
+
+        // Verify status is PendingSlash
+        assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.PendingSlash));
+
+        // Verify claimTotalSlashAmount is set even in PendingSlash state
+        assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId), slashAmount);
+
+        // Complete the slash via coordinator
+        mockCoordinator.setStatus(claimId, SlashStatus.Completed);
+        eigenCoverageProvider.completeSlash(claimId);
+
+        // Verify slash amount remains the same after completion
+        assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId), slashAmount);
+    }
+
+    /// @notice Fuzz test for claimTotalSlashAmount with various amounts
+    /// @param slashAmountBps The slash amount as percentage of claim amount in basis points (1-10000)
+    function testFuzz_claimTotalSlashAmount(uint256 slashAmountBps) public {
+        // Bound early to skip invalid cases before expensive setup
+        slashAmountBps = bound(slashAmountBps, 1, 10000);
+
+        uint256 positionId = _setupSlashingPosition(100e18);
+        uint256 claimAmount = 1000e6;
+        uint256 claimId = _createAndApproveClaim(positionId, claimAmount, 10e6);
+
+        // Calculate slash amount from basis points
+        uint256 slashAmount = (claimAmount * slashAmountBps) / 10000;
+        if (slashAmount == 0) slashAmount = 1; // Ensure at least 1 wei
+
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, slashAmount);
+        _executeSlash(claimIds, amounts, 15 days);
+
+        // Verify claimTotalSlashAmount returns the exact slash amount
+        assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId), slashAmount);
     }
 }
 

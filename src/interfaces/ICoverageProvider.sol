@@ -13,6 +13,7 @@ enum Refundable {
 
 struct CoveragePosition {
 
+
     /// @notice The address of the coverage agent that this position will cover.
     address coverageAgent;
 

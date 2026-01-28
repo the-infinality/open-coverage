@@ -9,8 +9,10 @@ import {
     Zap,
     Trash2,
     AlertTriangle,
+    ArrowRightLeft,
+    X,
 } from "lucide-react"
-import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useConfig } from "wagmi"
+import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useConfig, useAccount } from "wagmi"
 import { readContract } from "wagmi/actions"
 import { toast } from "sonner"
 import type { CoverageContract } from "@/types/contracts"
@@ -194,6 +196,17 @@ interface LoadedClaimData {
     claim: CoverageClaimData
     backing: bigint
     totalSlashAmount: bigint
+    coverageId: number
+}
+
+interface PendingCoverageRequest {
+    id: string // unique id for the request
+    providerAddress: Address
+    providerName: string
+    positionId: bigint
+    amount: bigint
+    duration: bigint
+    reward: bigint
 }
 
 /**
@@ -201,20 +214,16 @@ interface LoadedClaimData {
  */
 function ClaimItem({
     claimData,
-    isSelected,
-    onSelect,
-    onRemove,
     tokenDecimals,
     tokenSymbol,
+    totalSlashAmount,
 }: {
     claimData: LoadedClaimData
-    isSelected: boolean
-    onSelect: (selected: boolean) => void
-    onRemove: () => void
     tokenDecimals: number
+    totalSlashAmount: bigint
     tokenSymbol: string
 }) {
-    const { claim, claimId, providerAddress, backing, totalSlashAmount } = claimData
+    const { claim, claimId, providerAddress, backing } = claimData
     const statusInfo = CLAIM_STATUS_LABELS[claim.status] || {
         label: "Unknown",
         variant: "outline" as const,
@@ -223,28 +232,15 @@ function ClaimItem({
         BigInt(claim.createdAt) + BigInt(claim.duration) < BigInt(Math.floor(Date.now() / 1000))
     const expiryDate = new Date(Number(claim.createdAt + claim.duration) * 1000)
     const createdDate = new Date(Number(claim.createdAt) * 1000)
-    const canSlash = claim.status === 0 // Only issued claims can be slashed
 
     return (
         <div className="rounded-lg border p-4 space-y-3">
             <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    {canSlash && (
-                        <Checkbox
-                            checked={isSelected}
-                            onChange={(e) => onSelect(e.target.checked)}
-                            id={`claim-${claimId}`}
-                        />
-                    )}
-                    <div className="flex items-center gap-2">
-                        <Badge variant="outline">Claim #{claimId}</Badge>
-                        <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
-                        {isExpired && <Badge variant="destructive">Expired</Badge>}
-                    </div>
+                <div className="flex items-center gap-2">
+                    <Badge variant="outline">Claim #{claimId}</Badge>
+                    <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
+                    {isExpired && <Badge variant="destructive">Expired</Badge>}
                 </div>
-                <Button variant="ghost" size="sm" onClick={onRemove} title="Remove from list">
-                    <Trash2 className="size-4" />
-                </Button>
             </div>
 
             <div className="grid gap-2 text-sm">
@@ -307,11 +303,15 @@ function ClaimItem({
 /**
  * Slash Claims Dialog
  */
-function SlashClaimsDialog({
+/**
+ * Slash Coverage Dialog - slashes all claims in a coverage via the CoverageAgent
+ */
+function SlashCoverageDialog({
     open,
     onOpenChange,
-    selectedClaims,
-    providerAddress,
+    coverageId,
+    claims,
+    contractAddress,
     chainId,
     tokenDecimals,
     tokenSymbol,
@@ -319,40 +319,36 @@ function SlashClaimsDialog({
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
-    selectedClaims: LoadedClaimData[]
-    providerAddress: Address
+    coverageId: number | null
+    claims: LoadedClaimData[]
+    contractAddress: Address
     chainId: SupportedChainId | undefined
     tokenDecimals: number
     tokenSymbol: string
     onSuccess: () => void
 }) {
-    const [slashAmounts, setSlashAmounts] = useState<Record<number, string>>({})
     const { writeContract, isPending, data: hash } = useWriteContract()
     const { isLoading: isConfirming, isSuccess, isError: isReceiptError, error: receiptError } = useWaitForTransactionReceipt({ hash })
 
     const prevSuccessRef = useRef(false)
     const hasShownReceiptError = useRef<string>("")
 
-    // Initialize slash amounts when claims change
-    useEffect(() => {
-        const initialAmounts: Record<number, string> = {}
-        selectedClaims.forEach((c) => {
-            initialAmounts[c.claimId] = formatUnits(c.claim.amount, tokenDecimals)
-        })
-        setSlashAmounts(initialAmounts)
-    }, [selectedClaims, tokenDecimals])
+    // Calculate total slash amount
+    const totalAmount = useMemo(() => {
+        return claims.reduce((sum, c) => sum + c.claim.amount, 0n)
+    }, [claims])
 
     // Handle success
     useEffect(() => {
         if (isSuccess && !prevSuccessRef.current) {
-            toast.success("Claims slashed successfully!")
+            toast.success("Coverage slashed successfully!")
             onSuccess()
             onOpenChange(false)
         }
         prevSuccessRef.current = isSuccess
     }, [isSuccess, onSuccess, onOpenChange])
 
-    // Handle transaction receipt errors (transaction was mined but reverted)
+    // Handle transaction receipt errors
     useEffect(() => {
         if (isReceiptError && receiptError && hash && hasShownReceiptError.current !== hash) {
             hasShownReceiptError.current = hash
@@ -364,30 +360,358 @@ function SlashClaimsDialog({
     }, [isReceiptError, receiptError, hash])
 
     const handleSlash = () => {
-        const claimIds: bigint[] = []
-        const amounts: bigint[] = []
+        if (coverageId === null) return
 
-        for (const claim of selectedClaims) {
-            const amountStr = slashAmounts[claim.claimId]
+        writeContract(
+            {
+                address: contractAddress,
+                abi: iExampleCoverageAgentAbi,
+                functionName: "slashCoverage",
+                args: [BigInt(coverageId)],
+                chainId,
+            },
+            {
+                onSuccess: (hash) => {
+                    toast.success(`Slash transaction submitted: ${hash.slice(0, 10)}...`)
+                },
+                onError: (error) => {
+                    const decodedError = decodeContractError(error)
+                    toast.error(decodedError, {
+                        duration: 8000,
+                    })
+                },
+            }
+        )
+    }
+
+    if (coverageId === null) return null
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <Zap className="size-5 text-destructive" />
+                        Slash Coverage #{coverageId}
+                    </DialogTitle>
+                    <DialogDescription>
+                        This will slash all claims in this coverage. The slash amounts will be
+                        the full claim amounts for each claim.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4">
+                    {/* Summary */}
+                    <div className="rounded-lg border bg-destructive/10 p-4 space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Total Claims</span>
+                            <span className="font-medium">{claims.length}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Total Slash Amount</span>
+                            <span className="font-mono font-medium text-destructive">
+                                {formatUnits(totalAmount, tokenDecimals)} {tokenSymbol}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Claims List */}
+                    <div className="space-y-2">
+                        <h4 className="text-sm font-medium">Claims to be slashed:</h4>
+                        <ScrollArea className="max-h-[200px]">
+                            <div className="space-y-2">
+                                {claims.map((claimData) => (
+                                    <div
+                                        key={`${claimData.providerAddress}-${claimData.claimId}`}
+                                        className="flex items-center justify-between rounded-md border bg-muted/30 p-2 text-sm"
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <Badge variant="outline" className="font-mono text-xs">
+                                                Claim #{claimData.claimId}
+                                            </Badge>
+                                            <span className="text-xs text-muted-foreground">
+                                                Position {claimData.claim.positionId.toString()}
+                                            </span>
+                                        </div>
+                                        <span className="font-mono text-destructive">
+                                            {formatUnits(claimData.claim.amount, tokenDecimals)} {tokenSymbol}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </ScrollArea>
+                    </div>
+                </div>
+
+                <DialogFooter>
+                    <Button
+                        variant="outline"
+                        onClick={() => onOpenChange(false)}
+                        disabled={isPending || isConfirming}
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="destructive"
+                        onClick={handleSlash}
+                        disabled={isPending || isConfirming || claims.length === 0}
+                    >
+                        {isPending || isConfirming ? (
+                            <Loader2 className="mr-2 size-4 animate-spin" />
+                        ) : (
+                            <Zap className="mr-2 size-4" />
+                        )}
+                        {isPending
+                            ? "Confirm in wallet..."
+                            : isConfirming
+                              ? "Slashing..."
+                              : "Slash Coverage"}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+/**
+ * Convert Coverage Dialog
+ */
+function ConvertCoverageDialog({
+    open,
+    onOpenChange,
+    coverageId,
+    claims,
+    contractAddress,
+    assetAddress,
+    chainId,
+    tokenDecimals,
+    tokenSymbol,
+    onSuccess,
+}: {
+    open: boolean
+    onOpenChange: (open: boolean) => void
+    coverageId: number | null
+    claims: LoadedClaimData[]
+    contractAddress: Address
+    assetAddress: Address | undefined
+    chainId: SupportedChainId | undefined
+    tokenDecimals: number
+    tokenSymbol: string
+    onSuccess: () => void
+}) {
+    const { address: userAddress } = useAccount()
+    const [convertAmounts, setConvertAmounts] = useState<Record<number, string>>({})
+    const [convertDurations, setConvertDurations] = useState<Record<number, string>>({})
+    const [convertRewards, setConvertRewards] = useState<Record<number, string>>({})
+    const [isApproving, setIsApproving] = useState(false)
+    
+    const { writeContract, isPending, data: hash, reset: resetWrite } = useWriteContract()
+    const { isLoading: isConfirming, isSuccess, isError: isReceiptError, error: receiptError } = useWaitForTransactionReceipt({ hash })
+
+    // Fetch user's token balance
+    const { data: userBalance } = useReadContract({
+        address: assetAddress,
+        abi: ierc20Abi,
+        functionName: "balanceOf",
+        args: userAddress ? [userAddress] : undefined,
+        chainId,
+        query: {
+            enabled: !!assetAddress && !!userAddress && !!chainId && open,
+        },
+    })
+
+    // Fetch current allowance
+    const { data: currentAllowance, refetch: refetchAllowance } = useReadContract({
+        address: assetAddress,
+        abi: ierc20Abi,
+        functionName: "allowance",
+        args: userAddress ? [userAddress, contractAddress] : undefined,
+        chainId,
+        query: {
+            enabled: !!assetAddress && !!userAddress && !!chainId && open,
+        },
+    })
+
+    const prevSuccessRef = useRef(false)
+    const hasShownReceiptError = useRef<string>("")
+
+    // Calculate total reward from form inputs
+    const totalReward = useMemo(() => {
+        let total = 0n
+        for (const claim of claims) {
+            const rewardStr = convertRewards[claim.claimId]
+            if (rewardStr && parseFloat(rewardStr) > 0) {
+                total += BigInt(Math.floor(parseFloat(rewardStr) * 10 ** tokenDecimals))
+            }
+        }
+        return total
+    }, [claims, convertRewards, tokenDecimals])
+
+    // Check if approval is needed
+    const needsApproval = useMemo(() => {
+        if (!currentAllowance) return true
+        return (currentAllowance as bigint) < totalReward
+    }, [currentAllowance, totalReward])
+
+    // Check if user has sufficient balance
+    const hasSufficientBalance = useMemo(() => {
+        if (!userBalance) return false
+        return (userBalance as bigint) >= totalReward
+    }, [userBalance, totalReward])
+
+    // Initialize amounts when claims change
+    useEffect(() => {
+        const initialAmounts: Record<number, string> = {}
+        const initialDurations: Record<number, string> = {}
+        const initialRewards: Record<number, string> = {}
+        claims.forEach((c) => {
+            initialAmounts[c.claimId] = formatUnits(c.claim.amount, tokenDecimals)
+            initialDurations[c.claimId] = Math.round(Number(c.claim.duration) / 86400).toString()
+            initialRewards[c.claimId] = formatUnits(c.claim.reward, tokenDecimals)
+        })
+        setConvertAmounts(initialAmounts)
+        setConvertDurations(initialDurations)
+        setConvertRewards(initialRewards)
+    }, [claims, tokenDecimals])
+
+    // Handle success - either approval or convert
+    useEffect(() => {
+        if (isSuccess && !prevSuccessRef.current) {
+            if (isApproving) {
+                toast.success("Approval successful! You can now convert.")
+                setIsApproving(false)
+                resetWrite()
+                // Refetch allowance after approval
+                refetchAllowance()
+            } else {
+                toast.success("Coverage converted successfully!")
+                onSuccess()
+                onOpenChange(false)
+            }
+        }
+        prevSuccessRef.current = isSuccess
+    }, [isSuccess, isApproving, onSuccess, onOpenChange, refetchAllowance, resetWrite])
+
+    // Handle transaction receipt errors
+    useEffect(() => {
+        if (isReceiptError && receiptError && hash && hasShownReceiptError.current !== hash) {
+            hasShownReceiptError.current = hash
+            const decodedError = decodeContractError(receiptError)
+            toast.error(`Transaction failed: ${decodedError}`, {
+                duration: 10000,
+            })
+            setIsApproving(false)
+        }
+    }, [isReceiptError, receiptError, hash])
+
+    // Reset state when dialog closes
+    useEffect(() => {
+        if (!open) {
+            setIsApproving(false)
+            prevSuccessRef.current = false
+            hasShownReceiptError.current = ""
+        }
+    }, [open])
+
+    const handleApprove = () => {
+        if (!assetAddress) return
+
+        setIsApproving(true)
+        writeContract(
+            {
+                address: assetAddress,
+                abi: ierc20Abi,
+                functionName: "approve",
+                args: [contractAddress, totalReward],
+                chainId,
+            },
+            {
+                onSuccess: (hash) => {
+                    toast.success(`Approval submitted: ${hash.slice(0, 10)}...`)
+                },
+                onError: (error) => {
+                    setIsApproving(false)
+                    const decodedError = decodeContractError(error)
+                    toast.error(decodedError, {
+                        duration: 8000,
+                    })
+                },
+            }
+        )
+    }
+
+    const handleConvert = () => {
+        if (coverageId === null) return
+
+        // Check balance first
+        if (!hasSufficientBalance) {
+            toast.error("Insufficient balance to pay the total reward")
+            return
+        }
+
+        // Check allowance
+        if (needsApproval) {
+            toast.error("Please approve the token transfer first")
+            return
+        }
+
+        const requests: Array<{
+            coverageProvider: Address
+            positionId: bigint
+            amount: bigint
+            duration: bigint
+            reward: bigint
+        }> = []
+
+        for (const claim of claims) {
+            const amountStr = convertAmounts[claim.claimId]
+            const durationStr = convertDurations[claim.claimId]
+            const rewardStr = convertRewards[claim.claimId]
+
             if (!amountStr || parseFloat(amountStr) <= 0) {
                 toast.error(`Please enter a valid amount for claim #${claim.claimId}`)
                 return
             }
-            const amount = BigInt(Math.floor(parseFloat(amountStr) * 10 ** tokenDecimals))
-            if (amount > claim.claim.amount) {
-                toast.error(`Slash amount for claim #${claim.claimId} exceeds claim amount`)
+            if (!durationStr || parseFloat(durationStr) <= 0) {
+                toast.error(`Please enter a valid duration for claim #${claim.claimId}`)
                 return
             }
-            claimIds.push(BigInt(claim.claimId))
-            amounts.push(amount)
+            if (!rewardStr || parseFloat(rewardStr) < 0) {
+                toast.error(`Please enter a valid reward for claim #${claim.claimId}`)
+                return
+            }
+
+            const amount = BigInt(Math.floor(parseFloat(amountStr) * 10 ** tokenDecimals))
+            const duration = BigInt(Math.floor(parseFloat(durationStr) * 86400)) // days to seconds
+            const reward = BigInt(Math.floor(parseFloat(rewardStr) * 10 ** tokenDecimals))
+
+            // Check amount doesn't exceed reserved
+            if (amount > claim.claim.amount) {
+                toast.error(`Amount for claim #${claim.claimId} exceeds reserved amount`)
+                return
+            }
+
+            // Check duration doesn't exceed reserved
+            if (duration > claim.claim.duration) {
+                toast.error(`Duration for claim #${claim.claimId} exceeds reserved duration`)
+                return
+            }
+
+            requests.push({
+                coverageProvider: claim.providerAddress,
+                positionId: claim.claim.positionId,
+                amount,
+                duration,
+                reward,
+            })
         }
 
         writeContract(
             {
-                address: providerAddress,
-                abi: iCoverageProviderAbi,
-                functionName: "slashClaims",
-                args: [claimIds, amounts],
+                address: contractAddress,
+                abi: iExampleCoverageAgentAbi,
+                functionName: "convertReservedCoverage",
+                args: [BigInt(coverageId), requests],
                 chainId,
             },
             {
@@ -404,27 +728,88 @@ function SlashClaimsDialog({
         )
     }
 
-    const updateSlashAmount = (claimId: number, value: string) => {
-        setSlashAmounts((prev) => ({ ...prev, [claimId]: value }))
+    const updateAmount = (claimId: number, value: string) => {
+        setConvertAmounts((prev) => ({ ...prev, [claimId]: value }))
     }
+
+    const updateDuration = (claimId: number, value: string) => {
+        setConvertDurations((prev) => ({ ...prev, [claimId]: value }))
+    }
+
+    const updateReward = (claimId: number, value: string) => {
+        setConvertRewards((prev) => ({ ...prev, [claimId]: value }))
+    }
+
+    if (coverageId === null) return null
+
+    const isProcessing = isPending || isConfirming
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-2xl">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <Zap className="size-5 text-destructive" />
-                        Slash Claims
+                        <ArrowRightLeft className="size-5 text-primary" />
+                        Convert Reserved Coverage #{coverageId}
                     </DialogTitle>
                     <DialogDescription>
-                        Configure slash amounts for each selected claim. The slash will be executed
-                        on the coverage provider contract.
+                        Convert your reserved coverage to issued coverage. You can adjust the amount,
+                        duration, and reward for each claim (must be less than or equal to reserved values).
                     </DialogDescription>
                 </DialogHeader>
 
-                <ScrollArea className="max-h-[400px]">
+                {/* Balance and Allowance Info */}
+                <div className="rounded-lg border bg-muted/50 p-3 space-y-2">
+                    <div className="grid gap-2 text-sm">
+                        <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Your Balance</span>
+                            <span className={`font-mono ${!hasSufficientBalance && totalReward > 0n ? "text-destructive" : ""}`}>
+                                {userBalance !== undefined
+                                    ? `${formatUnits(userBalance as bigint, tokenDecimals)} ${tokenSymbol}`
+                                    : "Loading..."}
+                            </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Current Allowance</span>
+                            <span className={`font-mono ${needsApproval && totalReward > 0n ? "text-amber-600" : "text-green-600"}`}>
+                                {currentAllowance !== undefined
+                                    ? `${formatUnits(currentAllowance as bigint, tokenDecimals)} ${tokenSymbol}`
+                                    : "Loading..."}
+                            </span>
+                        </div>
+                        <Separator />
+                        <div className="flex items-center justify-between font-medium">
+                            <span>Total Reward Required</span>
+                            <span className="font-mono">
+                                {formatUnits(totalReward, tokenDecimals)} {tokenSymbol}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Warning messages */}
+                    {!hasSufficientBalance && totalReward > 0n && (
+                        <div className="flex items-center gap-2 text-sm text-destructive mt-2">
+                            <AlertTriangle className="size-4" />
+                            <span>Insufficient balance to pay the total reward</span>
+                        </div>
+                    )}
+                    {hasSufficientBalance && needsApproval && totalReward > 0n && (
+                        <div className="flex items-center gap-2 text-sm text-amber-600 mt-2">
+                            <AlertTriangle className="size-4" />
+                            <span>Token approval required before converting</span>
+                        </div>
+                    )}
+                    {hasSufficientBalance && !needsApproval && totalReward > 0n && (
+                        <div className="flex items-center gap-2 text-sm text-green-600 mt-2">
+                            <CheckCircle2 className="size-4" />
+                            <span>Sufficient balance and allowance</span>
+                        </div>
+                    )}
+                </div>
+
+                <ScrollArea className="max-h-[350px]">
                     <div className="space-y-4">
-                        {selectedClaims.map((claimData) => (
+                        {claims.map((claimData) => (
                             <div
                                 key={claimData.claimId}
                                 className="rounded-lg border p-4 space-y-3"
@@ -442,18 +827,22 @@ function SlashClaimsDialog({
                                         </span>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground">Claim Amount</span>
+                                        <span className="text-muted-foreground">Reserved Amount</span>
                                         <span className="font-mono">
                                             {formatUnits(claimData.claim.amount, tokenDecimals)}{" "}
                                             {tokenSymbol}
                                         </span>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground">Backing</span>
-                                        <span
-                                            className={`font-mono ${claimData.backing < 0n ? "text-destructive" : "text-green-600"}`}
-                                        >
-                                            {formatUnits(claimData.backing, tokenDecimals)}{" "}
+                                        <span className="text-muted-foreground">Reserved Duration</span>
+                                        <span className="font-mono">
+                                            {Math.round(Number(claimData.claim.duration) / 86400)} days
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-muted-foreground">Reserved Reward</span>
+                                        <span className="font-mono">
+                                            {formatUnits(claimData.claim.reward, tokenDecimals)}{" "}
                                             {tokenSymbol}
                                         </span>
                                     </div>
@@ -461,68 +850,133 @@ function SlashClaimsDialog({
 
                                 <Separator />
 
-                                <div className="space-y-2">
-                                    <Label htmlFor={`slash-amount-${claimData.claimId}`}>
-                                        Slash Amount ({tokenSymbol})
-                                    </Label>
-                                    <Input
-                                        id={`slash-amount-${claimData.claimId}`}
-                                        type="number"
-                                        step="any"
-                                        placeholder={`Max: ${formatUnits(claimData.claim.amount, tokenDecimals)}`}
-                                        value={slashAmounts[claimData.claimId] || ""}
-                                        onChange={(e) =>
-                                            updateSlashAmount(claimData.claimId, e.target.value)
-                                        }
-                                        className="font-mono"
-                                        disabled={isPending || isConfirming}
-                                    />
-                                    <div className="flex justify-end gap-2">
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() =>
-                                                updateSlashAmount(
-                                                    claimData.claimId,
-                                                    formatUnits(
-                                                        claimData.claim.amount,
-                                                        tokenDecimals
-                                                    )
-                                                )
+                                <div className="grid gap-3 md:grid-cols-3">
+                                    <div className="space-y-2">
+                                        <Label htmlFor={`convert-amount-${claimData.claimId}`}>
+                                            Amount ({tokenSymbol})
+                                        </Label>
+                                        <Input
+                                            id={`convert-amount-${claimData.claimId}`}
+                                            type="number"
+                                            step="any"
+                                            placeholder={`Max: ${formatUnits(claimData.claim.amount, tokenDecimals)}`}
+                                            value={convertAmounts[claimData.claimId] || ""}
+                                            onChange={(e) =>
+                                                updateAmount(claimData.claimId, e.target.value)
                                             }
-                                        >
-                                            Max
-                                        </Button>
+                                            className="font-mono"
+                                            disabled={isProcessing}
+                                        />
                                     </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor={`convert-duration-${claimData.claimId}`}>
+                                            Duration (days)
+                                        </Label>
+                                        <Input
+                                            id={`convert-duration-${claimData.claimId}`}
+                                            type="number"
+                                            placeholder={`Max: ${Math.round(Number(claimData.claim.duration) / 86400)}`}
+                                            value={convertDurations[claimData.claimId] || ""}
+                                            onChange={(e) =>
+                                                updateDuration(claimData.claimId, e.target.value)
+                                            }
+                                            className="font-mono"
+                                            disabled={isProcessing}
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor={`convert-reward-${claimData.claimId}`}>
+                                            Reward ({tokenSymbol})
+                                        </Label>
+                                        <Input
+                                            id={`convert-reward-${claimData.claimId}`}
+                                            type="number"
+                                            step="any"
+                                            placeholder="Enter reward..."
+                                            value={convertRewards[claimData.claimId] || ""}
+                                            onChange={(e) =>
+                                                updateReward(claimData.claimId, e.target.value)
+                                            }
+                                            className="font-mono"
+                                            disabled={isProcessing}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-end gap-2">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                            updateAmount(
+                                                claimData.claimId,
+                                                formatUnits(claimData.claim.amount, tokenDecimals)
+                                            )
+                                            updateDuration(
+                                                claimData.claimId,
+                                                Math.round(Number(claimData.claim.duration) / 86400).toString()
+                                            )
+                                            updateReward(
+                                                claimData.claimId,
+                                                formatUnits(claimData.claim.reward, tokenDecimals)
+                                            )
+                                        }}
+                                        disabled={isProcessing}
+                                    >
+                                        Use Reserved Values
+                                    </Button>
                                 </div>
                             </div>
                         ))}
                     </div>
                 </ScrollArea>
 
-                <DialogFooter>
+                <DialogFooter className="flex-col sm:flex-row gap-2">
                     <Button
                         variant="outline"
                         onClick={() => onOpenChange(false)}
-                        disabled={isPending || isConfirming}
+                        disabled={isProcessing}
                     >
                         Cancel
                     </Button>
+                    
+                    {/* Approve Button - show when approval is needed */}
+                    {needsApproval && totalReward > 0n && (
+                        <Button
+                            variant="secondary"
+                            onClick={handleApprove}
+                            disabled={isProcessing || !hasSufficientBalance || claims.length === 0}
+                        >
+                            {isProcessing && isApproving ? (
+                                <Loader2 className="mr-2 size-4 animate-spin" />
+                            ) : (
+                                <CheckCircle2 className="mr-2 size-4" />
+                            )}
+                            {isProcessing && isApproving
+                                ? isPending
+                                    ? "Confirm in wallet..."
+                                    : "Approving..."
+                                : `Approve ${formatUnits(totalReward, tokenDecimals)} ${tokenSymbol}`}
+                        </Button>
+                    )}
+
+                    {/* Convert Button */}
                     <Button
-                        variant="destructive"
-                        onClick={handleSlash}
-                        disabled={isPending || isConfirming || selectedClaims.length === 0}
+                        onClick={handleConvert}
+                        disabled={isProcessing || claims.length === 0 || needsApproval || !hasSufficientBalance || totalReward === 0n}
                     >
-                        {isPending || isConfirming ? (
+                        {isProcessing && !isApproving ? (
                             <Loader2 className="mr-2 size-4 animate-spin" />
                         ) : (
-                            <Zap className="mr-2 size-4" />
+                            <ArrowRightLeft className="mr-2 size-4" />
                         )}
-                        {isPending
-                            ? "Confirm in wallet..."
-                            : isConfirming
-                              ? "Slashing..."
-                              : `Slash ${selectedClaims.length} Claim${selectedClaims.length > 1 ? "s" : ""}`}
+                        {isProcessing && !isApproving
+                            ? isPending
+                                ? "Confirm in wallet..."
+                                : "Converting..."
+                            : "Convert Coverage"}
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -545,6 +999,7 @@ function CoverageClaimsManagement({
     savedContractsMap: Map<string, CoverageContract>
 }) {
     const config = useConfig()
+    const { address: userAddress } = useAccount()
 
     // Convert registered provider addresses to contracts for the select
     const registeredProviderContracts = useMemo(() => {
@@ -566,24 +1021,27 @@ function CoverageClaimsManagement({
     const [isLoadingMaxAmount, setIsLoadingMaxAmount] = useState(false)
     const [isReservation, setIsReservation] = useState(false)
 
-    // Claims viewing state
+    // Pending coverage requests (multi-position support)
+    const [pendingRequests, setPendingRequests] = useState<PendingCoverageRequest[]>([])
+
+    // Coverage viewing state
     const [loadedClaims, setLoadedClaims] = useState<LoadedClaimData[]>([])
-    const [newClaimId, setNewClaimId] = useState("")
-    const [loadClaimProviderId, setLoadClaimProviderId] = useState("")
-    const [isLoadingClaim, setIsLoadingClaim] = useState(false)
+    const [newCoverageId, setNewCoverageId] = useState("")
+    const [isLoadingCoverage, setIsLoadingCoverage] = useState(false)
+    const [loadedCoverageIds, setLoadedCoverageIds] = useState<Set<number>>(new Set())
+    const [reservationCoverageIds, setReservationCoverageIds] = useState<Set<number>>(new Set())
+
+    // Convert coverage dialog state
+    const [convertDialogOpen, setConvertDialogOpen] = useState(false)
+    const [convertCoverageId, setConvertCoverageId] = useState<number | null>(null)
+
+    // Slash coverage dialog state
+    const [slashDialogOpen, setSlashDialogOpen] = useState(false)
+    const [slashCoverageId, setSlashCoverageId] = useState<number | null>(null)
 
     // Get selected provider addresses from contract IDs
     const selectedProvider = getSelectedProvider(selectedProviderId, registeredProviderContracts)
     const selectedProviderAddress = selectedProvider?.address ?? ""
-    const loadClaimProviderContract = getSelectedProvider(
-        loadClaimProviderId,
-        registeredProviderContracts
-    )
-    const loadClaimProviderAddress = loadClaimProviderContract?.address ?? ""
-
-    // Slashing state
-    const [selectedClaimIds, setSelectedClaimIds] = useState<Set<number>>(new Set())
-    const [slashDialogOpen, setSlashDialogOpen] = useState(false)
 
     // Token info
     const [tokenDecimals, setTokenDecimals] = useState(18)
@@ -627,8 +1085,56 @@ function CoverageClaimsManagement({
         if (symbol) setTokenSymbol(symbol as string)
     }, [decimals, symbol])
 
+    // Fetch user's token balance for purchase
+    const { data: userBalance } = useReadContract({
+        address: assetAddress as Address,
+        abi: ierc20Abi,
+        functionName: "balanceOf",
+        args: userAddress ? [userAddress] : undefined,
+        chainId,
+        query: {
+            enabled: !!assetAddress && !!userAddress && !!chainId,
+        },
+    })
+
+    // Fetch current allowance for purchase
+    const { data: currentAllowance, refetch: refetchAllowance } = useReadContract({
+        address: assetAddress as Address,
+        abi: ierc20Abi,
+        functionName: "allowance",
+        args: userAddress ? [userAddress, contract.address] : undefined,
+        chainId,
+        query: {
+            enabled: !!assetAddress && !!userAddress && !!chainId,
+        },
+    })
+
+    // Calculate total reward amount from all pending requests
+    const totalPendingReward = useMemo(() => {
+        return pendingRequests.reduce((sum, req) => sum + req.reward, 0n)
+    }, [pendingRequests])
+
+    // Check if approval is needed for pending list purchase (only when not a reservation)
+    const purchaseNeedsApproval = useMemo(() => {
+        if (isReservation) return false // Reservations don't need approval
+        if (pendingRequests.length === 0) return false
+        if (!currentAllowance) return true
+        return (currentAllowance as bigint) < totalPendingReward
+    }, [currentAllowance, totalPendingReward, isReservation, pendingRequests.length])
+
+    // Check if user has sufficient balance for pending list purchase
+    const purchaseHasSufficientBalance = useMemo(() => {
+        if (isReservation) return true // Reservations don't need balance
+        if (pendingRequests.length === 0) return true
+        if (!userBalance) return false
+        return (userBalance as bigint) >= totalPendingReward
+    }, [userBalance, totalPendingReward, isReservation, pendingRequests.length])
+
+    // Approval state for purchase
+    const [isApprovingPurchase, setIsApprovingPurchase] = useState(false)
+
     // Write contract hooks for claiming coverage
-    const { writeContract, isPending, data: hash } = useWriteContract()
+    const { writeContract, isPending, data: hash, reset: resetPurchaseWrite } = useWriteContract()
     const {
         isLoading: isConfirming,
         isSuccess,
@@ -648,15 +1154,16 @@ function CoverageClaimsManagement({
             toast.error(`Transaction failed: ${decodedError}`, {
                 duration: 10000,
             })
+            setIsApprovingPurchase(false)
         }
     }, [isReceiptError, receiptError, hash])
 
-    // Load claim function wrapped in useCallback for use in effects
+    // Load a single claim from a provider
     const loadClaim = useCallback(
-        async (claimId: number, providerAddress: string) => {
-            if (!chainId) return
+        async (claimId: number, providerAddress: string, coverageId: number): Promise<boolean> => {
+            console.log(claimId, providerAddress, coverageId, chainId)
+            if (!chainId) return false
 
-            setIsLoadingClaim(true)
             try {
                 const [claim, backing, totalSlashAmount] = await Promise.all([
                     readContract(config, {
@@ -681,13 +1188,13 @@ function CoverageClaimsManagement({
                         chainId,
                     }),
                 ])
+                console.log(claim, backing)
 
                 const claimData = claim as CoverageClaimData
 
-                // Check if claim exists (has non-zero amount or duration)
-                if (claimData.amount === 0n && claimData.duration === 0n) {
-                    toast.error(`Claim #${claimId} does not exist`)
-                    return
+                // Check if claim exists (createdAt would be 0 for non-existent claims)
+                if (claimData.createdAt === 0n) {
+                    return false
                 }
 
                 setLoadedClaims((prev) => {
@@ -707,17 +1214,85 @@ function CoverageClaimsManagement({
                             claim: claimData,
                             backing: backing as bigint,
                             totalSlashAmount: totalSlashAmount as bigint,
+                            coverageId,
                         },
                     ]
                 })
-                toast.success(`Claim #${claimId} loaded`)
-            } catch {
-                toast.error(`Failed to fetch claim #${claimId}`)
-            } finally {
-                setIsLoadingClaim(false)
+                return true
+            } catch (error) {
+                console.error("Error loading claim:", error)
+                toast.error(`Failed to load claim #${claimId}`)
+                return false
             }
         },
         [chainId, config]
+    )
+
+    // Load coverage and all its claims
+    const loadCoverage = useCallback(
+        async (coverageId: number) => {
+            if (!chainId) return
+
+            // Check if already loaded
+            if (loadedCoverageIds.has(coverageId)) {
+                toast.error(`Coverage #${coverageId} is already loaded`)
+                return
+            }
+
+            setIsLoadingCoverage(true)
+            try {
+                const coverageData = await readContract(config, {
+                    address: contract.address,
+                    abi: iCoverageAgentAbi,
+                    functionName: "coverage",
+                    args: [BigInt(coverageId)],
+                    chainId,
+                })
+
+                const coverage = coverageData as {
+                    claims: Array<{
+                        coverageProvider: Address
+                        claimId: bigint
+                    }>
+                    reservation: boolean
+                }
+
+                if (!coverage.claims || coverage.claims.length === 0) {
+                    toast.error(`Coverage #${coverageId} has no claims or does not exist`)
+                    return
+                }
+
+                // Load all claims from this coverage
+                let loadedCount = 0
+                for (const claim of coverage.claims) {
+                    const success = await loadClaim(
+                        Number(claim.claimId),
+                        claim.coverageProvider,
+                        coverageId
+                    )
+                    if (success) loadedCount++
+                }
+
+                if (loadedCount > 0) {
+                    setLoadedCoverageIds((prev) => new Set([...prev, coverageId]))
+                    // Track if this coverage is a reservation
+                    if (coverage.reservation) {
+                        setReservationCoverageIds((prev) => new Set([...prev, coverageId]))
+                    }
+                    toast.success(
+                        `Coverage #${coverageId} loaded with ${loadedCount} claim${loadedCount > 1 ? "s" : ""}${coverage.reservation ? " (Reservation)" : ""}`
+                    )
+                } else {
+                    toast.error(`Could not load any claims for coverage #${coverageId}`)
+                }
+            } catch (error) {
+                console.error("Error loading coverage:", error)
+                toast.error(`Failed to fetch coverage #${coverageId}`)
+            } finally {
+                setIsLoadingCoverage(false)
+            }
+        },
+        [chainId, config, contract.address, loadClaim, loadedCoverageIds]
     )
 
     // Fetch max amount when provider and position are selected
@@ -752,6 +1327,15 @@ function CoverageClaimsManagement({
     // Parse coverage ID from transaction logs when coverage is purchased successfully
     useEffect(() => {
         if (isSuccess && receipt && !prevCreateSuccessRef.current) {
+            // Check if this was an approval transaction
+            if (isApprovingPurchase) {
+                toast.success("Approval successful! You can now purchase coverage.")
+                setIsApprovingPurchase(false)
+                resetPurchaseWrite()
+                refetchAllowance()
+                return
+            }
+            
             const loadCoverageClaimsAsync = async () => {
                 try {
                     // Find the CoverageClaimed event in the logs
@@ -771,32 +1355,8 @@ function CoverageClaimsManagement({
                                 const coverageId = Number(decoded.args.coverageId)
                                 toast.success(`Coverage #${coverageId} purchased successfully!`)
 
-                                // Fetch the coverage to get the claims
-                                if (chainId) {
-                                    try {
-                                        const coverageData = await readContract(config, {
-                                            address: contract.address,
-                                            abi: iCoverageAgentAbi,
-                                            functionName: "coverage",
-                                            args: [BigInt(coverageId)],
-                                            chainId,
-                                        })
-
-                                        // Load each claim from the coverage
-                                        const coverage = coverageData as {
-                                            claims: Array<{
-                                                coverageProvider: Address
-                                                claimId: bigint
-                                            }>
-                                            reservation: boolean
-                                        }
-                                        for (const claim of coverage.claims) {
-                                            loadClaim(Number(claim.claimId), claim.coverageProvider)
-                                        }
-                                    } catch (error) {
-                                        console.error("Error fetching coverage:", error)
-                                    }
-                                }
+                                // Load the coverage and its claims
+                                await loadCoverage(coverageId)
                                 break
                             }
                         } catch {
@@ -806,56 +1366,81 @@ function CoverageClaimsManagement({
                 } catch (error) {
                     console.error("Error parsing coverage creation logs:", error)
                 }
-                // Reset form
+                // Reset form and clear pending requests
                 setPositionId("")
                 setClaimAmount("")
                 setClaimDuration("30")
                 setClaimReward("")
                 setPositionMaxAmount(null)
+                setPendingRequests([])
             }
             loadCoverageClaimsAsync()
         }
         prevCreateSuccessRef.current = isSuccess
-    }, [isSuccess, receipt, loadClaim, chainId, config, contract.address])
+    }, [isSuccess, receipt, loadCoverage, isApprovingPurchase, resetPurchaseWrite, refetchAllowance])
 
-    const handleAddClaim = async () => {
-        const id = Number(newClaimId)
+    const handleAddCoverage = async () => {
+        const id = Number(newCoverageId)
         if (isNaN(id) || id < 0) {
-            toast.error("Please enter a valid claim ID")
+            toast.error("Please enter a valid coverage ID")
             return
         }
-        if (!loadClaimProviderAddress) {
-            toast.error("Please select a coverage provider")
-            return
-        }
-        await loadClaim(id, loadClaimProviderAddress)
-        setNewClaimId("")
+        await loadCoverage(id)
+        setNewCoverageId("")
     }
 
-    const handleRemoveClaim = (claimId: number, providerAddress: Address) => {
-        setLoadedClaims((prev) =>
-            prev.filter((c) => !(c.claimId === claimId && c.providerAddress === providerAddress))
-        )
-        setSelectedClaimIds((prev) => {
-            const next = new Set(prev)
-            next.delete(claimId)
-            return next
-        })
-    }
-
-    const handleToggleClaimSelection = (claimId: number, selected: boolean) => {
-        setSelectedClaimIds((prev) => {
-            const next = new Set(prev)
-            if (selected) {
-                next.add(claimId)
-            } else {
-                next.delete(claimId)
+    const handleRemoveClaim = (claimId: number, providerAddress: Address, coverageId: number) => {
+        setLoadedClaims((prev) => {
+            const newClaims = prev.filter(
+                (c) => !(c.claimId === claimId && c.providerAddress === providerAddress)
+            )
+            // Check if any claims from this coverage remain
+            const hasRemainingClaims = newClaims.some((c) => c.coverageId === coverageId)
+            if (!hasRemainingClaims) {
+                setLoadedCoverageIds((prevIds) => {
+                    const next = new Set(prevIds)
+                    next.delete(coverageId)
+                    return next
+                })
+                setReservationCoverageIds((prevIds) => {
+                    const next = new Set(prevIds)
+                    next.delete(coverageId)
+                    return next
+                })
             }
-            return next
+            return newClaims
         })
     }
 
-    const handleCreateClaim = () => {
+
+    const handleApprovePurchase = () => {
+        if (!assetAddress || pendingRequests.length === 0) return
+
+        setIsApprovingPurchase(true)
+        writeContract(
+            {
+                address: assetAddress as Address,
+                abi: ierc20Abi,
+                functionName: "approve",
+                args: [contract.address, totalPendingReward],
+                chainId,
+            },
+            {
+                onSuccess: (hash) => {
+                    toast.success(`Approval submitted: ${hash.slice(0, 10)}...`)
+                },
+                onError: (error) => {
+                    setIsApprovingPurchase(false)
+                    const decodedError = decodeContractError(error)
+                    toast.error(decodedError, {
+                        duration: 8000,
+                    })
+                },
+            }
+        )
+    }
+
+    const handleAddToList = () => {
         if (
             !selectedProviderAddress ||
             !positionId ||
@@ -871,14 +1456,68 @@ function CoverageClaimsManagement({
         const duration = BigInt(Number(claimDuration) * 24 * 60 * 60) // days to seconds
         const reward = BigInt(Math.floor(parseFloat(claimReward) * 10 ** tokenDecimals))
 
-        // Create the ClaimCoverageRequest struct
-        const request = {
-            coverageProvider: selectedProviderAddress as Address,
+        // Check amount doesn't exceed max
+        if (positionMaxAmount !== null && amount > positionMaxAmount) {
+            toast.error("Amount exceeds position max amount")
+            return
+        }
+
+        const newRequest: PendingCoverageRequest = {
+            id: `${selectedProviderAddress}-${positionId}-${Date.now()}`,
+            providerAddress: selectedProviderAddress as Address,
+            providerName: selectedProvider?.name || "Unknown Provider",
             positionId: BigInt(positionId),
             amount,
-            reward,
             duration,
+            reward,
         }
+
+        setPendingRequests((prev) => [...prev, newRequest])
+
+        // Reset form fields (except provider and reservation toggle)
+        setPositionId("")
+        setClaimAmount("")
+        setClaimDuration("30")
+        setClaimReward("")
+        setPositionMaxAmount(null)
+
+        toast.success("Coverage request added to list")
+    }
+
+    const handleRemoveFromList = (requestId: string) => {
+        setPendingRequests((prev) => prev.filter((r) => r.id !== requestId))
+    }
+
+    const handleClearList = () => {
+        setPendingRequests([])
+    }
+
+    const handleSubmitCoverage = () => {
+        if (pendingRequests.length === 0) {
+            toast.error("No coverage requests to submit")
+            return
+        }
+
+        // For non-reservation purchases, check balance and allowance
+        if (!isReservation) {
+            if (!purchaseHasSufficientBalance) {
+                toast.error("Insufficient balance to pay the total reward")
+                return
+            }
+            if (purchaseNeedsApproval) {
+                toast.error("Please approve the token transfer first")
+                return
+            }
+        }
+
+        // Convert pending requests to contract format
+        const requests = pendingRequests.map((req) => ({
+            coverageProvider: req.providerAddress,
+            positionId: req.positionId,
+            amount: req.amount,
+            reward: req.reward,
+            duration: req.duration,
+        }))
 
         // Use reserveCoverage if isReservation is true, otherwise use purchaseCoverage
         const successMessage = isReservation
@@ -890,7 +1529,7 @@ function CoverageClaimsManagement({
                 address: contract.address,
                 abi: iExampleCoverageAgentAbi,
                 functionName: isReservation ? "reserveCoverage" : "purchaseCoverage",
-                args: [[request]],
+                args: [requests],
                 chainId,
             },
             {
@@ -907,29 +1546,51 @@ function CoverageClaimsManagement({
         )
     }
 
-    // Get selected claims for slashing - only from the same provider
-    const selectedClaimsForSlash = useMemo(() => {
-        const selectedClaims = loadedClaims.filter(
-            (c) => selectedClaimIds.has(c.claimId) && c.claim.status === 0 // Only issued claims
-        )
-        // Group by provider - we can only slash claims from one provider at a time
-        if (selectedClaims.length === 0) return []
-        const firstProvider = selectedClaims[0].providerAddress
-        return selectedClaims.filter((c) => c.providerAddress === firstProvider)
-    }, [loadedClaims, selectedClaimIds])
+    // Group claims by coverage ID
+    const claimsByCoverage = useMemo(() => {
+        const grouped = new Map<number, LoadedClaimData[]>()
+        for (const claim of loadedClaims) {
+            const existing = grouped.get(claim.coverageId) || []
+            grouped.set(claim.coverageId, [...existing, claim])
+        }
+        // Sort by coverage ID
+        return Array.from(grouped.entries()).sort((a, b) => a[0] - b[0])
+    }, [loadedClaims])
 
     const handleSlashSuccess = () => {
-        // Refresh claim data
-        const claimIdsToRefresh = Array.from(selectedClaimIds)
-        setSelectedClaimIds(new Set())
-        // Reload the claims
-        claimIdsToRefresh.forEach((claimId) => {
-            const claimData = loadedClaims.find((c) => c.claimId === claimId)
-            if (claimData) {
-                handleRemoveClaim(claimId, claimData.providerAddress)
-                loadClaim(claimId, claimData.providerAddress)
-            }
+        if (slashCoverageId === null) return
+        
+        // Refresh claims for the slashed coverage
+        const claimsToRefresh = loadedClaims.filter((c) => c.coverageId === slashCoverageId)
+        claimsToRefresh.forEach((claimData) => {
+            handleRemoveClaim(claimData.claimId, claimData.providerAddress, claimData.coverageId)
         })
+        
+        // Reload the coverage
+        loadCoverage(slashCoverageId)
+        setSlashCoverageId(null)
+    }
+
+    const handleConvertSuccess = () => {
+        if (convertCoverageId === null) return
+        
+        // Remove coverage from reservation set
+        setReservationCoverageIds((prev) => {
+            const next = new Set(prev)
+            next.delete(convertCoverageId)
+            return next
+        })
+        
+        // Refresh claim data for this coverage
+        const claimsToRefresh = loadedClaims.filter((c) => c.coverageId === convertCoverageId)
+        claimsToRefresh.forEach((claimData) => {
+            handleRemoveClaim(claimData.claimId, claimData.providerAddress, claimData.coverageId)
+        })
+        
+        // Reload the coverage
+        loadCoverage(convertCoverageId)
+        
+        setConvertCoverageId(null)
     }
 
     const isValidClaimForm = useMemo(() => {
@@ -1102,29 +1763,179 @@ function CoverageClaimsManagement({
                             </div>
                         </div>
 
+                        {/* Add to Coverage Button */}
                         <Button
-                            onClick={handleCreateClaim}
+                            onClick={handleAddToList}
                             disabled={!isValidClaimForm || isPending || isConfirming}
+                            variant="secondary"
                             className="w-full"
-                            variant={isReservation ? "outline" : "default"}
                         >
-                            {isPending || isConfirming ? (
-                                <Loader2 className="mr-2 size-4 animate-spin" />
-                            ) : (
-                                <Plus className="mr-2 size-4" />
-                            )}
-                            {isPending
-                                ? "Confirm in wallet..."
-                                : isConfirming
-                                  ? isReservation
-                                      ? "Reserving..."
-                                      : "Creating..."
-                                  : isReservation
-                                    ? "Reserve Coverage"
-                                    : "Purchase Coverage"}
+                            <Plus className="mr-2 size-4" />
+                            Add to Coverage
                         </Button>
 
-                        {isSuccess && (
+                        {/* Pending Coverage Requests List */}
+                        {pendingRequests.length > 0 && (
+                            <div className="rounded-lg border p-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <h4 className="text-sm font-medium flex items-center gap-2">
+                                        <Layers className="size-4" />
+                                        Pending Coverage Requests
+                                        <Badge variant="secondary">{pendingRequests.length}</Badge>
+                                    </h4>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={handleClearList}
+                                        disabled={isPending || isConfirming}
+                                    >
+                                        <Trash2 className="size-4 mr-1" />
+                                        Clear All
+                                    </Button>
+                                </div>
+
+                                <ScrollArea className="max-h-[200px]">
+                                    <div className="space-y-2">
+                                        {pendingRequests.map((req, index) => (
+                                            <div
+                                                key={req.id}
+                                                className="flex items-center justify-between rounded-md border bg-muted/30 p-2 text-sm"
+                                            >
+                                                <div className="flex-1 space-y-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <Badge variant="outline" className="font-mono text-xs">
+                                                            #{index + 1}
+                                                        </Badge>
+                                                        <span className="font-medium truncate max-w-[150px]">
+                                                            {req.providerName}
+                                                        </span>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                                        <span>Position: <span className="font-mono">{req.positionId.toString()}</span></span>
+                                                        <span>Amount: <span className="font-mono">{formatUnits(req.amount, tokenDecimals)} {tokenSymbol}</span></span>
+                                                        <span>Duration: <span className="font-mono">{Math.round(Number(req.duration) / 86400)} days</span></span>
+                                                        <span>Reward: <span className="font-mono">{formatUnits(req.reward, tokenDecimals)} {tokenSymbol}</span></span>
+                                                    </div>
+                                                </div>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="size-8"
+                                                    onClick={() => handleRemoveFromList(req.id)}
+                                                    disabled={isPending || isConfirming}
+                                                >
+                                                    <X className="size-4" />
+                                                </Button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </ScrollArea>
+
+                                {/* Balance and Allowance Info - only show for non-reservation purchases */}
+                                {!isReservation && totalPendingReward > 0n && (
+                                    <div className="rounded-lg border bg-muted/50 p-3 space-y-2">
+                                        <div className="grid gap-2 text-sm">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-muted-foreground">Your Balance</span>
+                                                <span className={`font-mono ${!purchaseHasSufficientBalance ? "text-destructive" : ""}`}>
+                                                    {userBalance !== undefined
+                                                        ? `${formatUnits(userBalance as bigint, tokenDecimals)} ${tokenSymbol}`
+                                                        : "Loading..."}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-muted-foreground">Current Allowance</span>
+                                                <span className={`font-mono ${purchaseNeedsApproval ? "text-amber-600" : "text-green-600"}`}>
+                                                    {currentAllowance !== undefined
+                                                        ? `${formatUnits(currentAllowance as bigint, tokenDecimals)} ${tokenSymbol}`
+                                                        : "Loading..."}
+                                                </span>
+                                            </div>
+                                            <Separator />
+                                            <div className="flex items-center justify-between font-medium">
+                                                <span>Total Reward Required ({pendingRequests.length} positions)</span>
+                                                <span className="font-mono">
+                                                    {formatUnits(totalPendingReward, tokenDecimals)} {tokenSymbol}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Warning messages */}
+                                        {!purchaseHasSufficientBalance && (
+                                            <div className="flex items-center gap-2 text-sm text-destructive mt-2">
+                                                <AlertTriangle className="size-4" />
+                                                <span>Insufficient balance to pay the total reward</span>
+                                            </div>
+                                        )}
+                                        {purchaseHasSufficientBalance && purchaseNeedsApproval && (
+                                            <div className="flex items-center gap-2 text-sm text-amber-600 mt-2">
+                                                <AlertTriangle className="size-4" />
+                                                <span>Token approval required before purchasing</span>
+                                            </div>
+                                        )}
+                                        {purchaseHasSufficientBalance && !purchaseNeedsApproval && (
+                                            <div className="flex items-center gap-2 text-sm text-green-600 mt-2">
+                                                <CheckCircle2 className="size-4" />
+                                                <span>Sufficient balance and allowance</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                <div className="flex gap-2">
+                                    {/* Approve Button - show when approval is needed for non-reservation */}
+                                    {!isReservation && purchaseNeedsApproval && totalPendingReward > 0n && (
+                                        <Button
+                                            variant="secondary"
+                                            onClick={handleApprovePurchase}
+                                            disabled={isPending || isConfirming || !purchaseHasSufficientBalance}
+                                            className="flex-1"
+                                        >
+                                            {(isPending || isConfirming) && isApprovingPurchase ? (
+                                                <Loader2 className="mr-2 size-4 animate-spin" />
+                                            ) : (
+                                                <CheckCircle2 className="mr-2 size-4" />
+                                            )}
+                                            {(isPending || isConfirming) && isApprovingPurchase
+                                                ? isPending
+                                                    ? "Confirm in wallet..."
+                                                    : "Approving..."
+                                                : `Approve ${formatUnits(totalPendingReward, tokenDecimals)} ${tokenSymbol}`}
+                                        </Button>
+                                    )}
+
+                                    {/* Submit Coverage Button */}
+                                    <Button
+                                        onClick={handleSubmitCoverage}
+                                        disabled={
+                                            pendingRequests.length === 0 ||
+                                            isPending ||
+                                            isConfirming ||
+                                            (!isReservation && (purchaseNeedsApproval || !purchaseHasSufficientBalance))
+                                        }
+                                        className="flex-1"
+                                        variant={isReservation ? "outline" : "default"}
+                                    >
+                                        {(isPending || isConfirming) && !isApprovingPurchase ? (
+                                            <Loader2 className="mr-2 size-4 animate-spin" />
+                                        ) : (
+                                            <ArrowRightLeft className="mr-2 size-4" />
+                                        )}
+                                        {(isPending || isConfirming) && !isApprovingPurchase
+                                            ? isPending
+                                                ? "Confirm in wallet..."
+                                                : isReservation
+                                                    ? "Reserving..."
+                                                    : "Purchasing..."
+                                            : isReservation
+                                                ? `Reserve ${pendingRequests.length} Coverage${pendingRequests.length > 1 ? "s" : ""}`
+                                                : `Purchase ${pendingRequests.length} Coverage${pendingRequests.length > 1 ? "s" : ""}`}
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+
+                        {isSuccess && !isApprovingPurchase && (
                             <p className="flex items-center gap-2 text-sm text-green-600">
                                 <CheckCircle2 className="size-4" />
                                 {isReservation
@@ -1136,126 +1947,168 @@ function CoverageClaimsManagement({
 
                     <Separator />
 
-                    {/* View Claims Section */}
+                    {/* View Coverage Section */}
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
-                            <h4 className="text-sm font-medium">View Claims</h4>
+                            <h4 className="text-sm font-medium">View Coverage</h4>
                             <div className="flex items-center gap-2">
-                                <Badge variant="secondary">{loadedClaims.length} loaded</Badge>
-                                {selectedClaimIds.size > 0 && (
-                                    <Badge variant="outline">
-                                        {selectedClaimIds.size} selected
-                                    </Badge>
-                                )}
+                                <Badge variant="secondary">
+                                    {loadedCoverageIds.size} coverage{loadedCoverageIds.size !== 1 ? "s" : ""}
+                                </Badge>
+                                <Badge variant="outline">{loadedClaims.length} claims</Badge>
                             </div>
                         </div>
 
-                        <div className="flex flex-col gap-2 sm:flex-row">
-                            <div className="flex-1">
-                                <CoverageProviderSelect
-                                    selectedContractId={loadClaimProviderId}
-                                    onSelectedContractIdChange={setLoadClaimProviderId}
-                                    contracts={registeredProviderContracts}
-                                    disabled={isLoadingClaim}
-                                    placeholder="Select registered coverage provider..."
-                                    emptyMessage={
-                                        <>
-                                            No coverage providers registered yet.
-                                            <br />
-                                            Register a coverage provider first.
-                                        </>
-                                    }
-                                />
-                            </div>
-                            <div className="flex gap-2 items-center">
-                                <Input
-                                    placeholder="Claim ID..."
-                                    value={newClaimId}
-                                    onChange={(e) => setNewClaimId(e.target.value)}
-                                    className="font-mono w-32"
-                                    type="number"
-                                />
-                                <Button
-                                    variant="outline"
-                                    onClick={handleAddClaim}
-                                    disabled={
-                                        !newClaimId ||
-                                        !loadClaimProviderId ||
-                                        isNaN(Number(newClaimId)) ||
-                                        isLoadingClaim
-                                    }
-                                >
-                                    {isLoadingClaim ? (
-                                        <Loader2 className="mr-2 size-4 animate-spin" />
-                                    ) : (
-                                        <Plus className="mr-2 size-4" />
-                                    )}
-                                    {isLoadingClaim ? "Loading..." : "Load"}
-                                </Button>
-                            </div>
+                        <div className="flex gap-2">
+                            <Input
+                                placeholder="Coverage ID..."
+                                value={newCoverageId}
+                                onChange={(e) => setNewCoverageId(e.target.value)}
+                                className="font-mono flex-1"
+                                type="number"
+                            />
+                            <Button
+                                variant="outline"
+                                onClick={handleAddCoverage}
+                                disabled={
+                                    !newCoverageId ||
+                                    isNaN(Number(newCoverageId)) ||
+                                    isLoadingCoverage
+                                }
+                            >
+                                {isLoadingCoverage ? (
+                                    <Loader2 className="mr-2 size-4 animate-spin" />
+                                ) : (
+                                    <Plus className="mr-2 size-4" />
+                                )}
+                                {isLoadingCoverage ? "Loading..." : "Load Coverage"}
+                            </Button>
                         </div>
 
                         {loadedClaims.length === 0 ? (
                             <div className="py-8 text-center text-sm text-muted-foreground">
-                                Select a provider and enter a claim ID to view details
+                                Enter a coverage ID to view its claims
                             </div>
                         ) : (
                             <>
                                 <ScrollArea className="h-fit">
-                                    <div className="space-y-3 max-h-[500px]">
-                                        {loadedClaims.map((claimData) => (
-                                            <ClaimItem
-                                                key={`${claimData.providerAddress}-${claimData.claimId}`}
-                                                claimData={claimData}
-                                                isSelected={selectedClaimIds.has(claimData.claimId)}
-                                                onSelect={(selected) =>
-                                                    handleToggleClaimSelection(
-                                                        claimData.claimId,
-                                                        selected
-                                                    )
-                                                }
-                                                onRemove={() =>
-                                                    handleRemoveClaim(
-                                                        claimData.claimId,
-                                                        claimData.providerAddress
-                                                    )
-                                                }
-                                                tokenDecimals={tokenDecimals}
-                                                tokenSymbol={tokenSymbol}
-                                            />
+                                    <div className="space-y-4 max-h-[500px]">
+                                        {claimsByCoverage.map(([coverageId, claims]) => (
+                                            <div
+                                                key={coverageId}
+                                                className="rounded-lg border bg-card"
+                                            >
+                                                {/* Coverage Header */}
+                                                <div className="flex items-center justify-between border-b bg-muted/50 px-4 py-3 rounded-t-lg">
+                                                    <div className="flex items-center gap-2">
+                                                        <Layers className="size-4 text-muted-foreground" />
+                                                        <span className="font-medium">
+                                                            Coverage #{coverageId}
+                                                        </span>
+                                                        <Badge variant="outline">
+                                                            {claims.length} claim
+                                                            {claims.length !== 1 ? "s" : ""}
+                                                        </Badge>
+                                                        {reservationCoverageIds.has(coverageId) && (
+                                                            <Badge variant="secondary">Reserved</Badge>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-1">
+                                                        {reservationCoverageIds.has(coverageId) && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() => {
+                                                                    setConvertCoverageId(coverageId)
+                                                                    setConvertDialogOpen(true)
+                                                                }}
+                                                                title="Convert reserved coverage"
+                                                            >
+                                                                <ArrowRightLeft className="size-4 mr-1" />
+                                                                Convert
+                                                            </Button>
+                                                        )}
+                                                        {!reservationCoverageIds.has(coverageId) && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() => {
+                                                                    setSlashCoverageId(coverageId)
+                                                                    setSlashDialogOpen(true)
+                                                                }}
+                                                                title="Slash coverage"
+                                                                className="text-destructive hover:text-destructive"
+                                                            >
+                                                                <Zap className="size-4 mr-1" />
+                                                                Slash
+                                                            </Button>
+                                                        )}
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => {
+                                                                // Remove all claims from this coverage
+                                                                claims.forEach((c) =>
+                                                                    handleRemoveClaim(
+                                                                        c.claimId,
+                                                                        c.providerAddress,
+                                                                        c.coverageId
+                                                                    )
+                                                                )
+                                                            }}
+                                                            title="Remove coverage"
+                                                        >
+                                                            <Trash2 className="size-4" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Claims List */}
+                                                <div className="p-3 space-y-3">
+                                                    {claims.map((claimData) => (
+                                                        <ClaimItem
+                                                            key={`${claimData.providerAddress}-${claimData.claimId}`}
+                                                            claimData={claimData}
+                                                            totalSlashAmount={claimData.totalSlashAmount}
+                                                            tokenDecimals={tokenDecimals}
+                                                            tokenSymbol={tokenSymbol}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </div>
                                         ))}
                                     </div>
                                 </ScrollArea>
 
-                                {/* Slash Button */}
-                                {selectedClaimsForSlash.length > 0 && (
-                                    <div className="flex justify-end">
-                                        <Button
-                                            variant="destructive"
-                                            onClick={() => setSlashDialogOpen(true)}
-                                        >
-                                            <Zap className="mr-2 size-4" />
-                                            Slash {selectedClaimsForSlash.length} Claim
-                                            {selectedClaimsForSlash.length > 1 ? "s" : ""}
-                                        </Button>
-                                    </div>
-                                )}
                             </>
                         )}
                     </div>
 
-                    {/* Slash Dialog */}
-                    <SlashClaimsDialog
+                    {/* Slash Coverage Dialog */}
+                    <SlashCoverageDialog
                         open={slashDialogOpen}
                         onOpenChange={setSlashDialogOpen}
-                        selectedClaims={selectedClaimsForSlash}
-                        providerAddress={
-                            selectedClaimsForSlash[0]?.providerAddress || ("0x" as Address)
-                        }
+                        coverageId={slashCoverageId}
+                        claims={loadedClaims.filter((c) => c.coverageId === slashCoverageId)}
+                        contractAddress={contract.address}
                         chainId={chainId}
                         tokenDecimals={tokenDecimals}
                         tokenSymbol={tokenSymbol}
                         onSuccess={handleSlashSuccess}
+                    />
+
+                    {/* Convert Coverage Dialog */}
+                    <ConvertCoverageDialog
+                        open={convertDialogOpen}
+                        onOpenChange={setConvertDialogOpen}
+                        coverageId={convertCoverageId}
+                        claims={loadedClaims.filter((c) => c.coverageId === convertCoverageId)}
+                        contractAddress={contract.address}
+                        assetAddress={assetAddress as Address | undefined}
+                        chainId={chainId}
+                        tokenDecimals={tokenDecimals}
+                        tokenSymbol={tokenSymbol}
+                        onSuccess={handleConvertSuccess}
                     />
                 </WalletRequirement>
             </CardContent>

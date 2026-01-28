@@ -13,9 +13,9 @@ import {IPriceOracle} from "../interfaces/IPriceOracle.sol";
 abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorage, IAssetPriceOracleAndSwapper {
     /// @inheritdoc IAssetPriceOracleAndSwapper
     function register(AssetPair calldata _assetPair) public virtual {
-        bool priceOracleRequired =
-            _assetPair.priceStrategy != PriceStrategy.SwapperOnly || _assetPair.swapperAccuracy != 0;
+        bool priceOracleRequired = _assetPair.priceStrategy != PriceStrategy.SwapperOnly;
         if (_assetPair.priceOracle == address(0) && priceOracleRequired) revert PriceOracleRequired();
+        if (priceOracleRequired && _assetPair.swapperAccuracy == 0) revert InvalidAssetPair();
 
         if (_assetPair.assetA == address(0) || _assetPair.assetB == address(0)) revert InvalidAssetPair();
 
@@ -92,7 +92,7 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
 
     /// @inheritdoc IAssetPriceOracleAndSwapper
     function assetPair(address assetA, address assetB) public view returns (AssetPair memory) {
-        return assetPairs(keccak256(abi.encode(assetA, assetB)));
+        return _getRegisteredAssetPair(assetA, assetB);
     }
 
     /// @inheritdoc IAssetPriceOracleAndSwapper

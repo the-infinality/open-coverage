@@ -71,6 +71,22 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         assertEq(assetPriceOracleAndSwapper.assetPair(USDC, USDT).priceOracle, address(mockPriceOracle));
     }
 
+    function test_assetPair() public view {
+        AssetPair memory pair = assetPriceOracleAndSwapper.assetPair(rETH, USDC);
+        assertEq(pair.assetA, rETH);
+        assertEq(pair.assetB, USDC);
+        assertEq(pair.swapEngine, address(uniswapV3SwapperEngine));
+        assertEq(uint16(pair.priceStrategy), uint16(PriceStrategy.SwapperOnly));
+        assertEq(pair.swapperAccuracy, 0);
+
+        AssetPair memory pairSwapped = assetPriceOracleAndSwapper.assetPair(USDC, rETH);
+        assertEq(pairSwapped.assetA, rETH);
+        assertEq(pairSwapped.assetB, USDC);
+        assertEq(pairSwapped.swapEngine, address(uniswapV3SwapperEngine));
+        assertEq(uint16(pairSwapped.priceStrategy), uint16(PriceStrategy.SwapperOnly));
+        assertEq(pairSwapped.swapperAccuracy, 0);
+    }
+
     function test_RevertWhen_register_not_owner() public {
         address nonOwner = makeAddr("nonOwner");
         bytes memory USDC_USDT_V3_POOL_INFO = abi.encodePacked(USDC, uint24(500), USDT);
