@@ -1482,61 +1482,61 @@ contract EigenTest is EigenTestDeployer {
         assertEq(IDiamondOwner(address(eigenCoverageDiamond)).owner(), newOwner);
     }
 
-    // ============ updateMetadataURI Tests ============
+    // ============ updateAVSMetadataURI Tests ============
 
-    /// @notice Test that updateMetadataURI successfully updates the metadata and emits the correct event
-    function test_updateMetadataURI() public {
+    /// @notice Test that updateAVSMetadataURI successfully updates the metadata and emits the correct event
+    function test_updateAVSMetadataURI() public {
         string memory newMetadataURI = "https://new-coverage.example.com/metadata.json";
 
         // Expect the AVSMetadataURIUpdated event from AllocationManager
         vm.expectEmit(true, false, false, true, eigenServiceManager.eigenAddresses().allocationManager);
         emit IAllocationManagerEvents.AVSMetadataURIUpdated(address(eigenCoverageDiamond), newMetadataURI);
 
-        eigenServiceManager.updateMetadataURI(newMetadataURI);
+        eigenServiceManager.updateAVSMetadataURI(newMetadataURI);
     }
 
-    /// @notice Test that updateMetadataURI can be called multiple times with different URIs
-    function test_updateMetadataURI_multipleTimes() public {
+    /// @notice Test that updateAVSMetadataURI can be called multiple times with different URIs
+    function test_updateAVSMetadataURI_multipleTimes() public {
         string memory uri1 = "https://first-uri.example.com/metadata.json";
         string memory uri2 = "https://second-uri.example.com/metadata.json";
 
         // First update
         vm.expectEmit(true, false, false, true, eigenServiceManager.eigenAddresses().allocationManager);
         emit IAllocationManagerEvents.AVSMetadataURIUpdated(address(eigenCoverageDiamond), uri1);
-        eigenServiceManager.updateMetadataURI(uri1);
+        eigenServiceManager.updateAVSMetadataURI(uri1);
 
         // Second update
         vm.expectEmit(true, false, false, true, eigenServiceManager.eigenAddresses().allocationManager);
         emit IAllocationManagerEvents.AVSMetadataURIUpdated(address(eigenCoverageDiamond), uri2);
-        eigenServiceManager.updateMetadataURI(uri2);
+        eigenServiceManager.updateAVSMetadataURI(uri2);
     }
 
-    /// @notice Test that updateMetadataURI works with an empty string
-    function test_updateMetadataURI_emptyString() public {
+    /// @notice Test that updateAVSMetadataURI works with an empty string
+    function test_updateAVSMetadataURI_emptyString() public {
         string memory emptyURI = "";
 
         vm.expectEmit(true, false, false, true, eigenServiceManager.eigenAddresses().allocationManager);
         emit IAllocationManagerEvents.AVSMetadataURIUpdated(address(eigenCoverageDiamond), emptyURI);
 
-        eigenServiceManager.updateMetadataURI(emptyURI);
+        eigenServiceManager.updateAVSMetadataURI(emptyURI);
     }
 
-    /// @notice Test that updateMetadataURI reverts when called by non-owner
-    function test_RevertWhen_updateMetadataURI_notOwner() public {
+    /// @notice Test that updateAVSMetadataURI reverts when called by non-owner
+    function test_RevertWhen_updateAVSMetadataURI_notOwner() public {
         address nonOwner = makeAddr("nonOwner");
         string memory newMetadataURI = "https://new-coverage.example.com/metadata.json";
 
         vm.prank(nonOwner);
         vm.expectRevert(abi.encodeWithSelector(LibDiamond.NotContractOwner.selector, nonOwner, address(this)));
-        eigenServiceManager.updateMetadataURI(newMetadataURI);
+        eigenServiceManager.updateAVSMetadataURI(newMetadataURI);
     }
 
-    /// @notice Fuzz test for updateMetadataURI with various URI strings
-    function testFuzz_updateMetadataURI(string calldata metadataURI) public {
+    /// @notice Fuzz test for updateAVSMetadataURI with various URI strings
+    function testFuzz_updateAVSMetadataURI(string calldata metadataURI) public {
         vm.expectEmit(true, false, false, true, eigenServiceManager.eigenAddresses().allocationManager);
         emit IAllocationManagerEvents.AVSMetadataURIUpdated(address(eigenCoverageDiamond), metadataURI);
 
-        eigenServiceManager.updateMetadataURI(metadataURI);
+        eigenServiceManager.updateAVSMetadataURI(metadataURI);
     }
 
     // ============ Reservation Tests ============

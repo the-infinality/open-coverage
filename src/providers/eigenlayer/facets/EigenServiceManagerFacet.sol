@@ -379,10 +379,4 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
             revert ICoverageProvider.InsufficientCoverageAvailable(amount - totalAllocatedStakeValue);
         }
     }
-
-    /// @inheritdoc IEigenServiceManager
-    function updateMetadataURI(string calldata metadataURI) external {
-        LibDiamond.enforceIsContractOwner();
-        IAllocationManager(_eigenAddresses.allocationManager).updateAVSMetadataURI(address(this), metadataURI);
-    }
 }
