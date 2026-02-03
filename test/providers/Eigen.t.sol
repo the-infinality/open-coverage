@@ -16,6 +16,7 @@ import {IEigenOperatorProxy} from "src/providers/eigenlayer/interfaces/IEigenOpe
 import {EigenOperatorProxy} from "src/providers/eigenlayer/EigenOperatorProxy.sol";
 import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
 import {ICoverageAgent} from "src/interfaces/ICoverageAgent.sol";
+import {ExampleCoverageAgent} from "src/ExampleCoverageAgent.sol";
 import {IStrategyManager} from "eigenlayer-contracts/interfaces/IStrategyManager.sol";
 import {ISignatureUtilsMixinTypes} from "eigenlayer-contracts/interfaces/ISignatureUtilsMixin.sol";
 import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
@@ -146,6 +147,22 @@ contract EigenTest is EigenTestDeployer {
 
     function test_registerCoverageAgent() public {
         operator.registerCoverageAgent(address(eigenCoverageDiamond), address(coverageAgent), 10000);
+    }
+
+    /// @notice Test that coverage agent emits MetadataUpdated on deployment
+    function test_coverageAgent_emitsMetadataUpdated_onDeployment() public {
+        string memory uri = "https://coverage.example.com/agent-metadata.json";
+        vm.expectEmit(false, false, false, true);
+        emit ICoverageAgent.MetadataUpdated(uri);
+        new ExampleCoverageAgent(address(this), USDC, uri);
+    }
+
+    /// @notice Test that coverage agent emits MetadataUpdated when updateMetadata is called
+    function test_coverageAgent_emitsMetadataUpdated_onUpdate() public {
+        string memory newUri = "https://new-metadata.example.com/updated.json";
+        vm.expectEmit(false, false, false, true);
+        emit ICoverageAgent.MetadataUpdated(newUri);
+        coverageAgent.updateMetadata(newUri);
     }
 
     function test_allocate() public {

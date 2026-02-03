@@ -36,4 +36,9 @@ interface IExampleCoverageAgent {
     /// @param coverageId The id of the coverage purchase to slash.
     /// @return slashStatuses The status of each claim after slashing.
     function slashCoverage(uint256 coverageId) external returns (CoverageClaimStatus[] memory slashStatuses);
+
+    /// @notice Update the metadata of the coverage agent.
+    /// @dev Can only be called by the coverage agent coordinator.
+    /// @param metadataURI The new metadata URI.
+    function updateMetadata(string calldata metadataURI) external;
 }

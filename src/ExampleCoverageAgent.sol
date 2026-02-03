@@ -24,10 +24,11 @@ contract ExampleCoverageAgent is ICoverageAgent, IExampleCoverageAgent, ERC165 {
     Coverage[] private _coverages;
 
     /// @notice The asset that the coverage agent will distribute as yield
-    constructor(address _coordinator, address _coverageAsset) {
+    constructor(address _coordinator, address _coverageAsset, string memory initialMetadataUri) {
         if (_coordinator == address(0)) revert NotCoverageAgentCoordinator();
         _COORDINATOR = _coordinator;
         _ASSET = _coverageAsset;
+        emit MetadataUpdated(initialMetadataUri);
     }
 
     /// @inheritdoc ICoverageAgent
@@ -208,6 +209,11 @@ contract ExampleCoverageAgent is ICoverageAgent, IExampleCoverageAgent, ERC165 {
             slashStatuses[i] = statuses[0];
         }
         return slashStatuses;
+    }
+
+    /// @inheritdoc IExampleCoverageAgent
+    function updateMetadata(string calldata metadataURI) external onlyCoordinator {
+        emit MetadataUpdated(metadataURI);
     }
 
     /// @inheritdoc ICoverageAgent

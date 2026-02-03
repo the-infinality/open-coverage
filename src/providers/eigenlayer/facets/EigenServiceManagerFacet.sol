@@ -229,6 +229,7 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
     function updateAVSMetadataURI(string calldata metadataURI) external {
         LibDiamond.enforceIsContractOwner();
         IAllocationManager(_eigenAddresses.allocationManager).updateAVSMetadataURI(address(this), metadataURI);
+        emit ICoverageProvider.MetadataUpdated(metadataURI);
     }
 
     /// @inheritdoc IEigenServiceManager

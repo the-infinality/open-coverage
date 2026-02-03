@@ -12,8 +12,6 @@ enum Refundable {
 }
 
 struct CoveragePosition {
-
-
     /// @notice The address of the coverage agent that this position will cover.
     address coverageAgent;
 
@@ -38,6 +36,7 @@ struct CoveragePosition {
     /// - TimeWeighted: Refund proportional to remaining duration (e.g., 50% refund if 6 months remain of 12 month position)
     /// - Full: Complete refund of reward to allow coverage agent to purchase coverage for remaining duration
     Refundable refundable;
+
     /// @notice The address of the slash coordinator for the coverage position.
     /// @dev The slash coordinator is responsible for initiating the slashing process for the coverage position.
     /// If no slash coordinator is set, the coverage provider will instantly slash the coverage position.
@@ -79,9 +78,10 @@ interface ICoverageProvider {
     event ClaimIssued(uint256 indexed positionId, uint256 indexed claimId, uint256 amount, uint256 duration);
     event ClaimReserved(uint256 indexed positionId, uint256 indexed claimId, uint256 amount, uint256 duration);
     event ClaimClosed(uint256 indexed claimId);
-    event Liquidated(uint256 indexed claimId);
+    event ClaimLiquidated(uint256 indexed claimId);
     event ClaimSlashed(uint256 indexed claimId, uint256 amount);
     event ClaimSlashPending(uint256 indexed claimId, address slashCoordinator);
+    event MetadataUpdated(string metadataUri);
 
     error InvalidAmount();
     error PositionExpired(uint256 positionId);
@@ -105,9 +105,8 @@ interface ICoverageProvider {
 
     /// ============ Hooks ============
 
-    /// @notice Triggered when a coverage agent is registered by the coverage agent.
-    /// @dev Can only be called by the coverage agent. This hook should always be called by
-    /// the coverage agent and can be used for activities such as whitelisting the coverage agent.
+    /// @notice Triggered when a coverage agent registers.
+    /// @dev Can only be called by the coverage agent.
     function onIsRegistered() external;
 
     /// ============ Coverage Positions ============

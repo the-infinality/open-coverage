@@ -108,7 +108,7 @@ contract MockCoverageProvider is ICoverageProvider {
 
     function liquidateClaim(uint256 claimId) external override {
         _claims[claimId].status = CoverageClaimStatus.Liquidated;
-        emit Liquidated(claimId);
+        emit ClaimLiquidated(claimId);
     }
 
     function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts)
@@ -182,7 +182,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         nonHandler = address(0x123);
 
         // Deploy coverage agent
-        coverageAgent = new ExampleCoverageAgent(coordinator, USDC);
+        coverageAgent = new ExampleCoverageAgent(coordinator, USDC, "https://example.com/agent.json");
 
         // Deploy mock provider and price oracle
         mockProvider = new MockCoverageProvider();
@@ -193,6 +193,22 @@ contract ExampleCoverageAgentTest is TestDeployer {
     function test_constructor() public view {
         // Verify asset is set correctly (coordinator is tested via access control)
         assertEq(coverageAgent.asset(), USDC);
+    }
+
+    /// @notice Test that constructor emits MetadataUpdated with initial URI
+    function test_constructor_emitsMetadataUpdated() public {
+        string memory uri = "https://example.com/initial-metadata.json";
+        vm.expectEmit(false, false, false, true);
+        emit ICoverageAgent.MetadataUpdated(uri);
+        new ExampleCoverageAgent(coordinator, USDC, uri);
+    }
+
+    /// @notice Test that updateMetadata emits MetadataUpdated
+    function test_updateMetadata_emitsMetadataUpdated() public {
+        string memory newUri = "https://example.com/updated-metadata.json";
+        vm.expectEmit(false, false, false, true);
+        emit ICoverageAgent.MetadataUpdated(newUri);
+        coverageAgent.updateMetadata(newUri);
     }
 
     function test_constructor_handlerAccessControl() public {
@@ -208,7 +224,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
 
     function test_RevertWhen_constructor_zeroHandler() public {
         vm.expectRevert(IExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
-        new ExampleCoverageAgent(address(0), USDC);
+        new ExampleCoverageAgent(address(0), USDC, "");
     }
 
     /// ============ Coverage Provider Registration Tests ============

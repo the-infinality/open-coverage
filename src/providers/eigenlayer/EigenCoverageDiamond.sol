@@ -58,6 +58,7 @@ contract EigenCoverageDiamond is Diamond, EigenCoverageStorage, AssetPriceOracle
         // Update AVS metadata URI (required for AVS registration)
         IAllocationManager(_args.eigenAddresses.allocationManager)
             .updateAVSMetadataURI(address(this), _args.metadataURI);
+        emit ICoverageProvider.MetadataUpdated(_args.metadataURI);
 
         // Initialize default swap slippage (1%)
         _initializeSwapSlippage();
