@@ -191,31 +191,55 @@ contract ExampleCoverageAgent is ICoverageAgent, IExampleCoverageAgent, ERC165 {
         emit CoverageClaimed(coverageId);
     }
 
-    /// @notice Slash a coverage purchase.
+    /// @notice Slash a coverage purchase up to a specified amount.
     /// @dev Can only be called by the coverage agent coordinator.
     /// @dev Should slash the coverage purchase and track the amount of coverage slashed for future slashing purposes.
+    /// @dev Loops through claims in order, slashing each until the total slashed reaches the specified amount.
     /// @param coverageId The id of the coverage purchase to slash.
-    function slashCoverage(uint256 coverageId)
+    /// @param amount The maximum amount to slash across all claims in this coverage.
+    /// @return slashStatuses The status of each claim after slashing (may be unchanged if not slashed).
+    /// @return totalSlashed The total amount actually slashed across all claims.
+    function slashCoverage(uint256 coverageId, uint256 amount)
         external
         onlyCoordinator
-        returns (CoverageClaimStatus[] memory slashStatuses)
+        returns (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed)
     {
         require(coverageId < _coverages.length, InvalidCoverage(coverageId));
         Coverage storage coverageData = _coverages[coverageId];
         slashStatuses = new CoverageClaimStatus[](coverageData.claims.length);
-        for (uint256 i = 0; i < coverageData.claims.length; i++) {
-            CoverageClaim memory claim =
-                ICoverageProvider(coverageData.claims[i].coverageProvider).claim(coverageData.claims[i].claimId);
+
+        uint256 remainingAmount = amount;
+
+        for (uint256 i = 0; i < coverageData.claims.length && remainingAmount > 0; i++) {
+            ICoverageProvider provider = ICoverageProvider(coverageData.claims[i].coverageProvider);
+            uint256 claimId = coverageData.claims[i].claimId;
+
+            CoverageClaim memory claimData = provider.claim(claimId);
+
+            // Calculate remaining slashable amount for this claim (accounting for previous slashes)
+            uint256 alreadySlashed = provider.claimTotalSlashAmount(claimId);
+            uint256 slashableAmount = claimData.amount > alreadySlashed ? claimData.amount - alreadySlashed : 0;
+
+            if (slashableAmount == 0) {
+                continue;
+            }
+
+            // Determine how much to slash from this claim (minimum of remaining and slashable)
+            uint256 slashAmount = slashableAmount < remainingAmount ? slashableAmount : remainingAmount;
+
             uint256[] memory claimIds = new uint256[](1);
             uint256[] memory amounts = new uint256[](1);
-            claimIds[0] = coverageData.claims[i].claimId;
-            amounts[0] = claim.amount;
+            claimIds[0] = claimId;
+            amounts[0] = slashAmount;
 
-            CoverageClaimStatus[] memory statuses =
-                ICoverageProvider(coverageData.claims[i].coverageProvider).slashClaims(claimIds, amounts);
+            CoverageClaimStatus[] memory statuses = provider.slashClaims(claimIds, amounts);
             slashStatuses[i] = statuses[0];
+
+            totalSlashed += slashAmount;
+            remainingAmount -= slashAmount;
         }
-        return slashStatuses;
+
+        return (slashStatuses, totalSlashed);
     }
 
     /// @inheritdoc IExampleCoverageAgent

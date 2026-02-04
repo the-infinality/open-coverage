@@ -30,12 +30,17 @@ interface IExampleCoverageAgent {
     ///        coverageProvider and positionId are taken from the original reservation.
     function convertReservedCoverage(uint256 coverageId, ClaimCoverageRequest[] calldata requests) external;
 
-    /// @notice Slash a coverage purchase.
+    /// @notice Slash a coverage purchase up to a specified amount.
     /// @dev Can only be called by the coverage agent coordinator.
     /// @dev Should slash the coverage purchase and track the amount of coverage slashed for future slashing purposes.
+    /// @dev Loops through claims in order, slashing each until the total slashed reaches the specified amount.
     /// @param coverageId The id of the coverage purchase to slash.
-    /// @return slashStatuses The status of each claim after slashing.
-    function slashCoverage(uint256 coverageId) external returns (CoverageClaimStatus[] memory slashStatuses);
+    /// @param amount The maximum amount to slash across all claims in this coverage.
+    /// @return slashStatuses The status of each claim after slashing (may be unchanged if not slashed).
+    /// @return totalSlashed The total amount actually slashed across all claims.
+    function slashCoverage(uint256 coverageId, uint256 amount)
+        external
+        returns (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed);
 
     /// @notice Update the metadata of the coverage agent.
     /// @dev Can only be called by the coverage agent coordinator.

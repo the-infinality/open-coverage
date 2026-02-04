@@ -107,7 +107,6 @@ contract MockCoverageProvider is ICoverageProvider {
     }
 
     function liquidateClaim(uint256 claimId) external override {
-        _claims[claimId].status = CoverageClaimStatus.Liquidated;
         emit ClaimLiquidated(claimId);
     }
 
@@ -140,6 +139,17 @@ contract MockCoverageProvider is ICoverageProvider {
         }
         _claims[claimId].status = CoverageClaimStatus.Slashed;
         emit ClaimSlashed(claimId, _claimSlashAmounts[claimId]);
+    }
+
+    function repaySlashedClaim(uint256 claimId, uint256 amount) external override {
+        if (amount >= _claimSlashAmounts[claimId]) {
+            _claimSlashAmounts[claimId] = 0;
+            _claims[claimId].status = CoverageClaimStatus.Repaid;
+            emit ClaimRepaid(claimId);
+        } else {
+            _claimSlashAmounts[claimId] -= amount;
+        }
+        emit ClaimRepayment(claimId, amount);
     }
 
     /// @notice Helper function to simulate refunding a claim to the coverage agent
@@ -535,12 +545,14 @@ contract ExampleCoverageAgentTest is TestDeployer {
         CoverageClaim memory claimBefore = mockProvider.claim(claimId);
         assertEq(uint8(claimBefore.status), uint8(CoverageClaimStatus.Issued));
 
-        // Slash the coverage
-        CoverageClaimStatus[] memory slashStatuses = coverageAgent.slashCoverage(coverageId);
+        // Slash the coverage (use type(uint256).max to slash full amount)
+        (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed) =
+            coverageAgent.slashCoverage(coverageId, type(uint256).max);
 
         // Verify slash statuses
         assertEq(slashStatuses.length, 1);
         assertEq(uint8(slashStatuses[0]), uint8(CoverageClaimStatus.Slashed));
+        assertEq(totalSlashed, 1000e6); // Full claim amount slashed
 
         // Verify claim status was updated
         CoverageClaim memory claimAfter = mockProvider.claim(claimId);
@@ -600,13 +612,15 @@ contract ExampleCoverageAgentTest is TestDeployer {
         assertEq(uint8(claim1Before.status), uint8(CoverageClaimStatus.Issued));
         assertEq(uint8(claim2Before.status), uint8(CoverageClaimStatus.Issued));
 
-        // Slash the coverage
-        CoverageClaimStatus[] memory slashStatuses = coverageAgent.slashCoverage(coverageId);
+        // Slash the coverage (use type(uint256).max to slash full amount)
+        (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed) =
+            coverageAgent.slashCoverage(coverageId, type(uint256).max);
 
         // Verify slash statuses
         assertEq(slashStatuses.length, 2);
         assertEq(uint8(slashStatuses[0]), uint8(CoverageClaimStatus.Slashed));
         assertEq(uint8(slashStatuses[1]), uint8(CoverageClaimStatus.Slashed));
+        assertEq(totalSlashed, 1500e6); // 1000e6 + 500e6 from both claims
 
         // Verify both claim statuses were updated
         CoverageClaim memory claim1After = mockProvider.claim(claimId1);
@@ -666,13 +680,15 @@ contract ExampleCoverageAgentTest is TestDeployer {
         IERC20(USDC).approve(address(coverageAgent), 15e6);
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
-        // Slash the coverage
-        CoverageClaimStatus[] memory slashStatuses = coverageAgent.slashCoverage(coverageId);
+        // Slash the coverage (use type(uint256).max to slash full amount)
+        (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed) =
+            coverageAgent.slashCoverage(coverageId, type(uint256).max);
 
         // Verify slash statuses
         assertEq(slashStatuses.length, 2);
         assertEq(uint8(slashStatuses[0]), uint8(CoverageClaimStatus.Slashed));
         assertEq(uint8(slashStatuses[1]), uint8(CoverageClaimStatus.Slashed));
+        assertEq(totalSlashed, 1500e6); // 1000e6 + 500e6 from both claims
 
         // Verify claims from both providers were slashed
         Coverage memory cov = coverageAgent.coverage(coverageId);
@@ -723,13 +739,13 @@ contract ExampleCoverageAgentTest is TestDeployer {
         // Try to slash as non-coordinator
         vm.prank(nonHandler);
         vm.expectRevert(IExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
-        coverageAgent.slashCoverage(coverageId);
+        coverageAgent.slashCoverage(coverageId, type(uint256).max);
     }
 
     function test_RevertWhen_slashCoverage_invalidCoverageId() public {
         // Try to slash coverage with invalid ID (no coverage purchased yet)
         vm.expectRevert(abi.encodeWithSelector(ICoverageAgent.InvalidCoverage.selector, 0));
-        coverageAgent.slashCoverage(0);
+        coverageAgent.slashCoverage(0, type(uint256).max);
     }
 
     function test_RevertWhen_slashCoverage_coverageIdOutOfBounds() public {
@@ -768,7 +784,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
 
         // Try to slash coverage with out-of-bounds ID
         vm.expectRevert(abi.encodeWithSelector(ICoverageAgent.InvalidCoverage.selector, 1));
-        coverageAgent.slashCoverage(1);
+        coverageAgent.slashCoverage(1, type(uint256).max);
     }
 
     function test_slashCoverage_multipleCoverages() public {
@@ -826,16 +842,230 @@ contract ExampleCoverageAgentTest is TestDeployer {
         assertEq(uint8(mockProvider.claim(claimId1).status), uint8(CoverageClaimStatus.Issued));
         assertEq(uint8(mockProvider.claim(claimId2).status), uint8(CoverageClaimStatus.Issued));
 
-        // Slash only the first coverage
-        CoverageClaimStatus[] memory slashStatuses = coverageAgent.slashCoverage(coverageId1);
+        // Slash only the first coverage (use type(uint256).max to slash full amount)
+        (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed) =
+            coverageAgent.slashCoverage(coverageId1, type(uint256).max);
 
         // Verify first coverage was slashed
         assertEq(slashStatuses.length, 1);
         assertEq(uint8(slashStatuses[0]), uint8(CoverageClaimStatus.Slashed));
+        assertEq(totalSlashed, 1000e6);
         assertEq(uint8(mockProvider.claim(claimId1).status), uint8(CoverageClaimStatus.Slashed));
 
         // Verify second coverage was NOT slashed
         assertEq(uint8(mockProvider.claim(claimId2).status), uint8(CoverageClaimStatus.Issued));
+    }
+
+    function test_slashCoverage_partialAmount() public {
+        // Register provider first
+        coverageAgent.registerCoverageProvider(address(mockProvider));
+
+        // Create a position
+        CoveragePosition memory position = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: USDC,
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
+        });
+        uint256 positionId = mockProvider.createPosition(position, "");
+
+        // Purchase coverage with multiple claims
+        ClaimCoverageRequest[] memory requests = new ClaimCoverageRequest[](3);
+        requests[0] = ClaimCoverageRequest({
+            coverageProvider: address(mockProvider),
+            positionId: positionId,
+            amount: 1000e6,
+            duration: 30 days,
+            reward: 10e6
+        });
+        requests[1] = ClaimCoverageRequest({
+            coverageProvider: address(mockProvider),
+            positionId: positionId,
+            amount: 500e6,
+            duration: 30 days,
+            reward: 5e6
+        });
+        requests[2] = ClaimCoverageRequest({
+            coverageProvider: address(mockProvider),
+            positionId: positionId,
+            amount: 300e6,
+            duration: 30 days,
+            reward: 3e6
+        });
+
+        // Ensure coordinator has tokens and approve coverage agent to spend
+        deal(USDC, coordinator, 18e6);
+        vm.prank(coordinator);
+        IERC20(USDC).approve(address(coverageAgent), 18e6);
+        uint256 coverageId = coverageAgent.purchaseCoverage(requests);
+
+        // Verify all claims are issued before slashing
+        Coverage memory cov = coverageAgent.coverage(coverageId);
+        assertEq(cov.claims.length, 3);
+
+        // Slash only 1200e6 (should fully slash first claim of 1000e6 and partially slash second claim for 200e6)
+        (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed) =
+            coverageAgent.slashCoverage(coverageId, 1200e6);
+
+        // Verify total slashed matches requested amount
+        assertEq(totalSlashed, 1200e6);
+
+        // Verify first claim was fully slashed
+        assertEq(uint8(slashStatuses[0]), uint8(CoverageClaimStatus.Slashed));
+
+        // Verify second claim was partially slashed (200e6 out of 500e6)
+        assertEq(uint8(slashStatuses[1]), uint8(CoverageClaimStatus.Slashed));
+
+        // Verify third claim was NOT slashed (remaining amount was 0)
+        assertEq(uint8(slashStatuses[2]), uint8(CoverageClaimStatus.Issued));
+
+        // Verify slash amounts on provider
+        uint256 claimId1 = cov.claims[0].claimId;
+        uint256 claimId2 = cov.claims[1].claimId;
+        uint256 claimId3 = cov.claims[2].claimId;
+
+        assertEq(mockProvider.claimTotalSlashAmount(claimId1), 1000e6); // Fully slashed
+        assertEq(mockProvider.claimTotalSlashAmount(claimId2), 200e6); // Partially slashed
+        assertEq(mockProvider.claimTotalSlashAmount(claimId3), 0); // Not slashed
+    }
+
+    function test_slashCoverage_partialAmount_exactMatch() public {
+        // Register provider first
+        coverageAgent.registerCoverageProvider(address(mockProvider));
+
+        // Create a position
+        CoveragePosition memory position = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: USDC,
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
+        });
+        uint256 positionId = mockProvider.createPosition(position, "");
+
+        // Purchase coverage with a single claim
+        ClaimCoverageRequest[] memory requests = new ClaimCoverageRequest[](1);
+        requests[0] = ClaimCoverageRequest({
+            coverageProvider: address(mockProvider),
+            positionId: positionId,
+            amount: 1000e6,
+            duration: 30 days,
+            reward: 10e6
+        });
+
+        // Ensure coordinator has tokens and approve coverage agent to spend
+        deal(USDC, coordinator, 10e6);
+        vm.prank(coordinator);
+        IERC20(USDC).approve(address(coverageAgent), 10e6);
+        uint256 coverageId = coverageAgent.purchaseCoverage(requests);
+
+        // Slash exact amount of the claim
+        (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed) =
+            coverageAgent.slashCoverage(coverageId, 1000e6);
+
+        // Verify total slashed matches
+        assertEq(totalSlashed, 1000e6);
+        assertEq(uint8(slashStatuses[0]), uint8(CoverageClaimStatus.Slashed));
+    }
+
+    function test_slashCoverage_amountExceedsTotalCoverage() public {
+        // Register provider first
+        coverageAgent.registerCoverageProvider(address(mockProvider));
+
+        // Create a position
+        CoveragePosition memory position = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: USDC,
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
+        });
+        uint256 positionId = mockProvider.createPosition(position, "");
+
+        // Purchase coverage
+        ClaimCoverageRequest[] memory requests = new ClaimCoverageRequest[](1);
+        requests[0] = ClaimCoverageRequest({
+            coverageProvider: address(mockProvider),
+            positionId: positionId,
+            amount: 1000e6,
+            duration: 30 days,
+            reward: 10e6
+        });
+
+        // Ensure coordinator has tokens and approve coverage agent to spend
+        deal(USDC, coordinator, 10e6);
+        vm.prank(coordinator);
+        IERC20(USDC).approve(address(coverageAgent), 10e6);
+        uint256 coverageId = coverageAgent.purchaseCoverage(requests);
+
+        // Slash more than available (should only slash what's available)
+        (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed) =
+            coverageAgent.slashCoverage(coverageId, 5000e6);
+
+        // Verify total slashed is capped at available coverage
+        assertEq(totalSlashed, 1000e6);
+        assertEq(uint8(slashStatuses[0]), uint8(CoverageClaimStatus.Slashed));
+    }
+
+    function test_slashCoverage_zeroAmount() public {
+        // Register provider first
+        coverageAgent.registerCoverageProvider(address(mockProvider));
+
+        // Create a position
+        CoveragePosition memory position = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: USDC,
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
+        });
+        uint256 positionId = mockProvider.createPosition(position, "");
+
+        // Purchase coverage
+        ClaimCoverageRequest[] memory requests = new ClaimCoverageRequest[](1);
+        requests[0] = ClaimCoverageRequest({
+            coverageProvider: address(mockProvider),
+            positionId: positionId,
+            amount: 1000e6,
+            duration: 30 days,
+            reward: 10e6
+        });
+
+        // Ensure coordinator has tokens and approve coverage agent to spend
+        deal(USDC, coordinator, 10e6);
+        vm.prank(coordinator);
+        IERC20(USDC).approve(address(coverageAgent), 10e6);
+        uint256 coverageId = coverageAgent.purchaseCoverage(requests);
+
+        // Slash zero amount (should do nothing)
+        (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed) = coverageAgent.slashCoverage(coverageId, 0);
+
+        // Verify nothing was slashed
+        assertEq(totalSlashed, 0);
+        // Status array should still have length equal to claims, but claim is not slashed
+        assertEq(slashStatuses.length, 1);
+
+        // Verify claim is still issued
+        Coverage memory cov = coverageAgent.coverage(coverageId);
+        CoverageClaim memory claim = mockProvider.claim(cov.claims[0].claimId);
+        assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Issued));
     }
 
     /// ============ Slash Coordinator Tests ============
@@ -889,11 +1119,13 @@ contract ExampleCoverageAgentTest is TestDeployer {
         assertEq(uint8(claimBefore.status), uint8(CoverageClaimStatus.Issued));
 
         // Slash the coverage - should go to PendingSlash, not Slashed (coordinator is set)
-        CoverageClaimStatus[] memory slashStatuses = coverageAgent.slashCoverage(coverageId);
+        (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed) =
+            coverageAgent.slashCoverage(coverageId, type(uint256).max);
 
         // Verify slash returned PendingSlash status
         assertEq(slashStatuses.length, 1);
         assertEq(uint8(slashStatuses[0]), uint8(CoverageClaimStatus.PendingSlash));
+        assertEq(totalSlashed, 1000e6); // Full claim amount queued for slash
 
         // Verify claim is in PendingSlash status (requires slash coordinator to complete)
         CoverageClaim memory claimAfter = mockProvider.claim(claimId);
