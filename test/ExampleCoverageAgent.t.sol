@@ -1473,8 +1473,8 @@ contract ExampleCoverageAgentTest is TestDeployer {
         // Verify amounts
         assertEq(amounts.length, 3);
         assertEq(amounts[0], 1000e6); // First claim fully slashed
-        assertEq(amounts[1], 200e6);  // Second claim partially slashed
-        assertEq(amounts[2], 0);      // Third claim not slashed
+        assertEq(amounts[1], 200e6); // Second claim partially slashed
+        assertEq(amounts[2], 0); // Third claim not slashed
         assertEq(totalOwing, 1200e6);
     }
 
@@ -1520,11 +1520,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
             reward: 10e6
         });
         requests[1] = ClaimCoverageRequest({
-            coverageProvider: address(provider2),
-            positionId: positionId2,
-            amount: 500e6,
-            duration: 30 days,
-            reward: 5e6
+            coverageProvider: address(provider2), positionId: positionId2, amount: 500e6, duration: 30 days, reward: 5e6
         });
 
         // Ensure coordinator has tokens and approve coverage agent to spend
@@ -1655,9 +1651,9 @@ contract ExampleCoverageAgentTest is TestDeployer {
         // Verify amounts
         assertEq(amounts.length, 4);
         assertEq(amounts[0], 1000e6); // Fully slashed
-        assertEq(amounts[1], 500e6);  // Fully slashed
-        assertEq(amounts[2], 150e6);  // Partially slashed (150e6 out of 300e6)
-        assertEq(amounts[3], 0);      // Not slashed
+        assertEq(amounts[1], 500e6); // Fully slashed
+        assertEq(amounts[2], 150e6); // Partially slashed (150e6 out of 300e6)
+        assertEq(amounts[3], 0); // Not slashed
         assertEq(totalOwing, 1650e6);
     }
 
@@ -1887,7 +1883,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         requests[0] = ClaimCoverageRequest({
             coverageProvider: address(mockProvider),
             positionId: positionId,
-            amount: 333e6,  // Amounts that don't divide evenly
+            amount: 333e6, // Amounts that don't divide evenly
             duration: 30 days,
             reward: 3e6
         });
@@ -1901,7 +1897,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         requests[2] = ClaimCoverageRequest({
             coverageProvider: address(mockProvider),
             positionId: positionId,
-            amount: 334e6,  // Total: 1000e6
+            amount: 334e6, // Total: 1000e6
             duration: 30 days,
             reward: 4e6
         });
@@ -1932,13 +1928,13 @@ contract ExampleCoverageAgentTest is TestDeployer {
         // Verify no remainder (it all distributed evenly due to the specific numbers)
         uint256 coordinatorBalanceAfter = IERC20(USDC).balanceOf(coordinator);
         assertEq(coordinatorBalanceAfter, coordinatorBalanceBefore);
-        
+
         // Verify the repayment amounts
         (uint256[] memory amountsAfter, uint256 totalOwingAfter) = coverageAgent.repaymentsOwing(coverageId);
-        
+
         // After repayment:
         // Claim 0: 333e6 - 33.3e6 = 299.7e6
-        // Claim 1: 333e6 - 33.3e6 = 299.7e6  
+        // Claim 1: 333e6 - 33.3e6 = 299.7e6
         // Claim 2: 334e6 - 33.4e6 = 300.6e6
         assertEq(amountsAfter[0], 299.7e6);
         assertEq(amountsAfter[1], 299.7e6);
@@ -1983,7 +1979,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         requests[2] = ClaimCoverageRequest({
             coverageProvider: address(mockProvider),
             positionId: positionId,
-            amount: 777e6,  // Total: 2331e6
+            amount: 777e6, // Total: 2331e6
             duration: 30 days,
             reward: 7e6
         });
@@ -2012,7 +2008,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         // Verify remainder was returned due to rounding
         uint256 coordinatorBalanceAfter = IERC20(USDC).balanceOf(coordinator);
         uint256 remainder = coordinatorBalanceAfter - coordinatorBalanceBefore;
-        
+
         // Should have some remainder due to rounding down
         assertGt(remainder, 0);
         assertLt(remainder, 10e6);
@@ -2065,11 +2061,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
             reward: 7e6
         });
         requests[1] = ClaimCoverageRequest({
-            coverageProvider: address(provider2),
-            positionId: positionId2,
-            amount: 300e6,
-            duration: 30 days,
-            reward: 3e6
+            coverageProvider: address(provider2), positionId: positionId2, amount: 300e6, duration: 30 days, reward: 3e6
         });
 
         // Ensure coordinator has tokens and approve coverage agent to spend
@@ -2149,8 +2141,8 @@ contract ExampleCoverageAgentTest is TestDeployer {
         // Check slashed amounts
         (uint256[] memory amountsBefore,) = coverageAgent.repaymentsOwing(coverageId);
         assertEq(amountsBefore[0], 500e6); // Fully slashed
-        assertEq(amountsBefore[1], 50e6);  // Partially slashed
-        assertEq(amountsBefore[2], 0);     // Not slashed
+        assertEq(amountsBefore[1], 50e6); // Partially slashed
+        assertEq(amountsBefore[2], 0); // Not slashed
 
         // Repay 275e6 - should distribute proportionally only to slashed claims
         // Claim 0: 500e6 * 275e6 / 550e6 = 250e6
@@ -2165,8 +2157,8 @@ contract ExampleCoverageAgentTest is TestDeployer {
         // Verify repayment
         (uint256[] memory amountsAfter, uint256 totalOwingAfter) = coverageAgent.repaymentsOwing(coverageId);
         assertEq(amountsAfter[0], 250e6); // 500e6 - 250e6
-        assertEq(amountsAfter[1], 25e6);  // 50e6 - 25e6
-        assertEq(amountsAfter[2], 0);     // Still 0
+        assertEq(amountsAfter[1], 25e6); // 50e6 - 25e6
+        assertEq(amountsAfter[2], 0); // Still 0
         assertEq(totalOwingAfter, 275e6);
     }
 
@@ -2222,7 +2214,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         coverageAgent.repaySlashedCoverage(coverageId, 2000e6);
 
         // Verify NO refund was issued (this is the actual behavior, not ideal)
-        uint256 coordinatorBalanceAfter = IERC20(USDC).balanceOf(coordinator);        
+        uint256 coordinatorBalanceAfter = IERC20(USDC).balanceOf(coordinator);
         assertEq(coordinatorBalanceAfter, coordinatorBalanceBefore); // Paid 2000e6, got 0 back
 
         // Verify tokens are stuck in the coverage agent (1000e6 excess)
@@ -2428,7 +2420,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         requests[2] = ClaimCoverageRequest({
             coverageProvider: address(mockProvider),
             positionId: positionId,
-            amount: 999e6,  // Total: 2997e6
+            amount: 999e6, // Total: 2997e6
             duration: 30 days,
             reward: 9e6
         });
@@ -2450,7 +2442,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 repayAmount = 100e6;
         uint256 coordinatorBalanceBefore = IERC20(USDC).balanceOf(coordinator);
         uint256 agentBalanceBefore = IERC20(USDC).balanceOf(address(coverageAgent));
-        
+
         deal(USDC, coordinator, coordinatorBalanceBefore + repayAmount);
         vm.prank(coordinator);
         IERC20(USDC).approve(address(coverageAgent), repayAmount);
@@ -2460,7 +2452,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         // Verify remainder was returned (just 1 wei due to rounding)
         uint256 coordinatorBalanceAfter = IERC20(USDC).balanceOf(coordinator);
         uint256 remainder = coordinatorBalanceAfter - coordinatorBalanceBefore;
-        
+
         // Should have 1 wei remainder
         assertEq(remainder, 1);
 
@@ -2550,7 +2542,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         // This test demonstrates a CRITICAL BUG:
         // If individual claim amounts are very small (dust), attempting to repay
         // proportionally can result in 0 being repaid due to integer division rounding.
-        
+
         // Register provider first
         coverageAgent.registerCoverageProvider(address(mockProvider));
 
@@ -2574,7 +2566,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
             requests[i] = ClaimCoverageRequest({
                 coverageProvider: address(mockProvider),
                 positionId: positionId,
-                amount: 10,  // Very small amounts (10 wei each)
+                amount: 10, // Very small amounts (10 wei each)
                 duration: 30 days,
                 reward: 1
             });
@@ -2607,7 +2599,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         // Now try to repay only 3 wei when each claim owes 8 wei
         // Formula: amounts[i] * amount / totalOwing = 8 * 3 / 40 = 0 (rounds down!)
         // This is the BUG: trying to repay 3 will repay 0 to each claim!
-        
+
         uint256 coordinatorBalanceBefore = IERC20(USDC).balanceOf(coordinator);
         deal(USDC, coordinator, coordinatorBalanceBefore + 3);
         vm.prank(coordinator);
@@ -2617,7 +2609,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
 
         // Check if ANY repayment happened
         (, uint256 totalOwingAfter2) = coverageAgent.repaymentsOwing(coverageId);
-        
+
         // BUG DEMONSTRATED: totalOwing is UNCHANGED because all repayments rounded to 0
         assertEq(totalOwingAfter2, 40); // Still 40! Nothing was repaid!
 
@@ -2629,7 +2621,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
     function test_repaySlashedCoverage_partialRepaymentLeavesUnrepayableDust() public {
         // This test shows how partial repayments can leave dust that requires
         // repaying the exact totalOwing to clear.
-        
+
         // Register provider first
         coverageAgent.registerCoverageProvider(address(mockProvider));
 
@@ -2681,13 +2673,13 @@ contract ExampleCoverageAgentTest is TestDeployer {
 
         // Make several partial repayments that create rounding remainders
         // Each repayment will round down, accumulating dust
-        
+
         // Repay 1000e6 (1/3 of total)
         deal(USDC, coordinator, 1000e6);
         vm.prank(coordinator);
         IERC20(USDC).approve(address(coverageAgent), 1000e6);
         coverageAgent.repaySlashedCoverage(coverageId, 1000e6);
-        
+
         // Check remaining
         (uint256[] memory amounts1, uint256 totalOwing1) = coverageAgent.repaymentsOwing(coverageId);
         // Each claim: 1000e6 * 1000e6 / 3000e6 = 333333333 repaid
@@ -2702,27 +2694,27 @@ contract ExampleCoverageAgentTest is TestDeployer {
         vm.prank(coordinator);
         IERC20(USDC).approve(address(coverageAgent), 1000e6);
         coverageAgent.repaySlashedCoverage(coverageId, 1000e6);
-        
+
         (, uint256 totalOwing2) = coverageAgent.repaymentsOwing(coverageId);
         // More dust accumulates...
-        
+
         // Try to close it out with "approximately" what's owed
         // But if there's dust, small repayments might not work
-        
+
         // Let's try to repay 1 wei to each claim (3 wei total)
         // If totalOwing2 > 3, then each claim gets: amounts[i] * 3 / totalOwing2
         // which will round to 0 for most reasonable scenarios
-        
+
         if (totalOwing2 > 10) {
             uint256 coordinatorBalanceBefore = IERC20(USDC).balanceOf(coordinator);
             deal(USDC, coordinator, coordinatorBalanceBefore + 5);
             vm.prank(coordinator);
             IERC20(USDC).approve(address(coverageAgent), 5);
-            
+
             coverageAgent.repaySlashedCoverage(coverageId, 5);
-            
+
             (, uint256 totalOwing3) = coverageAgent.repaymentsOwing(coverageId);
-            
+
             // If the repayment rounded to 0, totalOwing3 == totalOwing2
             // This demonstrates that dust CAN be problematic
             if (totalOwing3 == totalOwing2) {
@@ -2730,18 +2722,18 @@ contract ExampleCoverageAgentTest is TestDeployer {
                 assertTrue(true, "Dust repayment failed as expected");
             }
         }
-        
+
         // The ONLY way to fully close is to repay EXACT remaining amount
         (, uint256 finalOwing) = coverageAgent.repaymentsOwing(coverageId);
         deal(USDC, coordinator, finalOwing);
         vm.prank(coordinator);
         IERC20(USDC).approve(address(coverageAgent), finalOwing);
-        
+
         vm.expectEmit(true, false, false, false);
         emit ICoverageAgent.CoverageRepaid(coverageId);
-        
+
         coverageAgent.repaySlashedCoverage(coverageId, finalOwing);
-        
+
         (, uint256 owingAfterExact) = coverageAgent.repaymentsOwing(coverageId);
         assertEq(owingAfterExact, 0);
     }
@@ -2750,7 +2742,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         // Worst case: many claims with amounts that maximize rounding loss
         // If you have N claims each owing 1 wei, and totalOwing = N,
         // then repaying anything less than N results in 0 repaid per claim
-        
+
         // Register provider first
         coverageAgent.registerCoverageProvider(address(mockProvider));
 
@@ -2774,7 +2766,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
             requests[i] = ClaimCoverageRequest({
                 coverageProvider: address(mockProvider),
                 positionId: positionId,
-                amount: 1,  // 1 wei each
+                amount: 1, // 1 wei each
                 duration: 30 days,
                 reward: 1
             });
@@ -2794,7 +2786,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         // Try to repay 9 wei
         // Each claim: 1 * 9 / 10 = 0 (rounds down!)
         // ALL repayments will be 0!
-        
+
         uint256 coordinatorBalanceBefore = IERC20(USDC).balanceOf(coordinator);
         deal(USDC, coordinator, coordinatorBalanceBefore + 9);
         vm.prank(coordinator);
@@ -2803,10 +2795,10 @@ contract ExampleCoverageAgentTest is TestDeployer {
         coverageAgent.repaySlashedCoverage(coverageId, 9);
 
         (, uint256 totalOwingAfter) = coverageAgent.repaymentsOwing(coverageId);
-        
+
         // CRITICAL BUG: Nothing was repaid! All 9 wei returned as remainder
         assertEq(totalOwingAfter, 10); // Still 10!
-        
+
         uint256 coordinatorBalanceAfter = IERC20(USDC).balanceOf(coordinator);
         assertEq(coordinatorBalanceAfter, coordinatorBalanceBefore + 9); // All returned
 
@@ -2824,7 +2816,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
     function test_repaySlashedCoverage_accumulatedDustOverMultipleRepayments() public {
         // This test shows how dust accumulates over many repayments
         // and whether it eventually becomes impossible to close
-        
+
         // Register provider first
         coverageAgent.registerCoverageProvider(address(mockProvider));
 
@@ -2865,23 +2857,23 @@ contract ExampleCoverageAgentTest is TestDeployer {
         // Make 10 partial repayments of 100e6 each
         // Each repayment will have rounding, accumulating dust
         uint256 totalActuallyRepaid = 0;
-        
+
         for (uint256 i = 0; i < 10; i++) {
             (, uint256 owingBefore) = coverageAgent.repaymentsOwing(coverageId);
-            
+
             deal(USDC, coordinator, 100e6);
             vm.prank(coordinator);
             IERC20(USDC).approve(address(coverageAgent), 100e6);
-            
+
             coverageAgent.repaySlashedCoverage(coverageId, 100e6);
             uint256 balAfter = IERC20(USDC).balanceOf(coordinator);
-            
+
             uint256 remainder = balAfter; // Remainder returned after repay
             uint256 actualRepaid = 100e6 - remainder;
             totalActuallyRepaid += actualRepaid;
-            
+
             (, uint256 owingAfter) = coverageAgent.repaymentsOwing(coverageId);
-            
+
             // Verify repayment math: owingBefore - owingAfter should equal actualRepaid
             assertEq(owingBefore - owingAfter, actualRepaid);
         }
@@ -2889,19 +2881,19 @@ contract ExampleCoverageAgentTest is TestDeployer {
         // After 10 repayments of 100e6 (1000e6 total attempted)
         // Some will have been lost to rounding
         (, uint256 totalOwingFinal) = coverageAgent.repaymentsOwing(coverageId);
-        
+
         // With 7000e6 original and ~1000e6 attempted repayments,
         // we should have ~6000e6 remaining, plus accumulated dust
         assertGt(totalOwingFinal, 6000e6 - 100); // Allow small margin
         assertLt(totalOwingFinal, 6000e6 + 100);
-        
+
         // Final verification: can we still close it with exact amount?
         deal(USDC, coordinator, totalOwingFinal);
         vm.prank(coordinator);
         IERC20(USDC).approve(address(coverageAgent), totalOwingFinal);
-        
+
         coverageAgent.repaySlashedCoverage(coverageId, totalOwingFinal);
-        
+
         (, uint256 finalOwing) = coverageAgent.repaymentsOwing(coverageId);
         assertEq(finalOwing, 0); // Successfully closed with exact amount
     }

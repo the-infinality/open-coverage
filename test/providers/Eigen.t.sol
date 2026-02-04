@@ -2724,10 +2724,10 @@ contract EigenTest is EigenTestDeployer {
         // Get recorded logs and verify ClaimRepaid was NOT emitted
         bytes32 claimRepaidSelector = ICoverageProvider.ClaimRepaid.selector;
         bytes32 claimRepaymentSelector = ICoverageProvider.ClaimRepayment.selector;
-        
+
         bool foundClaimRepaid = false;
         bool foundClaimRepayment = false;
-        
+
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics[0] == claimRepaidSelector) {
@@ -2737,10 +2737,10 @@ contract EigenTest is EigenTestDeployer {
                 foundClaimRepayment = true;
             }
         }
-        
+
         // ClaimRepaid should NOT be emitted for additional repayments
         assertFalse(foundClaimRepaid, "ClaimRepaid should not be emitted for additional repayments");
-        
+
         // ClaimRepayment should be emitted
         assertTrue(foundClaimRepayment, "ClaimRepayment should be emitted for additional repayments");
 

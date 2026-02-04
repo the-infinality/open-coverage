@@ -377,7 +377,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         // Claim the funds to this contract first
         SafeERC20.safeTransferFrom(coverageAgentAsset, _coverageAgent, address(this), amount);
 
-        if(_claim.status != CoverageClaimStatus.Repaid) {
+        if (_claim.status != CoverageClaimStatus.Repaid) {
             // Repayments amount greater than the slashed value is allowed
             if (amount >= claimSlashAmounts[claimId]) {
                 claimSlashAmounts[claimId] = 0;

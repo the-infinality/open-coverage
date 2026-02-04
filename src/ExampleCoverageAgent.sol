@@ -254,22 +254,23 @@ contract ExampleCoverageAgent is ICoverageAgent, IExampleCoverageAgent, ERC165 {
         uint256 totalRepaid = 0;
 
         for (uint256 i = 0; i < amounts.length; i++) {
-            if(amounts[i] == 0) {
+            if (amounts[i] == 0) {
                 continue;
             }
 
             uint256 repayAmount = amounts[i] * amount / totalOwing;
             totalRepaid += repayAmount;
 
-            ICoverageProvider(coverageData.claims[i].coverageProvider).repaySlashedClaim(coverageData.claims[i].claimId, repayAmount);
+            ICoverageProvider(coverageData.claims[i].coverageProvider)
+                .repaySlashedClaim(coverageData.claims[i].claimId, repayAmount);
         }
 
-        if(amount > totalRepaid) {
+        if (amount > totalRepaid) {
             // Return any excess tokens to the coordinator
             SafeERC20.safeTransfer(IERC20(_ASSET), msg.sender, amount - totalRepaid);
         }
 
-        if(totalOwing <= totalRepaid) {
+        if (totalOwing <= totalRepaid) {
             emit CoverageRepaid(coverageId);
         }
     }
@@ -281,7 +282,8 @@ contract ExampleCoverageAgent is ICoverageAgent, IExampleCoverageAgent, ERC165 {
         amounts = new uint256[](coverageData.claims.length);
         totalOwing = 0;
         for (uint256 i = 0; i < coverageData.claims.length; i++) {
-            amounts[i] = ICoverageProvider(coverageData.claims[i].coverageProvider).claimTotalSlashAmount(coverageData.claims[i].claimId);
+            amounts[i] = ICoverageProvider(coverageData.claims[i].coverageProvider)
+                .claimTotalSlashAmount(coverageData.claims[i].claimId);
             totalOwing += amounts[i];
         }
     }
