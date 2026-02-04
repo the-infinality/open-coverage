@@ -215,6 +215,16 @@ export const iCoverageAgentAbi = [
     },
     {
         type: "function",
+        inputs: [
+            { name: "claimId", internalType: "uint256", type: "uint256" },
+            { name: "refundAmount", internalType: "uint256", type: "uint256" },
+        ],
+        name: "onClaimRefunded",
+        outputs: [],
+        stateMutability: "nonpayable",
+    },
+    {
+        type: "function",
         inputs: [{ name: "positionId", internalType: "uint256", type: "uint256" }],
         name: "onRegisterPosition",
         outputs: [],
@@ -294,19 +304,13 @@ export const iCoverageAgentAbi = [
         anonymous: false,
         inputs: [
             {
-                name: "coverageProvider",
-                internalType: "address",
-                type: "address",
-                indexed: true,
-            },
-            {
-                name: "positionId",
-                internalType: "uint256",
-                type: "uint256",
-                indexed: true,
+                name: "metadataUri",
+                internalType: "string",
+                type: "string",
+                indexed: false,
             },
         ],
-        name: "PositionRegistered",
+        name: "MetadataUpdated",
     },
     {
         type: "error",
@@ -593,6 +597,19 @@ export const iCoverageProviderAbi = [
         anonymous: false,
         inputs: [
             {
+                name: "claimId",
+                internalType: "uint256",
+                type: "uint256",
+                indexed: true,
+            },
+        ],
+        name: "ClaimLiquidated",
+    },
+    {
+        type: "event",
+        anonymous: false,
+        inputs: [
+            {
                 name: "positionId",
                 internalType: "uint256",
                 type: "uint256",
@@ -662,13 +679,13 @@ export const iCoverageProviderAbi = [
         anonymous: false,
         inputs: [
             {
-                name: "claimId",
-                internalType: "uint256",
-                type: "uint256",
-                indexed: true,
+                name: "metadataUri",
+                internalType: "string",
+                type: "string",
+                indexed: false,
             },
         ],
-        name: "Liquidated",
+        name: "MetadataUpdated",
     },
     {
         type: "event",
@@ -1105,13 +1122,6 @@ export const iEigenServiceManagerAbi = [
     },
     {
         type: "function",
-        inputs: [{ name: "metadataURI", internalType: "string", type: "string" }],
-        name: "updateMetadataURI",
-        outputs: [],
-        stateMutability: "nonpayable",
-    },
-    {
-        type: "function",
         inputs: [],
         name: "whitelistedStrategies",
         outputs: [{ name: "strategies", internalType: "address[]", type: "address[]" }],
@@ -1233,6 +1243,13 @@ export const iExampleCoverageAgentAbi = [
                 type: "uint8[]",
             },
         ],
+        stateMutability: "nonpayable",
+    },
+    {
+        type: "function",
+        inputs: [{ name: "metadataURI", internalType: "string", type: "string" }],
+        name: "updateMetadata",
+        outputs: [],
         stateMutability: "nonpayable",
     },
     { type: "error", inputs: [], name: "NotCoverageAgentCoordinator" },
