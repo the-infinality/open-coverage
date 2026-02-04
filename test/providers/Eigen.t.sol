@@ -31,6 +31,7 @@ import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
 import {ISlashCoordinator, SlashStatus} from "src/interfaces/ISlashCoordinator.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
 import {console2} from "forge-std/console2.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 contract EigenTest is EigenTestDeployer {
     IEigenOperatorProxy public operator;
@@ -2501,6 +2502,329 @@ contract EigenTest is EigenTestDeployer {
 
         // Verify claimTotalSlashAmount returns the exact slash amount
         assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId), slashAmount);
+    }
+
+    // ============ repaySlashedClaim Tests ============
+
+    /// @notice Helper to set up a slashed claim for repayment tests
+    /// @param stakeAmount Amount to stake and delegate to operator
+    /// @param claimAmount Amount of coverage to claim
+    /// @param slashAmount Amount to slash from the claim
+    /// @return positionId The created position ID
+    /// @return claimId The created and slashed claim ID
+    function _setupSlashedClaim(uint256 stakeAmount, uint256 claimAmount, uint256 slashAmount)
+        internal
+        returns (uint256 positionId, uint256 claimId)
+    {
+        positionId = _setupSlashingPosition(stakeAmount);
+        claimId = _createAndApproveClaim(positionId, claimAmount, 10e6);
+
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, slashAmount);
+        _executeSlash(claimIds, amounts, 15 days);
+
+        // Verify claim is now slashed
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
+    }
+
+    /// @notice Test repaying a slashed claim fully
+    function test_repaySlashedClaim() public {
+        uint256 slashAmount = 500e6;
+        (, uint256 claimId) = _setupSlashedClaim(1000e18, 1000e6, slashAmount);
+
+        // Give coverage agent tokens to repay
+        deal(coverageAgent.asset(), address(coverageAgent), slashAmount);
+
+        // Approve diamond to spend tokens
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), slashAmount);
+
+        // Expect ClaimRepaid event (full repayment - emitted without amount)
+        vm.expectEmit(true, false, false, false);
+        emit ICoverageProvider.ClaimRepaid(claimId);
+
+        // Expect ClaimRepayment event (emitted on every repayment with amount)
+        vm.expectEmit(true, false, false, true);
+        emit ICoverageProvider.ClaimRepayment(claimId, slashAmount);
+
+        eigenCoverageProvider.repaySlashedClaim(claimId, slashAmount);
+        vm.stopPrank();
+
+        // Verify claim status is now Repaid
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Repaid));
+
+        // Verify slash amount is cleared
+        assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId), 0);
+    }
+
+    /// @notice Test partial repayment of a slashed claim
+    function test_repaySlashedClaim_partialRepayment() public {
+        uint256 slashAmount = 500e6;
+        uint256 partialRepayment = 200e6;
+        (, uint256 claimId) = _setupSlashedClaim(1000e18, 1000e6, slashAmount);
+
+        // Give coverage agent tokens to repay
+        deal(coverageAgent.asset(), address(coverageAgent), partialRepayment);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), partialRepayment);
+
+        // Expect ClaimRepayment event (partial repayment - no ClaimRepaid event)
+        vm.expectEmit(true, false, false, true);
+        emit ICoverageProvider.ClaimRepayment(claimId, partialRepayment);
+
+        eigenCoverageProvider.repaySlashedClaim(claimId, partialRepayment);
+        vm.stopPrank();
+
+        // Verify claim status remains Slashed (not fully repaid)
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
+
+        // Verify remaining slash amount
+        assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId), slashAmount - partialRepayment);
+    }
+
+    /// @notice Test multiple partial repayments leading to full repayment
+    function test_repaySlashedClaim_multiplePartialRepayments() public {
+        uint256 slashAmount = 500e6;
+        (, uint256 claimId) = _setupSlashedClaim(1000e18, 1000e6, slashAmount);
+
+        // First partial repayment
+        uint256 firstRepayment = 200e6;
+        deal(coverageAgent.asset(), address(coverageAgent), firstRepayment);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), firstRepayment);
+        eigenCoverageProvider.repaySlashedClaim(claimId, firstRepayment);
+        vm.stopPrank();
+
+        // Verify still slashed
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
+        assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId), 300e6);
+
+        // Second partial repayment
+        uint256 secondRepayment = 150e6;
+        deal(coverageAgent.asset(), address(coverageAgent), secondRepayment);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), secondRepayment);
+        eigenCoverageProvider.repaySlashedClaim(claimId, secondRepayment);
+        vm.stopPrank();
+
+        // Verify still slashed
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
+        assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId), 150e6);
+
+        // Final repayment (remaining amount)
+        uint256 finalRepayment = 150e6;
+        deal(coverageAgent.asset(), address(coverageAgent), finalRepayment);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), finalRepayment);
+        eigenCoverageProvider.repaySlashedClaim(claimId, finalRepayment);
+        vm.stopPrank();
+
+        // Verify now fully repaid
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Repaid));
+        assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId), 0);
+    }
+
+    /// @notice Test overpayment is allowed (amount > slashAmount)
+    function test_repaySlashedClaim_overpayment() public {
+        uint256 slashAmount = 500e6;
+        uint256 overpayment = 700e6; // More than slash amount
+        (, uint256 claimId) = _setupSlashedClaim(1000e18, 1000e6, slashAmount);
+
+        // Give coverage agent tokens to overpay
+        deal(coverageAgent.asset(), address(coverageAgent), overpayment);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), overpayment);
+
+        // Expect ClaimRepaid event (full repayment - overpayment counts as full)
+        vm.expectEmit(true, false, false, false);
+        emit ICoverageProvider.ClaimRepaid(claimId);
+
+        // Expect ClaimRepayment event with full overpayment amount
+        vm.expectEmit(true, false, false, true);
+        emit ICoverageProvider.ClaimRepayment(claimId, overpayment);
+
+        eigenCoverageProvider.repaySlashedClaim(claimId, overpayment);
+        vm.stopPrank();
+
+        // Verify claim status is Repaid
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Repaid));
+
+        // Verify slash amount is cleared (not negative)
+        assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId), 0);
+    }
+
+    /// @notice Test repayment reverts when claim is not slashed
+    function test_RevertWhen_repaySlashedClaim_notSlashed() public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        // Claim is Issued, not Slashed
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Issued));
+
+        deal(coverageAgent.asset(), address(coverageAgent), 100e6);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 100e6);
+
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId));
+        eigenCoverageProvider.repaySlashedClaim(claimId, 100e6);
+        vm.stopPrank();
+    }
+
+    /// @notice Test repayment reverts when caller is not the coverage agent
+    function test_RevertWhen_repaySlashedClaim_notCoverageAgent() public {
+        uint256 slashAmount = 500e6;
+        (, uint256 claimId) = _setupSlashedClaim(1000e18, 1000e6, slashAmount);
+
+        address randomCaller = makeAddr("randomCaller");
+        deal(coverageAgent.asset(), randomCaller, slashAmount);
+
+        vm.startPrank(randomCaller);
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), slashAmount);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.NotCoverageAgent.selector, randomCaller, address(coverageAgent))
+        );
+        eigenCoverageProvider.repaySlashedClaim(claimId, slashAmount);
+        vm.stopPrank();
+    }
+
+    /// @notice Test repayment reverts when claim is already repaid
+    /// @notice Test additional repayment after claim is already repaid
+    function test_repaySlashedClaim_additionalRepaymentAfterRepaid() public {
+        uint256 slashAmount = 500e6;
+        (, uint256 claimId) = _setupSlashedClaim(1000e18, 1000e6, slashAmount);
+
+        // First repayment - full amount
+        deal(coverageAgent.asset(), address(coverageAgent), slashAmount);
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), slashAmount);
+        eigenCoverageProvider.repaySlashedClaim(claimId, slashAmount);
+        vm.stopPrank();
+
+        // Verify claim is Repaid
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Repaid));
+
+        // Additional repayment after already being Repaid should succeed
+        uint256 additionalAmount = 100e6;
+        deal(coverageAgent.asset(), address(coverageAgent), additionalAmount);
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), additionalAmount);
+
+        // Record logs to verify ClaimRepaid is NOT emitted
+        vm.recordLogs();
+
+        eigenCoverageProvider.repaySlashedClaim(claimId, additionalAmount);
+        vm.stopPrank();
+
+        // Get recorded logs and verify ClaimRepaid was NOT emitted
+        bytes32 claimRepaidSelector = ICoverageProvider.ClaimRepaid.selector;
+        bytes32 claimRepaymentSelector = ICoverageProvider.ClaimRepayment.selector;
+        
+        bool foundClaimRepaid = false;
+        bool foundClaimRepayment = false;
+        
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] == claimRepaidSelector) {
+                foundClaimRepaid = true;
+            }
+            if (logs[i].topics[0] == claimRepaymentSelector) {
+                foundClaimRepayment = true;
+            }
+        }
+        
+        // ClaimRepaid should NOT be emitted for additional repayments
+        assertFalse(foundClaimRepaid, "ClaimRepaid should not be emitted for additional repayments");
+        
+        // ClaimRepayment should be emitted
+        assertTrue(foundClaimRepayment, "ClaimRepayment should be emitted for additional repayments");
+
+        // Verify claim status remains Repaid
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Repaid));
+
+        // Verify slash amount is still 0 (already cleared from first full repayment)
+        assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId), 0);
+    }
+
+    /// @notice Test that repayment transfers tokens from coverage agent to diamond
+    function test_repaySlashedClaim_tokenTransfer() public {
+        uint256 slashAmount = 500e6;
+        uint256 repayAmount = 300e6;
+        (, uint256 claimId) = _setupSlashedClaim(1000e18, 1000e6, slashAmount);
+
+        // Give coverage agent tokens to repay
+        deal(coverageAgent.asset(), address(coverageAgent), repayAmount);
+
+        uint256 coverageAgentBalanceBefore = IERC20(coverageAgent.asset()).balanceOf(address(coverageAgent));
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), repayAmount);
+        eigenCoverageProvider.repaySlashedClaim(claimId, repayAmount);
+        vm.stopPrank();
+
+        // Verify tokens were transferred from coverage agent
+        assertEq(
+            IERC20(coverageAgent.asset()).balanceOf(address(coverageAgent)), coverageAgentBalanceBefore - repayAmount
+        );
+
+        // Note: Diamond balance may not increase by full amount due to reward submission
+        // The tokens are used to submit operator rewards, so we just verify they left the coverage agent
+    }
+
+    /// @notice Test repayment with exact slash amount (boundary condition)
+    function test_repaySlashedClaim_exactAmount() public {
+        uint256 slashAmount = 500e6;
+        (, uint256 claimId) = _setupSlashedClaim(1000e18, 1000e6, slashAmount);
+
+        // Give coverage agent exact tokens to repay
+        deal(coverageAgent.asset(), address(coverageAgent), slashAmount);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), slashAmount);
+        eigenCoverageProvider.repaySlashedClaim(claimId, slashAmount);
+        vm.stopPrank();
+
+        // Verify claim status is Repaid (amount >= slashAmount)
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Repaid));
+        assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId), 0);
+    }
+
+    /// @notice Fuzz test for repaySlashedClaim with various repayment amounts
+    /// @param repaymentBps The repayment amount as percentage of slash amount in basis points (1-15000)
+    function testFuzz_repaySlashedClaim(uint256 repaymentBps) public {
+        // Bound early to include overpayment scenarios (up to 150% of slash amount)
+        repaymentBps = bound(repaymentBps, 1, 15000);
+
+        uint256 slashAmount = 500e6;
+        (, uint256 claimId) = _setupSlashedClaim(100e18, 1000e6, slashAmount);
+
+        // Calculate repayment amount from basis points
+        uint256 repayAmount = (slashAmount * repaymentBps) / 10000;
+        if (repayAmount == 0) repayAmount = 1; // Ensure at least 1 wei
+
+        // Give coverage agent tokens to repay
+        deal(coverageAgent.asset(), address(coverageAgent), repayAmount);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), repayAmount);
+        eigenCoverageProvider.repaySlashedClaim(claimId, repayAmount);
+        vm.stopPrank();
+
+        // Verify results based on repayment amount
+        if (repayAmount >= slashAmount) {
+            // Full repayment or overpayment
+            assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Repaid));
+            assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId), 0);
+        } else {
+            // Partial repayment
+            assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
+            assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId), slashAmount - repayAmount);
+        }
     }
 }
 

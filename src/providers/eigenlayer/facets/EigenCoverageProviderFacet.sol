@@ -361,6 +361,52 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     }
 
     /// @inheritdoc ICoverageProvider
+    function repaySlashedClaim(uint256 claimId, uint256 amount) external {
+        CoverageClaim storage _claim = claims[claimId];
+        CoveragePosition memory positionData = positions[_claim.positionId];
+        address _coverageAgent = positionData.coverageAgent;
+
+        // Allow repayments for claims that are Slashed or already Repaid (for additional repayments)
+        if (_claim.status != CoverageClaimStatus.Slashed && _claim.status != CoverageClaimStatus.Repaid) {
+            revert InvalidClaim(claimId);
+        }
+        if (msg.sender != _coverageAgent) revert NotCoverageAgent(msg.sender, _coverageAgent);
+
+        IERC20 coverageAgentAsset = IERC20(ICoverageAgent(_coverageAgent).asset());
+
+        // Claim the funds to this contract first
+        SafeERC20.safeTransferFrom(coverageAgentAsset, _coverageAgent, address(this), amount);
+
+        if(_claim.status != CoverageClaimStatus.Repaid) {
+            // Repayments amount greater than the slashed value is allowed
+            if (amount >= claimSlashAmounts[claimId]) {
+                claimSlashAmounts[claimId] = 0;
+                _claim.status = CoverageClaimStatus.Repaid; // Update the status if the slashed claim is fully repaid
+                emit ClaimRepaid(claimId);
+            } else {
+                claimSlashAmounts[claimId] -= amount;
+            }
+        }
+
+        emit ClaimRepayment(claimId, amount);
+
+        IRewardsCoordinator rewardsCoordinator = IRewardsCoordinator(_eigenAddresses.rewardsCoordinator);
+        uint32 calculationInterval = rewardsCoordinator.CALCULATION_INTERVAL_SECONDS();
+
+        // Pass 0 for startTimestamp to auto-calculate using the next interval
+        IEigenServiceManager(address(this))
+            .submitOperatorReward(
+                address(uint160(uint256(positionData.operatorId))),
+                IStrategy(assetToStrategy[positionData.asset]),
+                coverageAgentAsset,
+                amount,
+                0, // Auto-calculate startTimestamp
+                calculationInterval,
+                "Slash Repayment"
+            );
+    }
+
+    /// @inheritdoc ICoverageProvider
     function position(uint256 positionId) external view returns (CoveragePosition memory) {
         return positions[positionId];
     }

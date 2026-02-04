@@ -53,11 +53,11 @@ struct CoveragePosition {
 
 enum CoverageClaimStatus {
     Issued,
-    Liquidated,
     Completed,
     PendingSlash,
     Slashed,
-    Reserved
+    Reserved,
+    Repaid
 }
 
 struct CoverageClaim {
@@ -81,6 +81,8 @@ interface ICoverageProvider {
     event ClaimLiquidated(uint256 indexed claimId);
     event ClaimSlashed(uint256 indexed claimId, uint256 amount);
     event ClaimSlashPending(uint256 indexed claimId, address slashCoordinator);
+    event ClaimRepayment(uint256 indexed claimId, uint256 amount);
+    event ClaimRepaid(uint256 indexed claimId);
     event MetadataUpdated(string metadataUri);
 
     error InvalidAmount();
@@ -182,6 +184,12 @@ interface ICoverageProvider {
     /// @dev Can only be called by the slash coordinator that initiated the slashing process.
     /// @param claimId The id of the coverage claim to complete the slashing process for.
     function completeSlash(uint256 claimId) external;
+
+    /// @notice Repay a claim that has been slashed
+    /// @dev Can only be called by the coverage agent that issued the claim.
+    /// @param claimId The id of the claim to repay.
+    /// @param amount The amount of the coverage claim to repay.
+    function repaySlashedClaim(uint256 claimId, uint256 amount) external;
 
     /// ============ Discovery ============
 
