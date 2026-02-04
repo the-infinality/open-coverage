@@ -33,6 +33,8 @@ interface ICoverageAgent {
     event CoverageProviderRegistered(address indexed coverageProvider);
     event CoverageClaimed(uint256 indexed coverageId);
     event CoverageReserved(uint256 indexed coverageId);
+    event CoverageSlashed(uint256 indexed coverageId);
+    event CoverageRepaid(uint256 indexed coverageId);
     event MetadataUpdated(string metadataUri);
 
     error InvalidCoverage(uint256 coverageId);

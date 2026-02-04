@@ -239,7 +239,51 @@ contract ExampleCoverageAgent is ICoverageAgent, IExampleCoverageAgent, ERC165 {
             remainingAmount -= slashAmount;
         }
 
+        emit CoverageSlashed(coverageId);
+
         return (slashStatuses, totalSlashed);
+    }
+
+    /// @inheritdoc IExampleCoverageAgent
+    function repaySlashedCoverage(uint256 coverageId, uint256 amount) external onlyCoordinator {
+        require(coverageId < _coverages.length, InvalidCoverage(coverageId));
+        Coverage storage coverageData = _coverages[coverageId];
+        (uint256[] memory amounts, uint256 totalOwing) = repaymentsOwing(coverageId);
+        SafeERC20.safeTransferFrom(IERC20(_ASSET), msg.sender, address(this), amount);
+
+        uint256 totalRepaid = 0;
+
+        for (uint256 i = 0; i < amounts.length; i++) {
+            if(amounts[i] == 0) {
+                continue;
+            }
+
+            uint256 repayAmount = amounts[i] * amount / totalOwing;
+            totalRepaid += repayAmount;
+
+            ICoverageProvider(coverageData.claims[i].coverageProvider).repaySlashedClaim(coverageData.claims[i].claimId, repayAmount);
+        }
+
+        if(amount > totalRepaid) {
+            // Return any excess tokens to the coordinator
+            SafeERC20.safeTransfer(IERC20(_ASSET), msg.sender, amount - totalRepaid);
+        }
+
+        if(totalOwing <= totalRepaid) {
+            emit CoverageRepaid(coverageId);
+        }
+    }
+
+    /// @inheritdoc IExampleCoverageAgent
+    function repaymentsOwing(uint256 coverageId) public view returns (uint256[] memory amounts, uint256 totalOwing) {
+        require(coverageId < _coverages.length, InvalidCoverage(coverageId));
+        Coverage storage coverageData = _coverages[coverageId];
+        amounts = new uint256[](coverageData.claims.length);
+        totalOwing = 0;
+        for (uint256 i = 0; i < coverageData.claims.length; i++) {
+            amounts[i] = ICoverageProvider(coverageData.claims[i].coverageProvider).claimTotalSlashAmount(coverageData.claims[i].claimId);
+            totalOwing += amounts[i];
+        }
     }
 
     /// @inheritdoc IExampleCoverageAgent

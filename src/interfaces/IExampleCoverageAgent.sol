@@ -42,6 +42,18 @@ interface IExampleCoverageAgent {
         external
         returns (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed);
 
+    /// @notice Repay slashed coverage up to a specified amount.
+    /// @dev Should loop through claims in order, repaying each until the total repaid reaches the specified amount.
+    /// @param coverageId The id of the coverage purchase to repay.
+    /// @param amount The maximum amount to repay across all claims in this coverage.
+    function repaySlashedCoverage(uint256 coverageId, uint256 amount) external;
+
+    /// @notice Get the amounts of each claim owing after slashing.
+    /// @dev Should return the amounts of each claim owing after slashing.
+    /// @param coverageId The id of the coverage purchase to get the owing claims for.
+    /// @return amounts The amounts of each claim owing after slashing.
+    function repaymentsOwing(uint256 coverageId) external view returns (uint256[] memory amounts, uint256 totalOwing);
+
     /// @notice Update the metadata of the coverage agent.
     /// @dev Can only be called by the coverage agent coordinator.
     /// @param metadataURI The new metadata URI.
