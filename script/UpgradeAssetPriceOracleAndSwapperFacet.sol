@@ -7,7 +7,6 @@ import {IDiamondCut} from "../src/diamond/interfaces/IDiamondCut.sol";
 import {IDiamond} from "../src/diamond/interfaces/IDiamond.sol";
 import {IDiamondLoupe} from "../src/diamond/interfaces/IDiamondLoupe.sol";
 import {IAssetPriceOracleAndSwapper} from "../src/interfaces/IAssetPriceOracleAndSwapper.sol";
-import {AssetPriceOracleAndSwapperFacet} from "../src/facets/AssetPriceOracleAndSwapperFacet.sol";
 import {
     AssetPriceOracleAndSwapperFacetDeployer
 } from "../utils/deployments/AssetPriceOracleAndSwapperFacetDeployer.sol";

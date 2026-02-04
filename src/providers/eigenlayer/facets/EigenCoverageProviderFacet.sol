@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20} from "@openzeppelin-v5/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin-v5/contracts/token/ERC20/utils/SafeERC20.sol";
 import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/EnumerableMap.sol";
 import {IAllocationManager, IAllocationManagerTypes} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
@@ -116,9 +117,9 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         _validatePosition(positionData, amount, duration, reward);
 
         // Capture rewards funds from coverage agent
-        bool success =
-            IERC20(ICoverageAgent(positionData.coverageAgent).asset()).transferFrom(msg.sender, address(this), reward);
-        if (!success) revert RewardTransferFailed();
+        SafeERC20.safeTransferFrom(
+            IERC20(ICoverageAgent(positionData.coverageAgent).asset()), msg.sender, address(this), reward
+        );
 
         address operator = address(uint160(uint256(positionData.operatorId)));
         address strategy = assetToStrategy[positionData.asset];
@@ -232,9 +233,9 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         }
 
         // Capture rewards funds from coverage agent
-        bool success =
-            IERC20(ICoverageAgent(positionData.coverageAgent).asset()).transferFrom(msg.sender, address(this), reward);
-        if (!success) revert RewardTransferFailed();
+        SafeERC20.safeTransferFrom(
+            IERC20(ICoverageAgent(positionData.coverageAgent).asset()), msg.sender, address(this), reward
+        );
 
         // Update claim to Issued status with new values
         _claim.amount = amount;
@@ -261,30 +262,44 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         bool isReservation = _claim.status == CoverageClaimStatus.Reserved;
         bool isIssued = _claim.status == CoverageClaimStatus.Issued;
 
-        if (!isReservation && !isIssued) revert InvalidClaim(claimId);
-
-        bool isCoverageAgent = msg.sender == positionData.coverageAgent;
-        bool reservationExpired =
-            isReservation && (block.timestamp > _claim.createdAt + positionData.maxReservationTime);
-        bool claimDurationElapsed = isIssued && (block.timestamp >= _claim.createdAt + _claim.duration);
+        // Can not close claim that are not reserved or issued
+        if (!(isReservation || isIssued)) revert InvalidClaim(claimId);
 
         // Anyone can close an expired reservation or an issued claim whose duration has elapsed
-        // Only the coverage agent can close their own claim early
-        if (!reservationExpired && !claimDurationElapsed && !isCoverageAgent) {
-            if (isReservation) {
-                revert ClaimNotExpired(claimId);
-            }
-            revert NotCoverageAgent(msg.sender, positionData.coverageAgent);
+        // However, only the coverage agent can close their own reserved or issued claim early
+        if (
+            ((isReservation && (block.timestamp <= _claim.createdAt + positionData.maxReservationTime)) // Is the reservation not expired?
+                    || (isIssued && (block.timestamp <= _claim.createdAt + _claim.duration)) // Has the claim duration not elapsed?
+                ) && msg.sender != positionData.coverageAgent // Ensure the caller is not the coverage agent
+        ) {
+            revert ClaimNotExpired(claimId);
         }
 
-        // Release the coverage from the coverage map
-        address operator = address(uint160(uint256(positionData.operatorId)));
-        address strategy = assetToStrategy[positionData.asset];
-        _modifyCoverageForAgent(operator, strategy, positionData.coverageAgent, -int256(_claim.amount));
+        _modifyCoverageForAgent(
+            address(uint160(uint256(positionData.operatorId))), // Operator
+            assetToStrategy[positionData.asset], // Strategy
+            positionData.coverageAgent,
+            -int256(_claim.amount)
+        );
 
-        // Update duration to reflect actual time coverage was active (only if closed early by coverage agent)
+        // Calculate and process refund if claim is closed early with refundable policy
         if (isIssued && block.timestamp < _claim.createdAt + _claim.duration) {
-            _claim.duration = block.timestamp - _claim.createdAt;
+            uint256 originalDuration = _claim.duration;
+            uint256 elapsedTime = block.timestamp - _claim.createdAt;
+
+            // Update duration to reflect actual time coverage was active
+            _claim.duration = elapsedTime;
+
+            // Calculate refund based on refundable policy (Full and TimeWeighted both use time-based refund)
+            if (positionData.refundable != Refundable.None) {
+                // Calculate refund amount based on time elapsed divided by the total original duration of the claim
+                uint256 refundAmount = (_claim.reward * (originalDuration - elapsedTime)) / originalDuration;
+
+                address coverageAgent = positionData.coverageAgent;
+                SafeERC20.safeTransfer(IERC20(ICoverageAgent(coverageAgent).asset()), coverageAgent, refundAmount);
+
+                ICoverageAgent(coverageAgent).onClaimRefunded(claimId, refundAmount);
+            }
         }
 
         _claim.status = CoverageClaimStatus.Completed;
@@ -511,8 +526,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
             .swapForOutput(amount, ICoverageAgent(_position.coverageAgent).asset(), _position.asset);
 
         // Transfer swapped tokens to coverage agent
-        bool success = IERC20(ICoverageAgent(_position.coverageAgent).asset()).transfer(_position.coverageAgent, amount);
-        if (!success) revert SlashFailed(claimId);
+        SafeERC20.safeTransfer(IERC20(ICoverageAgent(_position.coverageAgent).asset()), _position.coverageAgent, amount);
 
         _claim.status = CoverageClaimStatus.Slashed;
         ICoverageAgent(_position.coverageAgent).onSlashCompleted(claimId, amount);

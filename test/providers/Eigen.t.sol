@@ -1888,6 +1888,117 @@ contract EigenTest is EigenTestDeployer {
         assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Completed));
     }
 
+    /// @notice Test that closing an issued claim early with Full refundable policy refunds proportionally
+    /// @dev Full means provider holds all rewards (no distribution over time), but refund is still time-based
+    function test_closeClaim_earlyWithFullRefund() public {
+        uint256 positionId = _setupSlashingPosition(10e18, address(0), Refundable.Full);
+        uint256 reward = 10e6;
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 30 days, reward, 0);
+
+        // Warp to halfway through the claim duration
+        vm.warp(block.timestamp + 15 days);
+
+        // Track coordinator balance before close (refund flows: provider -> agent -> coordinator)
+        address coordinator = coverageAgent.coordinator();
+        uint256 coordinatorBalanceBefore = IERC20(coverageAgent.asset()).balanceOf(coordinator);
+
+        // Coverage agent closes claim early
+        vm.prank(address(coverageAgent));
+        eigenCoverageProvider.closeClaim(claimId);
+
+        // Verify time-proportional refund (15 days remaining of 30 days = 50% refund)
+        uint256 coordinatorBalanceAfter = IERC20(coverageAgent.asset()).balanceOf(coordinator);
+        uint256 expectedRefund = reward / 2;
+        assertEq(
+            coordinatorBalanceAfter - coordinatorBalanceBefore,
+            expectedRefund,
+            "Half of reward should be refunded for remaining time"
+        );
+
+        CoverageClaim memory claim = eigenCoverageProvider.claim(claimId);
+        assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Completed));
+        assertEq(claim.duration, 15 days, "Duration should reflect actual coverage time");
+    }
+
+    /// @notice Test that closing an issued claim early with TimeWeighted refundable policy refunds proportionally
+    function test_closeClaim_earlyWithTimeWeightedRefund() public {
+        uint256 positionId = _setupSlashingPosition(10e18, address(0), Refundable.TimeWeighted);
+        uint256 reward = 10e6;
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 30 days, reward, 0);
+
+        // Warp to halfway through the claim duration
+        vm.warp(block.timestamp + 15 days);
+
+        // Track coordinator balance before close (refund flows: provider -> agent -> coordinator)
+        address coordinator = coverageAgent.coordinator();
+        uint256 coordinatorBalanceBefore = IERC20(coverageAgent.asset()).balanceOf(coordinator);
+
+        // Coverage agent closes claim early
+        vm.prank(address(coverageAgent));
+        eigenCoverageProvider.closeClaim(claimId);
+
+        // Verify time-weighted refund (50% remaining = 50% refund)
+        uint256 coordinatorBalanceAfter = IERC20(coverageAgent.asset()).balanceOf(coordinator);
+        uint256 expectedRefund = reward / 2; // 15 days remaining out of 30 days
+        assertEq(
+            coordinatorBalanceAfter - coordinatorBalanceBefore, expectedRefund, "Half of reward should be refunded"
+        );
+
+        CoverageClaim memory claim = eigenCoverageProvider.claim(claimId);
+        assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Completed));
+        assertEq(claim.duration, 15 days, "Duration should reflect actual coverage time");
+    }
+
+    /// @notice Test that closing an issued claim after duration elapsed with Full refundable policy does not refund
+    function test_closeClaim_afterDurationElapsed_noRefund() public {
+        uint256 positionId = _setupSlashingPosition(10e18, address(0), Refundable.Full);
+        uint256 reward = 10e6;
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 30 days, reward, 0);
+
+        // Warp past the claim duration
+        vm.warp(block.timestamp + 31 days);
+
+        // Track coordinator balance before close (refund flows: provider -> agent -> coordinator)
+        address coordinator = coverageAgent.coordinator();
+        uint256 coordinatorBalanceBefore = IERC20(coverageAgent.asset()).balanceOf(coordinator);
+
+        // Anyone can close after duration elapsed
+        eigenCoverageProvider.closeClaim(claimId);
+
+        // Verify no refund was given (claim completed naturally)
+        uint256 coordinatorBalanceAfter = IERC20(coverageAgent.asset()).balanceOf(coordinator);
+        assertEq(coordinatorBalanceAfter, coordinatorBalanceBefore, "No refund should be given after duration elapsed");
+
+        CoverageClaim memory claim = eigenCoverageProvider.claim(claimId);
+        assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Completed));
+    }
+
+    /// @notice Test that closing an issued claim early with None refundable policy does not refund
+    function test_closeClaim_earlyWithNoRefund() public {
+        uint256 positionId = _setupSlashingPosition(10e18, address(0), Refundable.None);
+        uint256 reward = 10e6;
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 30 days, reward, 0);
+
+        // Warp to halfway through the claim duration
+        vm.warp(block.timestamp + 15 days);
+
+        // Track coordinator balance before close (refund flows: provider -> agent -> coordinator)
+        address coordinator = coverageAgent.coordinator();
+        uint256 coordinatorBalanceBefore = IERC20(coverageAgent.asset()).balanceOf(coordinator);
+
+        // Coverage agent closes claim early
+        vm.prank(address(coverageAgent));
+        eigenCoverageProvider.closeClaim(claimId);
+
+        // Verify no refund was given
+        uint256 coordinatorBalanceAfter = IERC20(coverageAgent.asset()).balanceOf(coordinator);
+        assertEq(coordinatorBalanceAfter, coordinatorBalanceBefore, "No refund should be given with None policy");
+
+        CoverageClaim memory claim = eigenCoverageProvider.claim(claimId);
+        assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Completed));
+        assertEq(claim.duration, 15 days, "Duration should reflect actual coverage time");
+    }
+
     // ============ Claim Backing Tests ============
 
     /// @notice Test that backing decreases as multiple claims consume coverage

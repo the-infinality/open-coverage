@@ -17,8 +17,7 @@ contract DeployExampleCoverageAgent is Script, ChainHelper {
         address coverageAsset = vm.envOr("COVERAGE_ASSET", _getUSDC());
         string memory metadataUri = vm.prompt("Metadata URI");
 
-        ExampleCoverageAgent exampleCoverageAgent =
-            new ExampleCoverageAgent(coordinator, coverageAsset, metadataUri);
+        ExampleCoverageAgent exampleCoverageAgent = new ExampleCoverageAgent(coordinator, coverageAsset, metadataUri);
         exampleCoverageAgentAddress = address(exampleCoverageAgent);
 
         console.log("\n=== Deployment Summary ===");

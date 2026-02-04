@@ -88,9 +88,8 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
         eigenCoverageDiamond = new EigenCoverageDiamond(cuts, args);
 
         // Deploy coverage agent and allow this address to be the operator
-        coverageAgent = new ExampleCoverageAgent(
-            address(this), USDC, "https://coverage.example.com/agent-metadata.json"
-        );
+        coverageAgent =
+            new ExampleCoverageAgent(address(this), USDC, "https://coverage.example.com/agent-metadata.json");
 
         // Set eigenOperatorInstance to address(0) since we deploy directly now (no beacon pattern)
         eigenOperatorInstance = address(0);

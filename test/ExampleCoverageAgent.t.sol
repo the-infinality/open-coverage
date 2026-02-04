@@ -142,6 +142,21 @@ contract MockCoverageProvider is ICoverageProvider {
         emit ClaimSlashed(claimId, _claimSlashAmounts[claimId]);
     }
 
+    /// @notice Helper function to simulate refunding a claim to the coverage agent
+    /// @dev Transfers refund amount to the coverage agent and calls onClaimRefunded
+    function simulateRefund(uint256 claimId, uint256 refundAmount) external {
+        CoverageClaim memory claimData = _claims[claimId];
+        CoveragePosition memory _position = _positions[claimData.positionId];
+
+        // Transfer refund amount to the coverage agent
+        bool success =
+            IERC20(ICoverageAgent(_position.coverageAgent).asset()).transfer(_position.coverageAgent, refundAmount);
+        if (!success) revert RewardTransferFailed();
+
+        // Notify the coverage agent of the refund
+        ICoverageAgent(_position.coverageAgent).onClaimRefunded(claimId, refundAmount);
+    }
+
     function position(uint256 positionId) external view override returns (CoveragePosition memory) {
         return _positions[positionId];
     }
@@ -276,9 +291,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
 
         uint256 positionId = 123;
 
-        vm.expectEmit(true, true, false, false);
-        emit ICoverageAgent.PositionRegistered(address(mockProvider), positionId);
-
+        // Should not revert when called by registered provider
         vm.prank(address(mockProvider));
         coverageAgent.onRegisterPosition(positionId);
     }
@@ -307,10 +320,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
             operatorId: bytes32(0)
         });
 
-        // Expect PositionRegistered event from agent
-        vm.expectEmit(true, true, false, false);
-        emit ICoverageAgent.PositionRegistered(address(mockProvider), 0);
-
+        // Should not revert when creating position through registered provider
         uint256 positionId = mockProvider.createPosition(position, "");
         assertEq(positionId, 0);
     }
@@ -888,5 +898,127 @@ contract ExampleCoverageAgentTest is TestDeployer {
         // Verify claim is in PendingSlash status (requires slash coordinator to complete)
         CoverageClaim memory claimAfter = mockProvider.claim(claimId);
         assertEq(uint8(claimAfter.status), uint8(CoverageClaimStatus.PendingSlash));
+    }
+
+    /// ============ Claim Refund Tests ============
+
+    function test_onClaimRefunded() public {
+        // Register provider first
+        coverageAgent.registerCoverageProvider(address(mockProvider));
+
+        // Create a position with Full refundable policy
+        CoveragePosition memory position = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: USDC,
+            refundable: Refundable.Full,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
+        });
+        uint256 positionId = mockProvider.createPosition(position, "");
+
+        // Purchase coverage
+        ClaimCoverageRequest[] memory requests = new ClaimCoverageRequest[](1);
+        requests[0] = ClaimCoverageRequest({
+            coverageProvider: address(mockProvider),
+            positionId: positionId,
+            amount: 1000e6,
+            duration: 30 days,
+            reward: 10e6
+        });
+
+        // Ensure coordinator has tokens and approve coverage agent to spend
+        deal(USDC, coordinator, 10e6);
+        vm.prank(coordinator);
+        IERC20(USDC).approve(address(coverageAgent), 10e6);
+        uint256 coverageId = coverageAgent.purchaseCoverage(requests);
+
+        // Get the claim ID
+        Coverage memory cov = coverageAgent.coverage(coverageId);
+        uint256 claimId = cov.claims[0].claimId;
+
+        // Simulate refund from provider - provider needs tokens to transfer
+        uint256 refundAmount = 5e6;
+        deal(USDC, address(mockProvider), refundAmount);
+
+        // Track coordinator balance before refund
+        uint256 coordinatorBalanceBefore = IERC20(USDC).balanceOf(coordinator);
+
+        // Simulate refund
+        mockProvider.simulateRefund(claimId, refundAmount);
+
+        // Verify refund was transferred to coordinator
+        uint256 coordinatorBalanceAfter = IERC20(USDC).balanceOf(coordinator);
+        assertEq(coordinatorBalanceAfter - coordinatorBalanceBefore, refundAmount);
+    }
+
+    function test_onClaimRefunded_timeWeighted() public {
+        // Register provider first
+        coverageAgent.registerCoverageProvider(address(mockProvider));
+
+        // Create a position with TimeWeighted refundable policy
+        CoveragePosition memory position = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: USDC,
+            refundable: Refundable.TimeWeighted,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
+        });
+        uint256 positionId = mockProvider.createPosition(position, "");
+
+        // Purchase coverage
+        ClaimCoverageRequest[] memory requests = new ClaimCoverageRequest[](1);
+        requests[0] = ClaimCoverageRequest({
+            coverageProvider: address(mockProvider),
+            positionId: positionId,
+            amount: 1000e6,
+            duration: 30 days,
+            reward: 10e6
+        });
+
+        // Ensure coordinator has tokens and approve coverage agent to spend
+        deal(USDC, coordinator, 10e6);
+        vm.prank(coordinator);
+        IERC20(USDC).approve(address(coverageAgent), 10e6);
+        uint256 coverageId = coverageAgent.purchaseCoverage(requests);
+
+        // Get the claim ID
+        Coverage memory cov = coverageAgent.coverage(coverageId);
+        uint256 claimId = cov.claims[0].claimId;
+
+        // Simulate time-weighted refund (e.g., 50% of reward if closed halfway through)
+        uint256 refundAmount = 5e6;
+        deal(USDC, address(mockProvider), refundAmount);
+
+        // Track coordinator balance before refund
+        uint256 coordinatorBalanceBefore = IERC20(USDC).balanceOf(coordinator);
+
+        // Simulate refund
+        mockProvider.simulateRefund(claimId, refundAmount);
+
+        // Verify refund was transferred to coordinator
+        uint256 coordinatorBalanceAfter = IERC20(USDC).balanceOf(coordinator);
+        assertEq(coordinatorBalanceAfter - coordinatorBalanceBefore, refundAmount);
+    }
+
+    function test_RevertWhen_onClaimRefunded_providerNotRegistered() public {
+        // Try to call onClaimRefunded from unregistered provider
+        vm.prank(address(mockProvider));
+        vm.expectRevert(ICoverageAgent.CoverageProviderNotRegistered.selector);
+        coverageAgent.onClaimRefunded(0, 1e6);
+    }
+
+    function test_RevertWhen_onClaimRefunded_randomCaller() public {
+        // Try to call onClaimRefunded from random address
+        vm.prank(address(0x123));
+        vm.expectRevert(ICoverageAgent.CoverageProviderNotRegistered.selector);
+        coverageAgent.onClaimRefunded(0, 1e6);
     }
 }

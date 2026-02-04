@@ -41,11 +41,10 @@ contract ExampleCoverageAgent is ICoverageAgent, IExampleCoverageAgent, ERC165 {
     }
 
     /// @inheritdoc ICoverageAgent
-    function onRegisterPosition(uint256 positionId) external {
+    function onRegisterPosition(uint256) external view {
         if (!_coverageProviders.contains(msg.sender)) {
             revert ICoverageAgent.CoverageProviderNotRegistered();
         }
-        emit PositionRegistered(msg.sender, positionId);
     }
 
     /// @inheritdoc ICoverageAgent
@@ -54,6 +53,14 @@ contract ExampleCoverageAgent is ICoverageAgent, IExampleCoverageAgent, ERC165 {
             revert ICoverageAgent.CoverageProviderNotRegistered();
         }
         SafeERC20.safeTransfer(IERC20(_ASSET), _COORDINATOR, slashAmount);
+    }
+
+    /// @inheritdoc ICoverageAgent
+    function onClaimRefunded(uint256, uint256 refundAmount) external {
+        if (!_coverageProviders.contains(msg.sender)) {
+            revert ICoverageAgent.CoverageProviderNotRegistered();
+        }
+        SafeERC20.safeTransfer(IERC20(_ASSET), _COORDINATOR, refundAmount);
     }
 
     /// @notice Purchase coverage from coverage providers.

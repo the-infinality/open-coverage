@@ -31,7 +31,6 @@ struct Coverage {
 /// @notice An interface for a coverage agent.
 interface ICoverageAgent {
     event CoverageProviderRegistered(address indexed coverageProvider);
-    event PositionRegistered(address indexed coverageProvider, uint256 indexed positionId);
     event CoverageClaimed(uint256 indexed coverageId);
     event CoverageReserved(uint256 indexed coverageId);
     event MetadataUpdated(string metadataUri);
@@ -58,6 +57,12 @@ interface ICoverageAgent {
     /// @param claimId The claim id slashed.
     /// @param slashAmount The amount that was slashed.
     function onSlashCompleted(uint256 claimId, uint256 slashAmount) external;
+
+    /// @notice Triggered when a coverage claim has been refunded if it was closed early.
+    /// @dev Can only be called by the coverage provider that issued the claim.
+    /// @param claimId The claim id refunded.
+    /// @param refundAmount The amount that was refunded.
+    function onClaimRefunded(uint256 claimId, uint256 refundAmount) external;
 
     /// ============ Discovery ============
 
