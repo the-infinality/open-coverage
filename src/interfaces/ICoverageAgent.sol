@@ -86,9 +86,4 @@ interface ICoverageAgent {
     /// @dev The asset must be an ERC20 token. Rewards will be paid in this asset.
     /// @return asset The asset address.
     function asset() external view returns (address);
-
-    /// @notice Get the coordinator that manages the coverage agent
-    /// @dev The coordinator must be represented by an address and could be a contract or an account.
-    /// @return coordinator The coordinator address.
-    function coordinator() external view returns (address);
 }

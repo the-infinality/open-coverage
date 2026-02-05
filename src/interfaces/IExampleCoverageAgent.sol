@@ -1,15 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {ClaimCoverageRequest} from "./ICoverageAgent.sol";
+import {ICoverageAgent, ClaimCoverageRequest} from "./ICoverageAgent.sol";
 import {CoverageClaimStatus} from "./ICoverageProvider.sol";
 
 /// @title IExampleCoverageAgent
 /// @author p-dealwis, Infinality
 /// @notice An interface for the example coverage agent implementation.
 /// @dev Extends ICoverageAgent with specific functions for purchasing, reserving, and slashing coverage.
-interface IExampleCoverageAgent {
+interface IExampleCoverageAgent is ICoverageAgent {
     error NotCoverageAgentCoordinator();
+
+    /// @notice Get the coordinator that manages the coverage agent
+    /// @dev The coordinator must be represented by an address and could be a contract or an account.
+    /// @return coordinator The coordinator address.
+    function coordinator() external view returns (address);
 
     /// @notice Purchase coverage from coverage providers.
     /// @dev Can only be called by the coverage agent coordinator. Should track the amount of coverage purchased for future slashing purposes.

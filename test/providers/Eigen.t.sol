@@ -16,6 +16,7 @@ import {IEigenOperatorProxy} from "src/providers/eigenlayer/interfaces/IEigenOpe
 import {EigenOperatorProxy} from "src/providers/eigenlayer/EigenOperatorProxy.sol";
 import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
 import {ICoverageAgent} from "src/interfaces/ICoverageAgent.sol";
+import {IExampleCoverageAgent} from "src/interfaces/IExampleCoverageAgent.sol";
 import {ExampleCoverageAgent} from "src/ExampleCoverageAgent.sol";
 import {IStrategyManager} from "eigenlayer-contracts/interfaces/IStrategyManager.sol";
 import {ISignatureUtilsMixinTypes} from "eigenlayer-contracts/interfaces/ISignatureUtilsMixin.sol";
@@ -1012,7 +1013,7 @@ contract EigenTest is EigenTestDeployer {
         uint256 contractCoverageBalanceBefore = IERC20(coverageAsset).balanceOf(address(eigenCoverageDiamond));
         uint256 coverageAgentBalanceBefore = IERC20(coverageAsset).balanceOf(address(coverageAgent));
         uint256 coverageAgentCoordinatorBalanceBefore =
-            IERC20(coverageAsset).balanceOf(address(ICoverageAgent(coverageAgent).coordinator()));
+            IERC20(coverageAsset).balanceOf(address(IExampleCoverageAgent(coverageAgent).coordinator()));
         uint256 contractPositionBalanceBefore = IERC20(positionAsset).balanceOf(address(eigenCoverageDiamond));
 
         uint256 slashAmount = 10e6;
@@ -1036,7 +1037,7 @@ contract EigenTest is EigenTestDeployer {
 
         // Verify coverage agent receives exactly the slashed amount
         assertEq(
-            IERC20(coverageAsset).balanceOf(address(ICoverageAgent(coverageAgent).coordinator()))
+            IERC20(coverageAsset).balanceOf(address(IExampleCoverageAgent(coverageAgent).coordinator()))
                 - coverageAgentCoordinatorBalanceBefore,
             slashAmount,
             "Coverage agent coordinator should receive exact slashed amount"
@@ -1140,7 +1141,7 @@ contract EigenTest is EigenTestDeployer {
     function test_slashClaims_tokenTransfer() public {
         uint256 positionId = _setupSlashingPosition(1000e18);
         uint256 initialBalance =
-            IERC20(coverageAgent.asset()).balanceOf(address(ICoverageAgent(coverageAgent).coordinator()));
+            IERC20(coverageAgent.asset()).balanceOf(address(IExampleCoverageAgent(coverageAgent).coordinator()));
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
 
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1000e6);
@@ -1152,7 +1153,7 @@ contract EigenTest is EigenTestDeployer {
         _executeSlash(claimIds, amounts);
 
         uint256 finalBalance =
-            IERC20(coverageAgent.asset()).balanceOf(address(ICoverageAgent(coverageAgent).coordinator()));
+            IERC20(coverageAgent.asset()).balanceOf(address(IExampleCoverageAgent(coverageAgent).coordinator()));
         // The coverage agent should receive the slashed amount (1000e6 USDC)
         // Account for potential swap slippage - allow 1% tolerance
         uint256 expectedMinBalance = initialBalance + (1000e6 * 99) / 100;
@@ -1292,7 +1293,7 @@ contract EigenTest is EigenTestDeployer {
         uint256 coverageAgentBalanceBefore = IERC20(coverageAsset).balanceOf(address(coverageAgent));
         uint256 contractPositionBalanceBefore = IERC20(positionAsset).balanceOf(address(eigenCoverageDiamond));
         uint256 coverageAgentCoordinatorBalanceBefore =
-            IERC20(coverageAsset).balanceOf(address(ICoverageAgent(coverageAgent).coordinator()));
+            IERC20(coverageAsset).balanceOf(address(IExampleCoverageAgent(coverageAgent).coordinator()));
 
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, slashAmount);
         CoverageClaimStatus[] memory statuses = _executeSlash(claimIds, amounts, 15 days);
@@ -1310,7 +1311,7 @@ contract EigenTest is EigenTestDeployer {
 
         // Verify coverage agent receives exactly the slashed amount
         assertEq(
-            IERC20(coverageAsset).balanceOf(address(ICoverageAgent(coverageAgent).coordinator()))
+            IERC20(coverageAsset).balanceOf(address(IExampleCoverageAgent(coverageAgent).coordinator()))
                 - coverageAgentCoordinatorBalanceBefore,
             slashAmount,
             "Coverage agent coordinator should receive exact slashed amount"

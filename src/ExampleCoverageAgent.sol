@@ -15,7 +15,7 @@ import {ERC165} from "@openzeppelin-v5/contracts/utils/introspection/ERC165.sol"
 /// @dev This is a reference implementation that can be varied for each coordinator.
 /// Each pool acts as a target contract for the restaking networks to delegate to e.g. for Eigen this will be the strategy.
 /// Delegators are whitelisted by the operators to ensure they are trusted.
-contract ExampleCoverageAgent is ICoverageAgent, IExampleCoverageAgent, ERC165 {
+contract ExampleCoverageAgent is IExampleCoverageAgent, ERC165 {
     using EnumerableMap for EnumerableMap.AddressToUintMap;
 
     address private immutable _COORDINATOR;
@@ -314,7 +314,7 @@ contract ExampleCoverageAgent is ICoverageAgent, IExampleCoverageAgent, ERC165 {
         return _ASSET;
     }
 
-    /// @inheritdoc ICoverageAgent
+    /// @inheritdoc IExampleCoverageAgent
     function coordinator() external view returns (address) {
         return _COORDINATOR;
     }
