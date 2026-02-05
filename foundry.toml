@@ -6,8 +6,8 @@ fs_permissions = [{ access = "read-write", path = "./config"}]
 solc_version = "0.8.30"
 
 # Optimizer settings for contract size reduction
-optimizer = false
-optimizer_runs = 1000000
+optimizer = true
+optimizer_runs = 1000
 via_ir = false
 
 remappings = [
