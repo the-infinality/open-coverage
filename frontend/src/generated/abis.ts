@@ -785,7 +785,10 @@ export const iCoverageProviderAbi = [
     },
     {
         type: "error",
-        inputs: [{ name: "claimId", internalType: "uint256", type: "uint256" }],
+        inputs: [
+            { name: "claimId", internalType: "uint256", type: "uint256" },
+            { name: "expiresAt", internalType: "uint256", type: "uint256" },
+        ],
         name: "ClaimNotExpired",
     },
     {
@@ -831,10 +834,16 @@ export const iCoverageProviderAbi = [
         ],
         name: "InsufficientReward",
     },
-    { type: "error", inputs: [], name: "InvalidAmount" },
     {
         type: "error",
-        inputs: [{ name: "claimId", internalType: "uint256", type: "uint256" }],
+        inputs: [
+            { name: "claimId", internalType: "uint256", type: "uint256" },
+            {
+                name: "currentStatus",
+                internalType: "enum CoverageClaimStatus",
+                type: "uint8",
+            },
+        ],
         name: "InvalidClaim",
     },
     {
@@ -852,12 +861,18 @@ export const iCoverageProviderAbi = [
     },
     {
         type: "error",
-        inputs: [{ name: "positionId", internalType: "uint256", type: "uint256" }],
+        inputs: [
+            { name: "positionId", internalType: "uint256", type: "uint256" },
+            { name: "expiredAt", internalType: "uint256", type: "uint256" },
+        ],
         name: "PositionExpired",
     },
     {
         type: "error",
-        inputs: [{ name: "claimId", internalType: "uint256", type: "uint256" }],
+        inputs: [
+            { name: "claimId", internalType: "uint256", type: "uint256" },
+            { name: "expiredAt", internalType: "uint256", type: "uint256" },
+        ],
         name: "ReservationExpired",
     },
     {
@@ -865,7 +880,6 @@ export const iCoverageProviderAbi = [
         inputs: [{ name: "positionId", internalType: "uint256", type: "uint256" }],
         name: "ReservationNotAllowed",
     },
-    { type: "error", inputs: [], name: "RewardTransferFailed" },
     {
         type: "error",
         inputs: [
@@ -885,6 +899,7 @@ export const iCoverageProviderAbi = [
         inputs: [{ name: "timestamp", internalType: "uint256", type: "uint256" }],
         name: "TimestampInvalid",
     },
+    { type: "error", inputs: [], name: "ZeroAmount" },
 ] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1203,7 +1218,6 @@ export const iEigenServiceManagerAbi = [
         ],
         name: "NotAllocated",
     },
-    { type: "error", inputs: [], name: "NotImplemented" },
     {
         type: "error",
         inputs: [

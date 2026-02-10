@@ -20,7 +20,7 @@ import {ICoverageAgent} from "src/interfaces/ICoverageAgent.sol";
 import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {EigenCoverageStorage, ClaimRewardDistribution} from "../EigenCoverageStorage.sol";
 import {NotImplemented} from "../Errors.sol";
-import {ISlashCoordinator, SlashStatus} from "src/interfaces/ISlashCoordinator.sol";
+import {ISlashCoordinator, SlashCoordinationStatus} from "src/interfaces/ISlashCoordinator.sol";
 import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
 
 /// @title EigenCoverageProviderFacet
@@ -98,7 +98,9 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
                 )
         ) revert IEigenServiceManager.NotOperatorAuthorized(operator, msg.sender);
 
-        require(positionData.expiryTimestamp >= block.timestamp, PositionExpired(positionId));
+        require(
+            positionData.expiryTimestamp >= block.timestamp, PositionExpired(positionId, positionData.expiryTimestamp)
+        );
         positions[positionId].expiryTimestamp = block.timestamp;
         emit PositionClosed(positionId);
     }
@@ -108,7 +110,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         external
         returns (uint256 claimId)
     {
-        if (amount == 0) revert InvalidAmount();
+        if (amount == 0) revert ZeroAmount();
 
         CoveragePosition storage positionData = positions[positionId];
         if (msg.sender != positionData.coverageAgent) {
@@ -155,7 +157,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         external
         returns (uint256 claimId)
     {
-        if (amount == 0) revert InvalidAmount();
+        if (amount == 0) revert ZeroAmount();
 
         CoveragePosition storage positionData = positions[positionId];
         if (msg.sender != positionData.coverageAgent) {
@@ -207,7 +209,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
 
         // Check reservation hasn't expired
         if (block.timestamp > _claim.createdAt + positionData.maxReservationTime) {
-            revert ReservationExpired(claimId);
+            revert ReservationExpired(claimId, _claim.createdAt + positionData.maxReservationTime);
         }
 
         // Verify amount and duration are not larger than reserved
@@ -217,7 +219,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         if (duration > _claim.duration) {
             revert DurationExceedsReserved(claimId, duration, _claim.duration);
         }
-        if (amount == 0) revert InvalidAmount();
+        if (amount == 0) revert ZeroAmount();
 
         // Calculate minimum reward pro-rata based on the new amount and duration
         uint256 minimumReward = (amount * positionData.minRate * duration) / (10000 * 365 days);
@@ -264,16 +266,16 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         bool isIssued = _claim.status == CoverageClaimStatus.Issued;
 
         // Can not close claim that are not reserved or issued
-        if (!(isReservation || isIssued)) revert InvalidClaim(claimId);
+        if (!(isReservation || isIssued)) revert InvalidClaim(claimId, _claim.status);
 
         // Anyone can close an expired reservation or an issued claim whose duration has elapsed
         // However, only the coverage agent can close their own reserved or issued claim early
+        uint256 expiresAt =
+            isReservation ? _claim.createdAt + positionData.maxReservationTime : _claim.createdAt + _claim.duration;
         if (
-            ((isReservation && (block.timestamp <= _claim.createdAt + positionData.maxReservationTime)) // Is the reservation not expired?
-                    || (isIssued && (block.timestamp <= _claim.createdAt + _claim.duration)) // Has the claim duration not elapsed?
-                ) && msg.sender != positionData.coverageAgent // Ensure the caller is not the coverage agent
+            ((isReservation || isIssued) && (block.timestamp <= expiresAt)) && msg.sender != positionData.coverageAgent // Ensure the caller is not the coverage agent
         ) {
-            revert ClaimNotExpired(claimId);
+            revert ClaimNotExpired(claimId, expiresAt);
         }
 
         _modifyCoverageForAgent(
@@ -327,11 +329,11 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
             }
 
             // Status needs to be Issused to start the slashing process
-            if (_claim.status != CoverageClaimStatus.Issued) revert InvalidClaim(claimIds[i]);
+            if (_claim.status != CoverageClaimStatus.Issued) revert InvalidClaim(claimIds[i], _claim.status);
 
             // Ensure the claim cannot be slashed before after its duration has elapsed
             if (block.timestamp > _claim.createdAt + _claim.duration) {
-                revert TimestampInvalid(_claim.createdAt + _claim.duration);
+                revert ClaimExpired(claimIds[i], _claim.createdAt + _claim.duration);
             }
 
             if (amounts[i] > _claim.amount) revert SlashAmountExceedsClaim(claimIds[i], amounts[i], _claim.amount);
@@ -345,8 +347,13 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
             } else {
                 slashStatuses[i] = CoverageClaimStatus.PendingSlash;
                 _claim.status = CoverageClaimStatus.PendingSlash;
-                ISlashCoordinator(_position.slashCoordinator).initiateSlash(claimIds[i], amounts[i]);
-                emit ClaimSlashPending(claimIds[i], _position.slashCoordinator);
+                SlashCoordinationStatus status =
+                    ISlashCoordinator(_position.slashCoordinator).initiateSlash(address(this), claimIds[i], amounts[i]);
+                if (status == SlashCoordinationStatus.Passed) {
+                    _initiateSlash(claimIds[i], amounts[i]);
+                } else {
+                    emit ClaimSlashPending(claimIds[i], _position.slashCoordinator);
+                }
             }
         }
     }
@@ -354,8 +361,11 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     /// @inheritdoc ICoverageProvider
     function completeSlash(uint256 claimId) external {
         CoverageClaim storage _claim = claims[claimId];
-        if (_claim.status != CoverageClaimStatus.PendingSlash) revert InvalidClaim(claimId);
-        if (ISlashCoordinator(positions[_claim.positionId].slashCoordinator).status(claimId) != SlashStatus.Completed) {
+        if (_claim.status != CoverageClaimStatus.PendingSlash) revert InvalidClaim(claimId, _claim.status);
+        if (
+            ISlashCoordinator(positions[_claim.positionId].slashCoordinator).status(address(this), claimId)
+                != SlashCoordinationStatus.Passed
+        ) {
             revert SlashFailed(claimId);
         }
         _initiateSlash(claimId, claimSlashAmounts[claimId]);
@@ -369,7 +379,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
 
         // Allow repayments for claims that are Slashed or already Repaid (for additional repayments)
         if (_claim.status != CoverageClaimStatus.Slashed && _claim.status != CoverageClaimStatus.Repaid) {
-            revert InvalidClaim(claimId);
+            revert InvalidClaim(claimId, _claim.status);
         }
         if (msg.sender != _coverageAgent) revert NotCoverageAgent(msg.sender, _coverageAgent);
 
@@ -558,6 +568,9 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     function _initiateSlash(uint256 claimId, uint256 amount) private {
         CoverageClaim storage _claim = claims[claimId];
         CoveragePosition storage _position = positions[_claim.positionId];
+
+        if (_claim.status == CoverageClaimStatus.Slashed) revert InvalidClaim(claimId, _claim.status);
+
         address operator = address(uint160(uint256(_position.operatorId)));
         address strategy = assetToStrategy[_position.asset];
 

@@ -1,5 +1,12 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from "react"
-import { type Address, type Abi, formatUnits, decodeEventLog, decodeErrorResult, BaseError } from "viem"
+import {
+    type Address,
+    type Abi,
+    formatUnits,
+    decodeEventLog,
+    decodeErrorResult,
+    BaseError,
+} from "viem"
 import {
     RefreshCw,
     Loader2,
@@ -12,7 +19,13 @@ import {
     ArrowRightLeft,
     X,
 } from "lucide-react"
-import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useConfig, useAccount } from "wagmi"
+import {
+    useReadContract,
+    useWriteContract,
+    useWaitForTransactionReceipt,
+    useConfig,
+    useAccount,
+} from "wagmi"
 import { readContract } from "wagmi/actions"
 import { toast } from "sonner"
 import type { CoverageContract } from "@/types/contracts"
@@ -50,21 +63,92 @@ type SupportedChainId = (typeof supportedChains)[number]["id"]
 // Combined ABI for error decoding
 const combinedErrorAbi = [
     // ICoverageProvider errors
-    { type: "error", inputs: [{ name: "claimId", type: "uint256" }, { name: "amount", type: "uint256" }, { name: "reserved", type: "uint256" }], name: "AmountExceedsReserved" },
-    { type: "error", inputs: [{ name: "claimId", type: "uint256" }], name: "ClaimNotExpired" },
+    {
+        type: "error",
+        inputs: [
+            { name: "claimId", type: "uint256" },
+            { name: "amount", type: "uint256" },
+            { name: "reserved", type: "uint256" },
+        ],
+        name: "AmountExceedsReserved",
+    },
+    {
+        type: "error",
+        inputs: [
+            { name: "claimId", type: "uint256" },
+            { name: "expiresAt", type: "uint256" },
+        ],
+        name: "ClaimNotExpired",
+    },
     { type: "error", inputs: [{ name: "claimId", type: "uint256" }], name: "ClaimNotReserved" },
-    { type: "error", inputs: [{ name: "expiryTimestamp", type: "uint256" }, { name: "completionTimestamp", type: "uint256" }], name: "DurationExceedsExpiry" },
-    { type: "error", inputs: [{ name: "maxDuration", type: "uint256" }, { name: "duration", type: "uint256" }], name: "DurationExceedsMax" },
-    { type: "error", inputs: [{ name: "deficit", type: "uint256" }], name: "InsufficientCoverageAvailable" },
-    { type: "error", inputs: [{ name: "minimumReward", type: "uint256" }, { name: "reward", type: "uint256" }], name: "InsufficientReward" },
-    { type: "error", inputs: [], name: "InvalidAmount" },
-    { type: "error", inputs: [{ name: "claimId", type: "uint256" }], name: "InvalidClaim" },
+    {
+        type: "error",
+        inputs: [
+            { name: "expiryTimestamp", type: "uint256" },
+            { name: "completionTimestamp", type: "uint256" },
+        ],
+        name: "DurationExceedsExpiry",
+    },
+    {
+        type: "error",
+        inputs: [
+            { name: "maxDuration", type: "uint256" },
+            { name: "duration", type: "uint256" },
+        ],
+        name: "DurationExceedsMax",
+    },
+    {
+        type: "error",
+        inputs: [{ name: "deficit", type: "uint256" }],
+        name: "InsufficientCoverageAvailable",
+    },
+    {
+        type: "error",
+        inputs: [
+            { name: "minimumReward", type: "uint256" },
+            { name: "reward", type: "uint256" },
+        ],
+        name: "InsufficientReward",
+    },
+    { type: "error", inputs: [], name: "ZeroAmount" },
+    {
+        type: "error",
+        inputs: [
+            { name: "claimId", type: "uint256" },
+            { name: "currentStatus", type: "uint8" },
+        ],
+        name: "InvalidClaim",
+    },
     { type: "error", inputs: [{ name: "minRate", type: "uint16" }], name: "MinRateInvalid" },
-    { type: "error", inputs: [{ name: "caller", type: "address" }, { name: "required", type: "address" }], name: "NotCoverageAgent" },
-    { type: "error", inputs: [{ name: "positionId", type: "uint256" }], name: "PositionExpired" },
-    { type: "error", inputs: [{ name: "claimId", type: "uint256" }], name: "ReservationExpired" },
-    { type: "error", inputs: [{ name: "positionId", type: "uint256" }], name: "ReservationNotAllowed" },
-    { type: "error", inputs: [], name: "RewardTransferFailed" },
+    {
+        type: "error",
+        inputs: [
+            { name: "caller", type: "address" },
+            { name: "required", type: "address" },
+        ],
+        name: "NotCoverageAgent",
+    },
+    {
+        type: "error",
+        inputs: [
+            { name: "positionId", type: "uint256" },
+            { name: "expiredAt", type: "uint256" },
+        ],
+        name: "PositionExpired",
+    },
+    {
+        type: "error",
+        inputs: [
+            { name: "claimId", type: "uint256" },
+            { name: "expiredAt", type: "uint256" },
+        ],
+        name: "ReservationExpired",
+    },
+    {
+        type: "error",
+        inputs: [{ name: "positionId", type: "uint256" }],
+        name: "ReservationNotAllowed",
+    },
     // ICoverageAgent errors
     { type: "error", inputs: [], name: "CoverageProviderAlreadyRegistered" },
     { type: "error", inputs: [], name: "CoverageProviderNotRegistered" },
@@ -85,16 +169,16 @@ const errorMessages: Record<string, string> = {
     ClaimNotReserved: "Claim is not in reserved state.",
     DurationExceedsExpiry: "The coverage duration would exceed the position expiry.",
     DurationExceedsMax: "The requested duration exceeds the maximum allowed.",
-    InsufficientCoverageAvailable: "Not enough coverage available. The operator may not have sufficient allocation.",
+    InsufficientCoverageAvailable:
+        "Not enough coverage available. The operator may not have sufficient allocation.",
     InsufficientReward: "The reward amount is less than the minimum required for this coverage.",
-    InvalidAmount: "Invalid amount specified.",
+    ZeroAmount: "Amount must be greater than zero.",
     InvalidClaim: "The claim does not exist or is invalid.",
     MinRateInvalid: "The minimum rate is invalid.",
     NotCoverageAgent: "Only the coverage agent can perform this action.",
     PositionExpired: "The position has expired.",
     ReservationExpired: "The reservation has expired.",
     ReservationNotAllowed: "Reservations are not allowed for this position.",
-    RewardTransferFailed: "Failed to transfer the reward.",
     CoverageProviderAlreadyRegistered: "This coverage provider is already registered.",
     CoverageProviderNotRegistered: "This coverage provider is not registered.",
     InvalidClaimStatus: "Invalid claim status for this operation.",
@@ -125,7 +209,7 @@ function decodeContractError(error: unknown): string {
                             abi: combinedErrorAbi as Abi,
                             data: errorData as `0x${string}`,
                         })
-                        
+
                         const friendlyMessage = errorMessages[decoded.errorName]
                         if (friendlyMessage) {
                             if (decoded.args && decoded.args.length > 0) {
@@ -144,22 +228,22 @@ function decodeContractError(error: unknown): string {
                     ? (currentError as { cause?: unknown }).cause
                     : null
         }
-        
+
         const errorMessage = error.message || ""
         const revertMatch = errorMessage.match(/reverted with reason string '([^']+)'/)
         if (revertMatch) return revertMatch[1]
-        
+
         const customErrorMatch = errorMessage.match(/reverted with custom error '([^'(]+)/)
         if (customErrorMatch) {
             const errorName = customErrorMatch[1]
             return errorMessages[errorName] || `Contract error: ${errorName}`
         }
-        
+
         for (const [errorName, message] of Object.entries(errorMessages)) {
             if (errorMessage.includes(errorName)) return message
         }
     }
-    
+
     const message = error instanceof Error ? error.message : String(error)
     return message.length > 200 ? message.slice(0, 200) + "..." : message
 }
@@ -328,7 +412,12 @@ function SlashCoverageDialog({
     onSuccess: () => void
 }) {
     const { writeContract, isPending, data: hash } = useWriteContract()
-    const { isLoading: isConfirming, isSuccess, isError: isReceiptError, error: receiptError } = useWaitForTransactionReceipt({ hash })
+    const {
+        isLoading: isConfirming,
+        isSuccess,
+        isError: isReceiptError,
+        error: receiptError,
+    } = useWaitForTransactionReceipt({ hash })
 
     const prevSuccessRef = useRef(false)
     const hasShownReceiptError = useRef<string>("")
@@ -395,8 +484,8 @@ function SlashCoverageDialog({
                         Slash Coverage #{coverageId}
                     </DialogTitle>
                     <DialogDescription>
-                        This will slash all claims in this coverage. The slash amounts will be
-                        the full claim amounts for each claim.
+                        This will slash all claims in this coverage. The slash amounts will be the
+                        full claim amounts for each claim.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -434,7 +523,8 @@ function SlashCoverageDialog({
                                             </span>
                                         </div>
                                         <span className="font-mono text-destructive">
-                                            {formatUnits(claimData.claim.amount, tokenDecimals)} {tokenSymbol}
+                                            {formatUnits(claimData.claim.amount, tokenDecimals)}{" "}
+                                            {tokenSymbol}
                                         </span>
                                     </div>
                                 ))}
@@ -504,9 +594,14 @@ function ConvertCoverageDialog({
     const [convertDurations, setConvertDurations] = useState<Record<number, string>>({})
     const [convertRewards, setConvertRewards] = useState<Record<number, string>>({})
     const [isApproving, setIsApproving] = useState(false)
-    
+
     const { writeContract, isPending, data: hash, reset: resetWrite } = useWriteContract()
-    const { isLoading: isConfirming, isSuccess, isError: isReceiptError, error: receiptError } = useWaitForTransactionReceipt({ hash })
+    const {
+        isLoading: isConfirming,
+        isSuccess,
+        isError: isReceiptError,
+        error: receiptError,
+    } = useWaitForTransactionReceipt({ hash })
 
     // Fetch user's token balance
     const { data: userBalance } = useReadContract({
@@ -753,8 +848,9 @@ function ConvertCoverageDialog({
                         Convert Reserved Coverage #{coverageId}
                     </DialogTitle>
                     <DialogDescription>
-                        Convert your reserved coverage to issued coverage. You can adjust the amount,
-                        duration, and reward for each claim (must be less than or equal to reserved values).
+                        Convert your reserved coverage to issued coverage. You can adjust the
+                        amount, duration, and reward for each claim (must be less than or equal to
+                        reserved values).
                     </DialogDescription>
                 </DialogHeader>
 
@@ -763,7 +859,9 @@ function ConvertCoverageDialog({
                     <div className="grid gap-2 text-sm">
                         <div className="flex items-center justify-between">
                             <span className="text-muted-foreground">Your Balance</span>
-                            <span className={`font-mono ${!hasSufficientBalance && totalReward > 0n ? "text-destructive" : ""}`}>
+                            <span
+                                className={`font-mono ${!hasSufficientBalance && totalReward > 0n ? "text-destructive" : ""}`}
+                            >
                                 {userBalance !== undefined
                                     ? `${formatUnits(userBalance as bigint, tokenDecimals)} ${tokenSymbol}`
                                     : "Loading..."}
@@ -771,7 +869,9 @@ function ConvertCoverageDialog({
                         </div>
                         <div className="flex items-center justify-between">
                             <span className="text-muted-foreground">Current Allowance</span>
-                            <span className={`font-mono ${needsApproval && totalReward > 0n ? "text-amber-600" : "text-green-600"}`}>
+                            <span
+                                className={`font-mono ${needsApproval && totalReward > 0n ? "text-amber-600" : "text-green-600"}`}
+                            >
                                 {currentAllowance !== undefined
                                     ? `${formatUnits(currentAllowance as bigint, tokenDecimals)} ${tokenSymbol}`
                                     : "Loading..."}
@@ -827,20 +927,27 @@ function ConvertCoverageDialog({
                                         </span>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground">Reserved Amount</span>
+                                        <span className="text-muted-foreground">
+                                            Reserved Amount
+                                        </span>
                                         <span className="font-mono">
                                             {formatUnits(claimData.claim.amount, tokenDecimals)}{" "}
                                             {tokenSymbol}
                                         </span>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground">Reserved Duration</span>
+                                        <span className="text-muted-foreground">
+                                            Reserved Duration
+                                        </span>
                                         <span className="font-mono">
-                                            {Math.round(Number(claimData.claim.duration) / 86400)} days
+                                            {Math.round(Number(claimData.claim.duration) / 86400)}{" "}
+                                            days
                                         </span>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <span className="text-muted-foreground">Reserved Reward</span>
+                                        <span className="text-muted-foreground">
+                                            Reserved Reward
+                                        </span>
                                         <span className="font-mono">
                                             {formatUnits(claimData.claim.reward, tokenDecimals)}{" "}
                                             {tokenSymbol}
@@ -916,7 +1023,9 @@ function ConvertCoverageDialog({
                                             )
                                             updateDuration(
                                                 claimData.claimId,
-                                                Math.round(Number(claimData.claim.duration) / 86400).toString()
+                                                Math.round(
+                                                    Number(claimData.claim.duration) / 86400
+                                                ).toString()
                                             )
                                             updateReward(
                                                 claimData.claimId,
@@ -941,7 +1050,7 @@ function ConvertCoverageDialog({
                     >
                         Cancel
                     </Button>
-                    
+
                     {/* Approve Button - show when approval is needed */}
                     {needsApproval && totalReward > 0n && (
                         <Button
@@ -965,7 +1074,13 @@ function ConvertCoverageDialog({
                     {/* Convert Button */}
                     <Button
                         onClick={handleConvert}
-                        disabled={isProcessing || claims.length === 0 || needsApproval || !hasSufficientBalance || totalReward === 0n}
+                        disabled={
+                            isProcessing ||
+                            claims.length === 0 ||
+                            needsApproval ||
+                            !hasSufficientBalance ||
+                            totalReward === 0n
+                        }
                     >
                         {isProcessing && !isApproving ? (
                             <Loader2 className="mr-2 size-4 animate-spin" />
@@ -1335,7 +1450,7 @@ function CoverageClaimsManagement({
                 refetchAllowance()
                 return
             }
-            
+
             const loadCoverageClaimsAsync = async () => {
                 try {
                     // Find the CoverageClaimed or CoverageReserved event in the logs
@@ -1390,7 +1505,14 @@ function CoverageClaimsManagement({
             loadCoverageClaimsAsync()
         }
         prevCreateSuccessRef.current = isSuccess
-    }, [isSuccess, receipt, loadCoverage, isApprovingPurchase, resetPurchaseWrite, refetchAllowance])
+    }, [
+        isSuccess,
+        receipt,
+        loadCoverage,
+        isApprovingPurchase,
+        resetPurchaseWrite,
+        refetchAllowance,
+    ])
 
     const handleAddCoverage = async () => {
         const id = Number(newCoverageId)
@@ -1424,7 +1546,6 @@ function CoverageClaimsManagement({
             return newClaims
         })
     }
-
 
     const handleApprovePurchase = () => {
         if (!assetAddress || pendingRequests.length === 0) return
@@ -1572,35 +1693,35 @@ function CoverageClaimsManagement({
 
     const handleSlashSuccess = () => {
         if (slashCoverageId === null) return
-        
+
         const coverageIdToReload = slashCoverageId
-        
+
         // Remove claims for this coverage from state so they can be reloaded with fresh data
         setLoadedClaims((prev) => prev.filter((c) => c.coverageId !== coverageIdToReload))
-        
+
         setSlashCoverageId(null)
-        
+
         // Reload the coverage with forceReload=true to bypass the duplicate check
         loadCoverage(coverageIdToReload, true)
     }
 
     const handleConvertSuccess = () => {
         if (convertCoverageId === null) return
-        
+
         const coverageIdToReload = convertCoverageId
-        
+
         // Remove coverage from reservation set (it's no longer a reservation after conversion)
         setReservationCoverageIds((prev) => {
             const next = new Set(prev)
             next.delete(coverageIdToReload)
             return next
         })
-        
+
         // Remove claims for this coverage from state so they can be reloaded with fresh data
         setLoadedClaims((prev) => prev.filter((c) => c.coverageId !== coverageIdToReload))
-        
+
         setConvertCoverageId(null)
-        
+
         // Reload the coverage with forceReload=true to bypass the duplicate check
         loadCoverage(coverageIdToReload, true)
     }
@@ -1815,7 +1936,10 @@ function CoverageClaimsManagement({
                                             >
                                                 <div className="flex-1 space-y-1">
                                                     <div className="flex items-center gap-2">
-                                                        <Badge variant="outline" className="font-mono text-xs">
+                                                        <Badge
+                                                            variant="outline"
+                                                            className="font-mono text-xs"
+                                                        >
                                                             #{index + 1}
                                                         </Badge>
                                                         <span className="font-medium truncate max-w-[150px]">
@@ -1823,10 +1947,41 @@ function CoverageClaimsManagement({
                                                         </span>
                                                     </div>
                                                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                                                        <span>Position: <span className="font-mono">{req.positionId.toString()}</span></span>
-                                                        <span>Amount: <span className="font-mono">{formatUnits(req.amount, tokenDecimals)} {tokenSymbol}</span></span>
-                                                        <span>Duration: <span className="font-mono">{Math.round(Number(req.duration) / 86400)} days</span></span>
-                                                        <span>Reward: <span className="font-mono">{formatUnits(req.reward, tokenDecimals)} {tokenSymbol}</span></span>
+                                                        <span>
+                                                            Position:{" "}
+                                                            <span className="font-mono">
+                                                                {req.positionId.toString()}
+                                                            </span>
+                                                        </span>
+                                                        <span>
+                                                            Amount:{" "}
+                                                            <span className="font-mono">
+                                                                {formatUnits(
+                                                                    req.amount,
+                                                                    tokenDecimals
+                                                                )}{" "}
+                                                                {tokenSymbol}
+                                                            </span>
+                                                        </span>
+                                                        <span>
+                                                            Duration:{" "}
+                                                            <span className="font-mono">
+                                                                {Math.round(
+                                                                    Number(req.duration) / 86400
+                                                                )}{" "}
+                                                                days
+                                                            </span>
+                                                        </span>
+                                                        <span>
+                                                            Reward:{" "}
+                                                            <span className="font-mono">
+                                                                {formatUnits(
+                                                                    req.reward,
+                                                                    tokenDecimals
+                                                                )}{" "}
+                                                                {tokenSymbol}
+                                                            </span>
+                                                        </span>
                                                     </div>
                                                 </div>
                                                 <Button
@@ -1848,16 +2003,24 @@ function CoverageClaimsManagement({
                                     <div className="rounded-lg border bg-muted/50 p-3 space-y-2">
                                         <div className="grid gap-2 text-sm">
                                             <div className="flex items-center justify-between">
-                                                <span className="text-muted-foreground">Your Balance</span>
-                                                <span className={`font-mono ${!purchaseHasSufficientBalance ? "text-destructive" : ""}`}>
+                                                <span className="text-muted-foreground">
+                                                    Your Balance
+                                                </span>
+                                                <span
+                                                    className={`font-mono ${!purchaseHasSufficientBalance ? "text-destructive" : ""}`}
+                                                >
                                                     {userBalance !== undefined
                                                         ? `${formatUnits(userBalance as bigint, tokenDecimals)} ${tokenSymbol}`
                                                         : "Loading..."}
                                                 </span>
                                             </div>
                                             <div className="flex items-center justify-between">
-                                                <span className="text-muted-foreground">Current Allowance</span>
-                                                <span className={`font-mono ${purchaseNeedsApproval ? "text-amber-600" : "text-green-600"}`}>
+                                                <span className="text-muted-foreground">
+                                                    Current Allowance
+                                                </span>
+                                                <span
+                                                    className={`font-mono ${purchaseNeedsApproval ? "text-amber-600" : "text-green-600"}`}
+                                                >
                                                     {currentAllowance !== undefined
                                                         ? `${formatUnits(currentAllowance as bigint, tokenDecimals)} ${tokenSymbol}`
                                                         : "Loading..."}
@@ -1865,9 +2028,13 @@ function CoverageClaimsManagement({
                                             </div>
                                             <Separator />
                                             <div className="flex items-center justify-between font-medium">
-                                                <span>Total Reward Required ({pendingRequests.length} positions)</span>
+                                                <span>
+                                                    Total Reward Required ({pendingRequests.length}{" "}
+                                                    positions)
+                                                </span>
                                                 <span className="font-mono">
-                                                    {formatUnits(totalPendingReward, tokenDecimals)} {tokenSymbol}
+                                                    {formatUnits(totalPendingReward, tokenDecimals)}{" "}
+                                                    {tokenSymbol}
                                                 </span>
                                             </div>
                                         </div>
@@ -1876,13 +2043,17 @@ function CoverageClaimsManagement({
                                         {!purchaseHasSufficientBalance && (
                                             <div className="flex items-center gap-2 text-sm text-destructive mt-2">
                                                 <AlertTriangle className="size-4" />
-                                                <span>Insufficient balance to pay the total reward</span>
+                                                <span>
+                                                    Insufficient balance to pay the total reward
+                                                </span>
                                             </div>
                                         )}
                                         {purchaseHasSufficientBalance && purchaseNeedsApproval && (
                                             <div className="flex items-center gap-2 text-sm text-amber-600 mt-2">
                                                 <AlertTriangle className="size-4" />
-                                                <span>Token approval required before purchasing</span>
+                                                <span>
+                                                    Token approval required before purchasing
+                                                </span>
                                             </div>
                                         )}
                                         {purchaseHasSufficientBalance && !purchaseNeedsApproval && (
@@ -1896,25 +2067,32 @@ function CoverageClaimsManagement({
 
                                 <div className="flex gap-2">
                                     {/* Approve Button - show when approval is needed for non-reservation */}
-                                    {!isReservation && purchaseNeedsApproval && totalPendingReward > 0n && (
-                                        <Button
-                                            variant="secondary"
-                                            onClick={handleApprovePurchase}
-                                            disabled={isPending || isConfirming || !purchaseHasSufficientBalance}
-                                            className="flex-1"
-                                        >
-                                            {(isPending || isConfirming) && isApprovingPurchase ? (
-                                                <Loader2 className="mr-2 size-4 animate-spin" />
-                                            ) : (
-                                                <CheckCircle2 className="mr-2 size-4" />
-                                            )}
-                                            {(isPending || isConfirming) && isApprovingPurchase
-                                                ? isPending
-                                                    ? "Confirm in wallet..."
-                                                    : "Approving..."
-                                                : `Approve ${formatUnits(totalPendingReward, tokenDecimals)} ${tokenSymbol}`}
-                                        </Button>
-                                    )}
+                                    {!isReservation &&
+                                        purchaseNeedsApproval &&
+                                        totalPendingReward > 0n && (
+                                            <Button
+                                                variant="secondary"
+                                                onClick={handleApprovePurchase}
+                                                disabled={
+                                                    isPending ||
+                                                    isConfirming ||
+                                                    !purchaseHasSufficientBalance
+                                                }
+                                                className="flex-1"
+                                            >
+                                                {(isPending || isConfirming) &&
+                                                isApprovingPurchase ? (
+                                                    <Loader2 className="mr-2 size-4 animate-spin" />
+                                                ) : (
+                                                    <CheckCircle2 className="mr-2 size-4" />
+                                                )}
+                                                {(isPending || isConfirming) && isApprovingPurchase
+                                                    ? isPending
+                                                        ? "Confirm in wallet..."
+                                                        : "Approving..."
+                                                    : `Approve ${formatUnits(totalPendingReward, tokenDecimals)} ${tokenSymbol}`}
+                                            </Button>
+                                        )}
 
                                     {/* Submit Coverage Button */}
                                     <Button
@@ -1923,7 +2101,9 @@ function CoverageClaimsManagement({
                                             pendingRequests.length === 0 ||
                                             isPending ||
                                             isConfirming ||
-                                            (!isReservation && (purchaseNeedsApproval || !purchaseHasSufficientBalance))
+                                            (!isReservation &&
+                                                (purchaseNeedsApproval ||
+                                                    !purchaseHasSufficientBalance))
                                         }
                                         className="flex-1"
                                         variant={isReservation ? "outline" : "default"}
@@ -1937,11 +2117,11 @@ function CoverageClaimsManagement({
                                             ? isPending
                                                 ? "Confirm in wallet..."
                                                 : isReservation
-                                                    ? "Reserving..."
-                                                    : "Purchasing..."
+                                                  ? "Reserving..."
+                                                  : "Purchasing..."
                                             : isReservation
-                                                ? `Reserve ${pendingRequests.length} Coverage${pendingRequests.length > 1 ? "s" : ""}`
-                                                : `Purchase ${pendingRequests.length} Coverage${pendingRequests.length > 1 ? "s" : ""}`}
+                                              ? `Reserve ${pendingRequests.length} Coverage${pendingRequests.length > 1 ? "s" : ""}`
+                                              : `Purchase ${pendingRequests.length} Coverage${pendingRequests.length > 1 ? "s" : ""}`}
                                     </Button>
                                 </div>
                             </div>
@@ -1965,7 +2145,8 @@ function CoverageClaimsManagement({
                             <h4 className="text-sm font-medium">View Coverage</h4>
                             <div className="flex items-center gap-2">
                                 <Badge variant="secondary">
-                                    {loadedCoverageIds.size} coverage{loadedCoverageIds.size !== 1 ? "s" : ""}
+                                    {loadedCoverageIds.size} coverage
+                                    {loadedCoverageIds.size !== 1 ? "s" : ""}
                                 </Badge>
                                 <Badge variant="outline">{loadedClaims.length} claims</Badge>
                             </div>
@@ -2022,7 +2203,9 @@ function CoverageClaimsManagement({
                                                             {claims.length !== 1 ? "s" : ""}
                                                         </Badge>
                                                         {reservationCoverageIds.has(coverageId) && (
-                                                            <Badge variant="secondary">Reserved</Badge>
+                                                            <Badge variant="secondary">
+                                                                Reserved
+                                                            </Badge>
                                                         )}
                                                     </div>
                                                     <div className="flex items-center gap-1">
@@ -2041,21 +2224,25 @@ function CoverageClaimsManagement({
                                                             </Button>
                                                         )}
                                                         {!reservationCoverageIds.has(coverageId) &&
-                                                            claims.some((c) => c.claim.status !== 4) && (
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="sm"
-                                                                onClick={() => {
-                                                                    setSlashCoverageId(coverageId)
-                                                                    setSlashDialogOpen(true)
-                                                                }}
-                                                                title="Slash coverage"
-                                                                className="text-destructive hover:text-destructive"
-                                                            >
-                                                                <Zap className="size-4 mr-1" />
-                                                                Slash
-                                                            </Button>
-                                                        )}
+                                                            claims.some(
+                                                                (c) => c.claim.status !== 4
+                                                            ) && (
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    onClick={() => {
+                                                                        setSlashCoverageId(
+                                                                            coverageId
+                                                                        )
+                                                                        setSlashDialogOpen(true)
+                                                                    }}
+                                                                    title="Slash coverage"
+                                                                    className="text-destructive hover:text-destructive"
+                                                                >
+                                                                    <Zap className="size-4 mr-1" />
+                                                                    Slash
+                                                                </Button>
+                                                            )}
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
@@ -2082,7 +2269,9 @@ function CoverageClaimsManagement({
                                                         <ClaimItem
                                                             key={`${claimData.providerAddress}-${claimData.claimId}`}
                                                             claimData={claimData}
-                                                            totalSlashAmount={claimData.totalSlashAmount}
+                                                            totalSlashAmount={
+                                                                claimData.totalSlashAmount
+                                                            }
                                                             tokenDecimals={tokenDecimals}
                                                             tokenSymbol={tokenSymbol}
                                                         />
@@ -2092,7 +2281,6 @@ function CoverageClaimsManagement({
                                         ))}
                                     </div>
                                 </ScrollArea>
-
                             </>
                         )}
                     </div>
@@ -2154,7 +2342,12 @@ export function CoverageAgentInfo({ contract }: CoverageAgentInfoProps) {
 
     // Write contract hook for registering providers
     const { writeContract, isPending, data: hash } = useWriteContract()
-    const { isLoading: isConfirming, isSuccess, isError: isReceiptError, error: receiptError } = useWaitForTransactionReceipt({ hash })
+    const {
+        isLoading: isConfirming,
+        isSuccess,
+        isError: isReceiptError,
+        error: receiptError,
+    } = useWaitForTransactionReceipt({ hash })
 
     // Track previous success state to detect new success
     const prevSuccessRef = useRef(false)

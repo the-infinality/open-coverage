@@ -17,6 +17,8 @@ import {IExampleCoverageAgent} from "src/interfaces/IExampleCoverageAgent.sol";
 
 /// @notice Mock Coverage Provider for testing
 contract MockCoverageProvider is ICoverageProvider {
+    error RewardTransferFailed();
+
     bool public isRegistered;
     uint256 public nextPositionId;
     uint256 public nextClaimId;

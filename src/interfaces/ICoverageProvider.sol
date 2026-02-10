@@ -85,25 +85,25 @@ interface ICoverageProvider {
     event ClaimRepaid(uint256 indexed claimId);
     event MetadataUpdated(string metadataUri);
 
-    error InvalidAmount();
-    error PositionExpired(uint256 positionId);
+    error ZeroAmount();
+    error PositionExpired(uint256 positionId, uint256 expiredAt);
     error TimestampInvalid(uint256 timestamp);
     error MinRateInvalid(uint16 minRate);
     error NotCoverageAgent(address caller, address required);
     error InsufficientReward(uint256 minimumReward, uint256 reward);
-    error RewardTransferFailed();
     error InsufficientCoverageAvailable(uint256 deficit);
     error DurationExceedsMax(uint256 maxDuration, uint256 duration);
     error DurationExceedsExpiry(uint256 expiryTimestamp, uint256 completionTimestamp);
-    error InvalidClaim(uint256 claimId);
+    error InvalidClaim(uint256 claimId, CoverageClaimStatus currentStatus);
     error SlashFailed(uint256 claimId);
     error SlashAmountExceedsClaim(uint256 claimId, uint256 slash, uint256 claim);
     error ReservationNotAllowed(uint256 positionId);
-    error ReservationExpired(uint256 claimId);
+    error ReservationExpired(uint256 claimId, uint256 expiredAt);
     error AmountExceedsReserved(uint256 claimId, uint256 amount, uint256 reserved);
     error DurationExceedsReserved(uint256 claimId, uint256 duration, uint256 reserved);
     error ClaimNotReserved(uint256 claimId);
-    error ClaimNotExpired(uint256 claimId);
+    error ClaimNotExpired(uint256 claimId, uint256 expiresAt);
+    error ClaimExpired(uint256 claimId, uint256 expiredAt);
 
     /// ============ Hooks ============
 

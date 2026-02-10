@@ -29,7 +29,7 @@ import {UniswapAddressbook} from "utils/UniswapHelper.sol";
 import {ISwapperEngine} from "src/interfaces/ISwapperEngine.sol";
 import {PriceStrategy, AssetPair} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
-import {ISlashCoordinator, SlashStatus} from "src/interfaces/ISlashCoordinator.sol";
+import {ISlashCoordinator, SlashCoordinationStatus} from "src/interfaces/ISlashCoordinator.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
 import {console2} from "forge-std/console2.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -228,11 +228,12 @@ contract EigenTest is EigenTestDeployer {
     function test_RevertWhen_closePosition_expired() public {
         _setupwithAllocations();
 
+        uint256 expiryTimestamp = block.timestamp + 365 days;
         CoveragePosition memory data = CoveragePosition({
             coverageAgent: address(coverageAgent),
             minRate: 100,
             maxDuration: 30 days,
-            expiryTimestamp: block.timestamp + 365 days,
+            expiryTimestamp: expiryTimestamp,
             asset: address(_getTestStrategy().underlyingToken()),
             refundable: Refundable.None,
             slashCoordinator: address(0),
@@ -244,7 +245,7 @@ contract EigenTest is EigenTestDeployer {
         // Warp past the expiry timestamp
         vm.warp(block.timestamp + 366 days);
 
-        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.PositionExpired.selector, positionId));
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.PositionExpired.selector, positionId, expiryTimestamp));
         eigenCoverageProvider.closePosition(positionId);
     }
 
@@ -655,7 +656,7 @@ contract EigenTest is EigenTestDeployer {
 
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
-        vm.expectRevert(ICoverageProvider.InvalidAmount.selector);
+        vm.expectRevert(ICoverageProvider.ZeroAmount.selector);
         eigenCoverageProvider.issueClaim(positionId, 0, 30 days, 10e6);
         vm.stopPrank();
     }
@@ -1213,7 +1214,9 @@ contract EigenTest is EigenTestDeployer {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                ICoverageProvider.TimestampInvalid.selector, eigenCoverageProvider.claim(claimId).createdAt + 30 days
+                ICoverageProvider.ClaimExpired.selector,
+                claimId,
+                eigenCoverageProvider.claim(claimId).createdAt + 30 days
             )
         );
         _executeSlash(claimIds, amounts, 31 days);
@@ -1247,7 +1250,9 @@ contract EigenTest is EigenTestDeployer {
         vm.warp(block.timestamp - 1 days); // Go back to within duration window
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1000e6);
 
-        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId));
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId, CoverageClaimStatus.Completed)
+        );
         _executeSlash(claimIds, amounts);
     }
 
@@ -1424,7 +1429,7 @@ contract EigenTest is EigenTestDeployer {
         assertEq(eigenCoverageDiamond.claimSlashAmounts(claimId), 1000e6);
 
         // Complete the slash through coordinator
-        coordinator.setStatus(claimId, SlashStatus.Completed);
+        coordinator.setStatus(claimId, SlashCoordinationStatus.Passed);
 
         // Expect ClaimSlashed event when completing the slash
         vm.expectEmit(true, false, false, true);
@@ -1442,7 +1447,9 @@ contract EigenTest is EigenTestDeployer {
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
 
         // Try to complete slash without initiating it first
-        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId));
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId, CoverageClaimStatus.Issued)
+        );
         eigenCoverageProvider.completeSlash(claimId);
     }
 
@@ -1456,7 +1463,9 @@ contract EigenTest is EigenTestDeployer {
         _executeSlash(claimIds, amounts, 15 days);
 
         // Coordinator status is still Pending
-        assertEq(uint8(coordinator.status(claimId)), uint8(SlashStatus.Pending));
+        assertEq(
+            uint8(coordinator.status(address(eigenCoverageDiamond), claimId)), uint8(SlashCoordinationStatus.Pending)
+        );
 
         // Try to complete slash
         vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.SlashFailed.selector, claimId));
@@ -1487,8 +1496,66 @@ contract EigenTest is EigenTestDeployer {
         _executeSlash(claimIds, amounts, 15 days);
 
         // Second slash should fail
-        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId));
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId, CoverageClaimStatus.Slashed)
+        );
         _executeSlash(claimIds, amounts);
+    }
+
+    /// @notice Test that _initiateSlash reverts when claim status is already Slashed
+    function test_RevertWhen_initiateSlash_alreadySlashed() public {
+        MockSlashCoordinator coordinator = new MockSlashCoordinator();
+        uint256 positionId = _setupSlashingPosition(1000e18, address(coordinator), Refundable.None);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1000e6);
+
+        // First slash with coordinator
+        vm.warp(block.timestamp + 15 days);
+        vm.startPrank(address(coverageAgent));
+        eigenCoverageProvider.slashClaims(claimIds, amounts);
+        vm.stopPrank();
+
+        // Complete the slash through coordinator
+        coordinator.setStatus(claimId, SlashCoordinationStatus.Passed);
+        eigenCoverageProvider.completeSlash(claimId);
+
+        // Verify claim is slashed
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
+
+        // Attempt to complete slash again should revert with InvalidClaim
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId, CoverageClaimStatus.Slashed)
+        );
+        eigenCoverageProvider.completeSlash(claimId);
+    }
+
+    /// @notice Test that _initiateSlash runs immediately when coordinator returns Completed status
+    function test_slashClaims_coordinatorCompletedImmediately() public {
+        MockSlashCoordinatorImmediate coordinator = new MockSlashCoordinatorImmediate();
+        uint256 positionId = _setupSlashingPosition(1000e18, address(coordinator), Refundable.None);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1000e6);
+
+        // Warp time and expect ClaimSlashed event (coordinator returns Completed immediately)
+        vm.warp(block.timestamp + 15 days);
+
+        vm.expectEmit(true, false, false, true);
+        emit ICoverageProvider.ClaimSlashed(claimId, 1000e6);
+
+        vm.startPrank(address(coverageAgent));
+        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts);
+        vm.stopPrank();
+
+        // Verify status is PendingSlash in return value (set before initiateSlash is called)
+        assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.PendingSlash));
+
+        // But the actual claim status should be Slashed (updated by _initiateSlash)
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
+
+        // Verify slash amount was recorded
+        assertEq(eigenCoverageDiamond.claimSlashAmounts(claimId), 1000e6);
     }
 
     function test_owner() public view {
@@ -1724,12 +1791,14 @@ contract EigenTest is EigenTestDeployer {
         vm.startPrank(address(coverageAgent));
         uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
 
+        uint256 expiredAt = block.timestamp + 1 hours;
+
         // Warp past reservation time
         vm.warp(block.timestamp + 2 hours);
 
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
 
-        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.ReservationExpired.selector, claimId));
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.ReservationExpired.selector, claimId, expiredAt));
         eigenCoverageProvider.convertReservedClaim(claimId, 1000e6, 30 days, 10e6);
         vm.stopPrank();
     }
@@ -1800,12 +1869,13 @@ contract EigenTest is EigenTestDeployer {
 
         vm.startPrank(address(coverageAgent));
         uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+        uint256 expiresAt = block.timestamp + 1 hours;
         vm.stopPrank();
 
         // Try to close before expiration as non-coverage-agent
         address anyone = makeAddr("anyone");
         vm.prank(anyone);
-        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.ClaimNotExpired.selector, claimId));
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.ClaimNotExpired.selector, claimId, expiresAt));
         eigenCoverageProvider.closeClaim(claimId);
     }
 
@@ -2477,7 +2547,7 @@ contract EigenTest is EigenTestDeployer {
         assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId), slashAmount);
 
         // Complete the slash via coordinator
-        mockCoordinator.setStatus(claimId, SlashStatus.Completed);
+        mockCoordinator.setStatus(claimId, SlashCoordinationStatus.Passed);
         eigenCoverageProvider.completeSlash(claimId);
 
         // Verify slash amount remains the same after completion
@@ -2671,7 +2741,9 @@ contract EigenTest is EigenTestDeployer {
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 100e6);
 
-        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId));
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId, CoverageClaimStatus.Issued)
+        );
         eigenCoverageProvider.repaySlashedClaim(claimId, 100e6);
         vm.stopPrank();
     }
@@ -2832,25 +2904,50 @@ contract EigenTest is EigenTestDeployer {
 // ============ Mock Slash Coordinator ============
 
 contract MockSlashCoordinator is ISlashCoordinator {
-    mapping(uint256 => SlashStatus) private _statuses;
+    mapping(uint256 => SlashCoordinationStatus) private _statuses;
+    mapping(uint256 => address) private _coverageProviders;
 
-    function initiateSlash(uint256 claimId, uint256) external returns (SlashStatus) {
-        _statuses[claimId] = SlashStatus.Pending;
-        emit SlashRequested(claimId, 0);
-        return SlashStatus.Pending;
+    function initiateSlash(address coverageProvider, uint256 claimId, uint256 amount)
+        external
+        returns (SlashCoordinationStatus)
+    {
+        _statuses[claimId] = SlashCoordinationStatus.Pending;
+        _coverageProviders[claimId] = coverageProvider;
+        emit SlashRequested(coverageProvider, claimId, amount);
+        return SlashCoordinationStatus.Pending;
     }
 
-    function status(uint256 claimId) external view returns (SlashStatus) {
+    function status(address coverageProvider, uint256 claimId) external view returns (SlashCoordinationStatus) {
         return _statuses[claimId];
     }
 
-    function setStatus(uint256 claimId, SlashStatus _status) external {
+    function setStatus(uint256 claimId, SlashCoordinationStatus _status) external {
         _statuses[claimId] = _status;
-        if (_status == SlashStatus.Completed) {
-            emit SlashCompleted(claimId, 0);
-        } else if (_status == SlashStatus.Failed) {
-            emit SlashFailed(claimId);
+        address coverageProvider = _coverageProviders[claimId];
+        if (_status == SlashCoordinationStatus.Passed) {
+            emit SlashCompleted(coverageProvider, claimId, 0);
+        } else if (_status == SlashCoordinationStatus.Failed) {
+            emit SlashFailed(coverageProvider, claimId);
         }
+    }
+}
+
+/// @notice Mock slash coordinator that immediately returns Passed status
+contract MockSlashCoordinatorImmediate is ISlashCoordinator {
+    mapping(uint256 => SlashCoordinationStatus) private _statuses;
+
+    function initiateSlash(address coverageProvider, uint256 claimId, uint256 amount)
+        external
+        returns (SlashCoordinationStatus)
+    {
+        _statuses[claimId] = SlashCoordinationStatus.Passed;
+        emit SlashRequested(coverageProvider, claimId, amount);
+        emit SlashCompleted(coverageProvider, claimId, amount);
+        return SlashCoordinationStatus.Passed;
+    }
+
+    function status(address, uint256 claimId) external view returns (SlashCoordinationStatus) {
+        return _statuses[claimId];
     }
 }
 
