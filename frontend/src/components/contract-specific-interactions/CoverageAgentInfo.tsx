@@ -456,7 +456,7 @@ function SlashCoverageDialog({
                 address: contractAddress,
                 abi: iExampleCoverageAgentAbi,
                 functionName: "slashCoverage",
-                args: [BigInt(coverageId)],
+                args: [BigInt(coverageId), totalAmount],
                 chainId,
             },
             {
