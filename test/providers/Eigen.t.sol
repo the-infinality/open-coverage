@@ -2917,7 +2917,7 @@ contract MockSlashCoordinator is ISlashCoordinator {
         return SlashCoordinationStatus.Pending;
     }
 
-    function status(address coverageProvider, uint256 claimId) external view returns (SlashCoordinationStatus) {
+    function status(address, uint256 claimId) external view returns (SlashCoordinationStatus) {
         return _statuses[claimId];
     }
 
