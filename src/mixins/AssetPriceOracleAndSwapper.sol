@@ -15,7 +15,7 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
     function register(AssetPair calldata _assetPair) public virtual {
         bool priceOracleRequired = _assetPair.priceStrategy != PriceStrategy.SwapperOnly;
         if (_assetPair.priceOracle == address(0) && priceOracleRequired) revert PriceOracleRequired();
-        if (priceOracleRequired && _assetPair.swapperAccuracy == 0) revert InvalidAssetPair();
+        if (priceOracleRequired && _assetPair.swapperAccuracy == 0) revert InvalidSwapperAccuracy();
 
         if (_assetPair.assetA == address(0) || _assetPair.assetB == address(0)) revert InvalidAssetPair();
 

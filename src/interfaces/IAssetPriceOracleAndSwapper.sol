@@ -43,6 +43,7 @@ interface IAssetPriceOracleAndSwapper {
     error AssetPairNotRegistered();
     error PriceOracleRequired();
     error InvalidAssetPair();
+    error InvalidSwapperAccuracy();
     error InvalidSwapSlippage();
 
     /// @notice Registers a price adaptor for an asset pair

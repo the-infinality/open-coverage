@@ -106,6 +106,153 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         );
     }
 
+    /// @dev Covers branch: priceStrategy == SwapperOnly (priceOracleRequired false) in register
+    function test_register_swapperOnly() public {
+        address tokenA = makeAddr("tokenA");
+        address tokenB = makeAddr("tokenB");
+        bytes memory poolInfo = abi.encodePacked(USDC, uint24(500), USDT);
+
+        assetPriceOracleAndSwapper.register(
+            AssetPair({
+                assetA: tokenA,
+                assetB: tokenB,
+                swapEngine: address(uniswapV3SwapperEngine),
+                poolInfo: poolInfo,
+                priceStrategy: PriceStrategy.SwapperOnly,
+                swapperAccuracy: 0,
+                priceOracle: address(0)
+            })
+        );
+
+        AssetPair memory pair = assetPriceOracleAndSwapper.assetPair(tokenA, tokenB);
+        assertEq(uint16(pair.priceStrategy), uint16(PriceStrategy.SwapperOnly));
+        assertEq(pair.priceOracle, address(0));
+    }
+
+    function test_RevertWhen_register_PriceOracleRequired() public {
+        bytes memory USDC_USDT_V3_POOL_INFO = abi.encodePacked(USDC, uint24(500), USDT);
+
+        vm.expectRevert(IAssetPriceOracleAndSwapper.PriceOracleRequired.selector);
+        assetPriceOracleAndSwapper.register(
+            AssetPair({
+                assetA: USDC,
+                assetB: USDT,
+                swapEngine: address(uniswapV3SwapperEngine),
+                poolInfo: USDC_USDT_V3_POOL_INFO,
+                priceStrategy: PriceStrategy.OracleOnly,
+                swapperAccuracy: 10,
+                priceOracle: address(0)
+            })
+        );
+    }
+
+    function test_RevertWhen_register_InvalidSwapperAccuracy_zeroWhenRequired() public {
+        bytes memory USDC_USDT_V3_POOL_INFO = abi.encodePacked(USDC, uint24(500), USDT);
+
+        AssetPair memory pair = AssetPair({
+            assetA: USDC,
+            assetB: USDT,
+            swapEngine: address(uniswapV3SwapperEngine),
+            poolInfo: USDC_USDT_V3_POOL_INFO,
+            priceStrategy: PriceStrategy.OracleOnly,
+            swapperAccuracy: 0,
+            priceOracle: address(mockPriceOracle)
+        });
+        // Use low-level call so the reverting branch (priceOracleRequired && swapperAccuracy == 0)
+        // is executed and recorded by coverage
+        (bool success, bytes memory result) = address(assetPriceOracleAndSwapper).call(
+            abi.encodeWithSelector(IAssetPriceOracleAndSwapper.register.selector, pair)
+        );
+        assertFalse(success, "register should revert with InvalidSwapperAccuracy");
+        assertEq(
+            result.length >= 4 ? bytes4(result) : bytes4(0),
+            IAssetPriceOracleAndSwapper.InvalidSwapperAccuracy.selector,
+            "revert reason should be InvalidSwapperAccuracy"
+        );
+    }
+
+    /// @dev Also hits revert (priceOracleRequired && swapperAccuracy == 0) via SwapperVerified
+    function test_RevertWhen_register_InvalidSwapperAccuracy_zeroWhenRequired_swapperVerified() public {
+        bytes memory poolInfo = abi.encodePacked(rETH, uint24(100), WETH, uint24(500), USDC);
+        MockPriceOracle oracle = new MockPriceOracle(1e18, rETH, USDC);
+
+        vm.expectRevert(IAssetPriceOracleAndSwapper.InvalidSwapperAccuracy.selector);
+        assetPriceOracleAndSwapper.register(
+            AssetPair({
+                assetA: rETH,
+                assetB: USDC,
+                swapEngine: address(uniswapV3SwapperEngine),
+                poolInfo: poolInfo,
+                priceStrategy: PriceStrategy.SwapperVerified,
+                swapperAccuracy: 0,
+                priceOracle: address(oracle)
+            })
+        );
+    }
+
+    function test_RevertWhen_register_InvalidAssetPair_assetA_zero() public {
+        bytes memory poolInfo = abi.encodePacked(USDC, uint24(500), USDT);
+
+        vm.expectRevert(IAssetPriceOracleAndSwapper.InvalidAssetPair.selector);
+        assetPriceOracleAndSwapper.register(
+            AssetPair({
+                assetA: address(0),
+                assetB: USDT,
+                swapEngine: address(uniswapV3SwapperEngine),
+                poolInfo: poolInfo,
+                priceStrategy: PriceStrategy.SwapperOnly,
+                swapperAccuracy: 0,
+                priceOracle: address(0)
+            })
+        );
+    }
+
+    function test_RevertWhen_register_InvalidAssetPair_assetB_zero() public {
+        bytes memory poolInfo = abi.encodePacked(USDC, uint24(500), USDT);
+
+        vm.expectRevert(IAssetPriceOracleAndSwapper.InvalidAssetPair.selector);
+        assetPriceOracleAndSwapper.register(
+            AssetPair({
+                assetA: USDC,
+                assetB: address(0),
+                swapEngine: address(uniswapV3SwapperEngine),
+                poolInfo: poolInfo,
+                priceStrategy: PriceStrategy.SwapperOnly,
+                swapperAccuracy: 0,
+                priceOracle: address(0)
+            })
+        );
+    }
+
+    function test_RevertWhen_register_InvalidPoolInfo() public {
+        address tokenA = makeAddr("tokenA");
+        address tokenB = makeAddr("tokenB");
+        // Invalid poolInfo: zero address as first token causes onInit to revert in UniswapV3SwapperEngine
+        bytes memory invalidPoolInfo = abi.encodePacked(address(0), USDC);
+
+        vm.expectRevert(IAssetPriceOracleAndSwapper.InvalidPoolInfo.selector);
+        assetPriceOracleAndSwapper.register(
+            AssetPair({
+                assetA: tokenA,
+                assetB: tokenB,
+                swapEngine: address(uniswapV3SwapperEngine),
+                poolInfo: invalidPoolInfo,
+                priceStrategy: PriceStrategy.SwapperOnly,
+                swapperAccuracy: 0,
+                priceOracle: address(0)
+            })
+        );
+    }
+
+    function test_RevertWhen_swapForInput_swapFailed() public {
+        // Use an amountIn so large that the swap fails (e.g. exceeds liquidity), triggering SwapFailed
+        uint256 amountIn = 1000e6 * 1e12; // 1e21 raw units
+        deal(USDT, address(assetPriceOracleAndSwapper), amountIn);
+
+        vm.expectRevert(IAssetPriceOracleAndSwapper.SwapFailed.selector);
+        assetPriceOracleAndSwapper.swapForInput(amountIn, USDC, USDT);
+    }
+
     function test_swapForOutput() public {
         uint128 amountOut = 1000e6;
         // Deal USDT (swap/input asset) instead of USDC

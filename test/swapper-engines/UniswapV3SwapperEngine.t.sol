@@ -849,4 +849,28 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         // forge-lint: disable-next-line(unsafe-typecast)
         assertEq(bytes4(result), ISwapperEngine.InvalidPoolInfo.selector, "Should revert with InvalidPoolInfo");
     }
+
+    function test_RevertWhen_onInit_assetAIsZero() public {
+        // Pool info with first asset (assetA) as zero address - passes length check but fails zero check in onInit
+        bytes memory poolInfo = abi.encodePacked(address(0), USDC);
+
+        (bool success, bytes memory result) =
+            address(proxy).call(abi.encodeWithSelector(UniswapV3SwapperEngine.onInit.selector, poolInfo));
+        assertFalse(success, "Should revert with InvalidPoolInfo when assetA is zero");
+        // casting to 'bytes4' is safe because error selectors are always 4 bytes
+        // forge-lint: disable-next-line(unsafe-typecast)
+        assertEq(bytes4(result), ISwapperEngine.InvalidPoolInfo.selector, "Should revert with InvalidPoolInfo");
+    }
+
+    function test_RevertWhen_onInit_assetBIsZero() public {
+        // Pool info with last asset (assetB) as zero address - passes length check but fails zero check in onInit
+        bytes memory poolInfo = abi.encodePacked(USDC, address(0));
+
+        (bool success, bytes memory result) =
+            address(proxy).call(abi.encodeWithSelector(UniswapV3SwapperEngine.onInit.selector, poolInfo));
+        assertFalse(success, "Should revert with InvalidPoolInfo when assetB is zero");
+        // casting to 'bytes4' is safe because error selectors are always 4 bytes
+        // forge-lint: disable-next-line(unsafe-typecast)
+        assertEq(bytes4(result), ISwapperEngine.InvalidPoolInfo.selector, "Should revert with InvalidPoolInfo");
+    }
 }
