@@ -107,7 +107,12 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
             return (0, 0, distributionStartTime);
         }
 
-        if (_position.refundable == Refundable.TimeWeighted || _position.refundable == Refundable.None) {
+        if (_position.refundable == Refundable.None) {
+            // No refund possible — operator earned the full reward on issuance
+            amount = _claim.reward - _claimRewardDistribution.amount;
+            claimRewardDistributions[claimId].amount += amount;
+            claimRewardDistributions[claimId].lastDistributedTimestamp = uint32(block.timestamp);
+        } else if (_position.refundable == Refundable.TimeWeighted) {
             uint256 claimableReward =
                 _min(block.timestamp - _claim.createdAt, _claim.duration) * _claim.reward / _claim.duration;
             amount = claimableReward - _claimRewardDistribution.amount;
@@ -116,6 +121,12 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         } else if (_position.refundable == Refundable.Full && _claim.status == CoverageClaimStatus.Completed) {
             amount = _claim.reward;
         } else {
+            return (0, 0, distributionStartTime);
+        }
+
+        // Guard against submitting a zero-amount reward (e.g. already fully distributed,
+        // or reward was reduced to 0 after refund on early close)
+        if (amount == 0) {
             return (0, 0, distributionStartTime);
         }
 

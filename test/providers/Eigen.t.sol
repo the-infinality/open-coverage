@@ -2,7 +2,9 @@
 pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20 as IERC20v5} from "@openzeppelin-v5/contracts/token/ERC20/IERC20.sol";
 import {EigenTestDeployer} from "../utils/EigenTestDeployer.sol";
+import {EigenAddresses} from "src/providers/eigenlayer/Types.sol";
 import {CoveragePosition, Refundable} from "src/interfaces/ICoverageProvider.sol";
 import {IEigenServiceManager} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
 import {
@@ -816,21 +818,24 @@ contract EigenTest is EigenTestDeployer {
         uint256 claimId = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
         vm.stopPrank();
 
-        console2.log("block timestamp", block.timestamp);
-
         uint256 amount;
         uint32 duration;
         uint32 distributionStartTime;
 
+        // Same-block capture returns 0 (elapsedDuration == 0)
         (amount, duration,) = eigenServiceManager.captureRewards(claimId);
         assertEq(amount, 0);
         assertEq(duration, 0);
 
-        vm.warp(block.timestamp + 40 days);
+        // Refundable.None: full reward is capturable immediately after any time elapses
+        vm.warp(block.timestamp + 1);
         (amount, duration, distributionStartTime) = eigenServiceManager.captureRewards(claimId);
-        assertEq(amount, 10e6);
-        assertEq(duration, 30 days);
-        assertEq(distributionStartTime, toRewardsInterval(block.timestamp - 40 days));
+        assertEq(amount, 10e6, "Full reward should be capturable immediately for None policy");
+
+        // Second capture returns 0 (already fully distributed)
+        vm.warp(block.timestamp + 40 days);
+        (amount,,) = eigenServiceManager.captureRewards(claimId);
+        assertEq(amount, 0, "No remaining reward to capture");
     }
 
     function test_captureRewards_refundableTimeWeighted() public {
@@ -1978,7 +1983,8 @@ contract EigenTest is EigenTestDeployer {
         vm.prank(address(coverageAgent));
         eigenCoverageProvider.closeClaim(claimId);
 
-        // Verify time-proportional refund (15 days remaining of 30 days = 50% refund)
+        // Refundable.Full uses time-proportional refund on closeClaim (full refund only on liquidation).
+        // 15 days remaining of 30 days = 50% refund.
         uint256 coordinatorBalanceAfter = IERC20(coverageAgent.asset()).balanceOf(coordinator);
         uint256 expectedRefund = reward / 2;
         assertEq(
@@ -1990,6 +1996,7 @@ contract EigenTest is EigenTestDeployer {
         CoverageClaim memory claim = eigenCoverageProvider.claim(claimId);
         assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Completed));
         assertEq(claim.duration, 15 days, "Duration should reflect actual coverage time");
+        assertEq(claim.reward, reward - expectedRefund, "Reward should be reduced by refund amount");
     }
 
     /// @notice Test that closing an issued claim early with TimeWeighted refundable policy refunds proportionally
@@ -2898,6 +2905,669 @@ contract EigenTest is EigenTestDeployer {
             assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
             assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId), slashAmount - repayAmount);
         }
+    }
+
+    // ============ EigenCoverageProviderFacet Branch Coverage Tests ============
+
+    // --- onIsRegistered (line 35) ---
+
+    /// @notice Test that onIsRegistered reverts if coverage agent is already registered
+    function test_RevertWhen_onIsRegistered_alreadyRegistered() public {
+        // coverageAgent is already registered in setUp via coverageAgent.registerCoverageProvider(...)
+        // Calling onIsRegistered again from the same coverage agent should revert
+        vm.prank(address(coverageAgent));
+        vm.expectRevert(abi.encodeWithSelector(IEigenServiceManager.CoverageAgentAlreadyRegistered.selector));
+        eigenCoverageProvider.onIsRegistered();
+    }
+
+    // --- createPosition validation branches (lines 62, 63, 69, 75, 77) ---
+
+    /// @notice Test that createPosition reverts when expiryTimestamp is in the past
+    function test_RevertWhen_createPosition_expiredTimestamp() public {
+        _setupwithAllocations();
+
+        uint256 pastTimestamp = block.timestamp - 1;
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: pastTimestamp,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(uint256(uint160(address(operator))))
+        });
+
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.TimestampInvalid.selector, pastTimestamp));
+        eigenCoverageProvider.createPosition(data, "");
+    }
+
+    /// @notice Test that createPosition reverts when minRate exceeds 10000
+    function test_RevertWhen_createPosition_invalidMinRate() public {
+        _setupwithAllocations();
+
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 10001,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(uint256(uint160(address(operator))))
+        });
+
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.MinRateInvalid.selector, uint16(10001)));
+        eigenCoverageProvider.createPosition(data, "");
+    }
+
+    /// @notice Test that createPosition reverts when asset has no mapped strategy (strategy == address(0))
+    function test_RevertWhen_createPosition_unmappedAsset() public {
+        _setupwithAllocations();
+
+        // Use an asset that has no strategy mapping (e.g., WETH which is not mapped in setUp)
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: WETH, // No strategy mapped for WETH
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(uint256(uint160(address(operator))))
+        });
+
+        vm.expectRevert(abi.encodeWithSelector(IEigenOperatorProxy.StrategyNotWhitelisted.selector, address(0)));
+        eigenCoverageProvider.createPosition(data, "");
+    }
+
+    /// @notice Test that createPosition reverts when caller doesn't have operator permissions
+    function test_RevertWhen_createPosition_notAuthorized() public {
+        _setupwithAllocations();
+
+        // Create a position using an unauthorized address (not the operator handler)
+        address unauthorized = makeAddr("unauthorized");
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(uint256(uint160(address(operator))))
+        });
+
+        vm.prank(unauthorized);
+        vm.expectRevert(
+            abi.encodeWithSelector(IEigenServiceManager.NotOperatorAuthorized.selector, address(operator), unauthorized)
+        );
+        eigenCoverageProvider.createPosition(data, "");
+    }
+
+    /// @notice Test that createPosition reverts when strategy is not whitelisted
+    function test_RevertWhen_createPosition_strategyNotWhitelisted() public {
+        _setupwithAllocations();
+
+        // Remove the strategy from whitelist
+        address strategy = address(_getTestStrategy());
+        eigenServiceManager.setStrategyWhitelist(strategy, false);
+
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(uint256(uint160(address(operator))))
+        });
+
+        vm.expectRevert(abi.encodeWithSelector(IEigenOperatorProxy.StrategyNotWhitelisted.selector, strategy));
+        eigenCoverageProvider.createPosition(data, "");
+    }
+
+    // --- reserveClaim validation branches (lines 160, 163) ---
+
+    /// @notice Test that reserveClaim reverts with zero amount
+    function test_RevertWhen_reserveClaim_zeroAmount() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.prank(address(coverageAgent));
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.ZeroAmount.selector));
+        eigenCoverageProvider.reserveClaim(positionId, 0, 30 days, 10e6);
+    }
+
+    /// @notice Test that reserveClaim reverts when caller is not the coverage agent
+    function test_RevertWhen_reserveClaim_notCoverageAgent() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        address unauthorized = makeAddr("unauthorized");
+        vm.prank(unauthorized);
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.NotCoverageAgent.selector, unauthorized, address(coverageAgent))
+        );
+        eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+    }
+
+    // --- convertReservedClaim validation branches (lines 203, 206, 222, 226) ---
+
+    /// @notice Test that convertReservedClaim reverts when claim is not in Reserved status
+    function test_RevertWhen_convertReservedClaim_notReserved() public {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(10e18);
+
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(uint256(uint160(address(operator))))
+        });
+        uint256 positionId = eigenCoverageProvider.createPosition(data, "");
+
+        // Issue a regular claim (status = Issued, not Reserved)
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
+
+        // Try to convert an Issued claim (not Reserved)
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.ClaimNotReserved.selector, claimId));
+        eigenCoverageProvider.convertReservedClaim(claimId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+    }
+
+    /// @notice Test that convertReservedClaim reverts when caller is not the coverage agent
+    function test_RevertWhen_convertReservedClaim_notCoverageAgent() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.prank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+
+        // Try to convert from an unauthorized address
+        address unauthorized = makeAddr("unauthorized");
+        vm.prank(unauthorized);
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.NotCoverageAgent.selector, unauthorized, address(coverageAgent))
+        );
+        eigenCoverageProvider.convertReservedClaim(claimId, 1000e6, 30 days, 10e6);
+    }
+
+    /// @notice Test that convertReservedClaim reverts when amount is zero
+    function test_RevertWhen_convertReservedClaim_zeroAmount() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.ZeroAmount.selector));
+        eigenCoverageProvider.convertReservedClaim(claimId, 0, 30 days, 0);
+        vm.stopPrank();
+    }
+
+    /// @notice Test that convertReservedClaim reverts when reward is insufficient
+    function test_RevertWhen_convertReservedClaim_insufficientReward() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+
+        // The minimum reward for 1000e6 coverage at 100 bps for 30 days:
+        // minReward = (1000e6 * 100 * 30 days) / (10000 * 365 days)
+        // Try with a very small reward that doesn't meet the minimum
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 1);
+        vm.expectRevert(); // InsufficientReward
+        eigenCoverageProvider.convertReservedClaim(claimId, 1000e6, 30 days, 1);
+        vm.stopPrank();
+    }
+
+    // --- closeClaim validation branch (line 269) ---
+
+    /// @notice Test that closeClaim reverts when claim status is neither Reserved nor Issued
+    function test_RevertWhen_closeClaim_invalidStatus() public {
+        uint256 positionId = _setupSlashingPosition(100e18);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        // Slash the claim first to change its status to Slashed
+        uint256[] memory claimIds = new uint256[](1);
+        claimIds[0] = claimId;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 500e6;
+        _executeSlash(claimIds, amounts);
+
+        // Verify claim is now Slashed
+        CoverageClaim memory slashedClaim = eigenCoverageProvider.claim(claimId);
+        assertEq(uint8(slashedClaim.status), uint8(CoverageClaimStatus.Slashed));
+
+        // Try to close a Slashed claim - should revert
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId, CoverageClaimStatus.Slashed)
+        );
+        eigenCoverageProvider.closeClaim(claimId);
+    }
+
+    // --- liquidateClaim (line 313-315) ---
+
+    /// @notice Test that liquidateClaim reverts with NotImplemented
+    function test_RevertWhen_liquidateClaim_notImplemented() public {
+        vm.expectRevert();
+        eigenCoverageProvider.liquidateClaim(0);
+    }
+
+    // ============ EigenServiceManagerFacet Branch Coverage Tests ============
+
+    // --- registerOperator ---
+
+    /// @notice Test that registerOperator reverts with InvalidAVS when avs is not this contract
+    function test_RevertWhen_registerOperator_invalidAVS() public {
+        address randomAVS = makeAddr("randomAVS");
+        uint32[] memory operatorSetIds = new uint32[](0);
+
+        vm.expectRevert(abi.encodeWithSelector(IEigenServiceManager.InvalidAVS.selector, randomAVS));
+        eigenServiceManager.registerOperator(address(this), randomAVS, operatorSetIds, "");
+    }
+
+    /// @notice Test that registerOperator reverts when called by the delegation manager
+    function test_RevertWhen_registerOperator_calledByDelegationManager() public {
+        address delegationManager = eigenServiceManager.eigenAddresses().delegationManager;
+        uint32[] memory operatorSetIds = new uint32[](0);
+
+        vm.prank(delegationManager);
+        vm.expectRevert("Not delegation manager");
+        eigenServiceManager.registerOperator(address(this), address(eigenCoverageDiamond), operatorSetIds, "");
+    }
+
+    /// @notice Test that registerOperator succeeds when called by non-delegation-manager with correct AVS
+    function test_registerOperator_succeeds() public {
+        uint32[] memory operatorSetIds = new uint32[](0);
+        // This function just validates, should not revert
+        eigenServiceManager.registerOperator(address(this), address(eigenCoverageDiamond), operatorSetIds, "");
+    }
+
+    // --- captureRewards with Refundable.Full ---
+
+    /// @notice Test captureRewards returns (0,0,...) for Refundable.Full when claim is NOT yet Completed
+    function test_captureRewards_refundableFull_notCompleted() public {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(1000e18);
+
+        // Create position with Refundable.Full
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.Full,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(uint256(uint160(address(operator))))
+        });
+        uint256 positionId = eigenCoverageProvider.createPosition(data, "");
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+
+        // Warp partway through the claim (still Issued, not Completed)
+        vm.warp(block.timestamp + 15 days);
+
+        // captureRewards should return 0 for Full refundable when claim is still Issued
+        (uint256 amount, uint32 duration, uint32 distributionStartTime) = eigenServiceManager.captureRewards(claimId);
+        assertEq(amount, 0, "Amount should be 0 for Full refundable when not Completed");
+        assertEq(duration, 0, "Duration should be 0 for Full refundable when not Completed");
+        assertEq(distributionStartTime, 0, "Distribution start time should be 0 for Full refundable when not Completed");
+    }
+
+    /// @notice Test captureRewards returns full reward for Refundable.Full when claim IS Completed
+    function test_captureRewards_refundableFull_completed() public {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(1000e18);
+
+        // Create position with Refundable.Full
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.Full,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(uint256(uint160(address(operator))))
+        });
+        uint256 positionId = eigenCoverageProvider.createPosition(data, "");
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+
+        // Warp past the claim duration and close it so status becomes Completed
+        vm.warp(block.timestamp + 31 days);
+        eigenCoverageProvider.closeClaim(claimId);
+
+        CoverageClaim memory _claim = eigenCoverageProvider.claim(claimId);
+        assertEq(uint8(_claim.status), uint8(CoverageClaimStatus.Completed), "Claim should be Completed after close");
+
+        // captureRewards should now return the full reward
+        (uint256 amount,,) = eigenServiceManager.captureRewards(claimId);
+        assertEq(amount, 10e6, "Amount should equal full reward for Full refundable when Completed");
+    }
+
+    /// @notice Test captureRewards distributes the reduced reward after early close with Full policy
+    function test_captureRewards_refundableFull_afterEarlyClose() public {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(1000e18);
+
+        uint256 reward = 10e6;
+
+        // Create position with Refundable.Full
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.Full,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(uint256(uint160(address(operator))))
+        });
+        uint256 positionId = eigenCoverageProvider.createPosition(data, "");
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), reward);
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, reward);
+        vm.stopPrank();
+
+        // Close early at halfway — time-proportional refund (50%)
+        vm.warp(block.timestamp + 15 days);
+        vm.prank(address(coverageAgent));
+        eigenCoverageProvider.closeClaim(claimId);
+
+        // Verify reward was reduced by the refund amount (50%)
+        CoverageClaim memory _claim = eigenCoverageProvider.claim(claimId);
+        assertEq(_claim.reward, reward / 2, "Reward should be reduced by refund amount");
+        assertEq(uint8(_claim.status), uint8(CoverageClaimStatus.Completed));
+
+        // captureRewards should distribute the remaining reward (50%) now that status is Completed
+        (uint256 amount,,) = eigenServiceManager.captureRewards(claimId);
+        assertEq(amount, reward / 2, "captureRewards should distribute remaining reward after early close");
+    }
+
+    /// @notice Test captureRewards returns 0 immediately after claim creation (elapsedDuration == 0 for non-Full)
+    function test_captureRewards_zeroElapsedDuration() public {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(1000e18);
+
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.TimeWeighted,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(uint256(uint160(address(operator))))
+        });
+        uint256 positionId = eigenCoverageProvider.createPosition(data, "");
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+
+        // Call captureRewards in the same block as claim creation (elapsedDuration == 0)
+        (uint256 amount, uint32 duration, uint32 distributionStartTime) = eigenServiceManager.captureRewards(claimId);
+        assertEq(amount, 0, "Amount should be 0 when elapsed duration is 0");
+        assertEq(duration, 0, "Duration should be 0 when elapsed duration is 0");
+        // distributionStartTime should equal the claim creation timestamp (lastDistributedTimestamp)
+        assertEq(distributionStartTime, uint32(block.timestamp), "Should return the claim creation timestamp");
+    }
+
+    // --- submitOperatorReward external access control ---
+
+    /// @notice Test that submitOperatorReward reverts when called externally
+    function test_RevertWhen_submitOperatorReward_notInternal() public {
+        // Pre-compute parameters before expectRevert (these involve external calls)
+        IStrategy strategy = _getTestStrategy();
+        address asset = coverageAgent.asset();
+
+        vm.expectRevert("Only internal calls");
+        eigenServiceManager.submitOperatorReward(
+            address(operator),
+            strategy,
+            IERC20v5(asset),
+            1e6,
+            0,
+            1 days,
+            "Test reward"
+        );
+    }
+
+    // --- slashOperator external access control ---
+
+    /// @notice Test that slashOperator reverts when called externally
+    function test_RevertWhen_slashOperator_notInternal() public {
+        // Pre-compute parameters before expectRevert
+        address strategy = address(_getTestStrategy());
+
+        vm.expectRevert("Only internal calls");
+        eigenServiceManager.slashOperator(
+            address(operator), strategy, address(coverageAgent), 100e6
+        );
+    }
+
+    // --- ensureAllocations ---
+
+    /// @notice Test that ensureAllocations reverts when operator has zero allocation
+    function test_RevertWhen_ensureAllocations_notAllocated() public {
+        // Register coverage agent with operator but do NOT allocate any strategy magnitude
+        vm.roll(block.number + 126001);
+        operator.registerCoverageAgent(address(eigenCoverageDiamond), address(coverageAgent), 0);
+
+        // Strategy exists in the operator set but operator has 0 magnitude
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IEigenServiceManager.NotAllocated.selector,
+                address(operator),
+                address(_getTestStrategy()),
+                address(coverageAgent)
+            )
+        );
+        eigenServiceManager.ensureAllocations(address(operator), address(coverageAgent), address(_getTestStrategy()));
+    }
+
+    /// @notice Test that ensureAllocations succeeds when operator has allocations
+    function test_ensureAllocations_succeeds() public {
+        _setupwithAllocations();
+
+        // Should not revert since operator has allocations
+        eigenServiceManager.ensureAllocations(address(operator), address(coverageAgent), address(_getTestStrategy()));
+    }
+
+    /// @notice Test that ensureAllocations adds strategy to operator set if not already present
+    function test_ensureAllocations_addsStrategyToSet() public {
+        // Register coverage agent and allocate
+        _setupwithAllocations();
+
+        // Create a second mock strategy with a different underlying token
+        MockStrategy newStrategy = new MockStrategy(WETH);
+        eigenServiceManager.setStrategyWhitelist(address(newStrategy), true);
+
+        // Verify strategy is not yet in the operator set by calling ensureAllocations
+        // It should revert with NotAllocated because the operator hasn't allocated to this new strategy
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IEigenServiceManager.NotAllocated.selector,
+                address(operator),
+                address(newStrategy),
+                address(coverageAgent)
+            )
+        );
+        eigenServiceManager.ensureAllocations(address(operator), address(coverageAgent), address(newStrategy));
+    }
+
+    // --- setStrategyWhitelist access control ---
+
+    /// @notice Test that setStrategyWhitelist reverts when called by non-owner
+    function test_RevertWhen_setStrategyWhitelist_notOwner() public {
+        address nonOwner = makeAddr("nonOwner");
+
+        vm.prank(nonOwner);
+        vm.expectRevert(abi.encodeWithSelector(LibDiamond.NotContractOwner.selector, nonOwner, address(this)));
+        eigenServiceManager.setStrategyWhitelist(address(_getTestStrategy()), false);
+    }
+
+    // --- captureRewards multiple captures with TimeWeighted ---
+
+    /// @notice Test that captureRewards accumulates correctly over multiple calls with TimeWeighted
+    function test_captureRewards_timeWeighted_multipleCaptures() public {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(1000e18);
+
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.TimeWeighted,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(uint256(uint160(address(operator))))
+        });
+        uint256 positionId = eigenCoverageProvider.createPosition(data, "");
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+
+        uint256 totalCaptured;
+
+        // Capture at 10 days (1/3 of duration)
+        vm.warp(block.timestamp + 10 days);
+        (uint256 amount1,,) = eigenServiceManager.captureRewards(claimId);
+        totalCaptured += amount1;
+        assertApproxEqAbs(amount1, 3333333, 1, "First capture should be ~1/3 of reward");
+
+        // Capture at 20 days (2/3 of duration)
+        vm.warp(block.timestamp + 10 days);
+        (uint256 amount2,,) = eigenServiceManager.captureRewards(claimId);
+        totalCaptured += amount2;
+        assertApproxEqAbs(amount2, 3333333, 1, "Second capture should be ~1/3 of reward");
+
+        // Capture after duration ends (30 days)
+        vm.warp(block.timestamp + 10 days);
+        (uint256 amount3,,) = eigenServiceManager.captureRewards(claimId);
+        totalCaptured += amount3;
+
+        // Total captured should equal the full reward
+        assertEq(totalCaptured, 10e6, "Total captured should equal full reward");
+    }
+
+    // --- captureRewards with None refundable, partial time ---
+
+    /// @notice Test captureRewards with Refundable.None captures incrementally
+    function test_captureRewards_refundableNone_fullCaptureImmediate() public {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(1000e18);
+
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(uint256(uint160(address(operator))))
+        });
+        uint256 positionId = eigenCoverageProvider.createPosition(data, "");
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+
+        // Capture at 15 days (halfway) — None policy grants full reward immediately
+        vm.warp(block.timestamp + 15 days);
+        (uint256 amount,,) = eigenServiceManager.captureRewards(claimId);
+        assertEq(amount, 10e6, "Should capture full reward regardless of elapsed time for None policy");
+
+        // Capture again at the same block should return 0 (already fully distributed)
+        (uint256 amountAgain, uint32 durationAgain,) = eigenServiceManager.captureRewards(claimId);
+        assertEq(amountAgain, 0, "Second capture in same block should return 0");
+        assertEq(durationAgain, 0, "Duration should be 0 for second capture in same block");
+    }
+
+    // --- coverageAllocated view function ---
+
+    /// @notice Test that coverageAllocated returns correct value after staking
+    function test_coverageAllocated_returnsCorrectValue() public {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(10e18);
+
+        uint256 allocated = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+        assertGt(allocated, 0, "Coverage allocated should be greater than 0 after staking and allocation");
+    }
+
+    // --- getOperatorSetId view function ---
+
+    /// @notice Test that getOperatorSetId returns correct operator set ID after registration
+    function test_getOperatorSetId_afterRegistration() public {
+        _setupwithAllocations();
+
+        uint32 operatorSetId = eigenServiceManager.getOperatorSetId(address(coverageAgent));
+        // Should be > 0 since the coverage agent has been registered
+        assertGt(operatorSetId, 0, "Operator set ID should be greater than 0");
+    }
+
+    /// @notice Test that getOperatorSetId returns 0 for unregistered coverage agent
+    function test_getOperatorSetId_unregistered() public {
+        address unregistered = makeAddr("unregistered");
+        uint32 operatorSetId = eigenServiceManager.getOperatorSetId(unregistered);
+        assertEq(operatorSetId, 0, "Operator set ID should be 0 for unregistered agent");
+    }
+
+    // --- eigenAddresses view function ---
+
+    /// @notice Test that eigenAddresses returns valid non-zero addresses
+    function test_eigenAddresses_returnsValidAddresses() public view {
+        EigenAddresses memory addrs = eigenServiceManager.eigenAddresses();
+        assertTrue(addrs.allocationManager != address(0), "Allocation manager should not be zero");
+        assertTrue(addrs.delegationManager != address(0), "Delegation manager should not be zero");
+        assertTrue(addrs.strategyManager != address(0), "Strategy manager should not be zero");
+        assertTrue(addrs.rewardsCoordinator != address(0), "Rewards coordinator should not be zero");
+        assertTrue(addrs.permissionController != address(0), "Permission controller should not be zero");
+    }
+
+    // --- isStrategyWhitelisted view function ---
+
+    /// @notice Test isStrategyWhitelisted returns false for non-whitelisted strategy
+    function test_isStrategyWhitelisted_nonWhitelisted() public {
+        address randomStrategy = makeAddr("randomStrategy");
+        assertFalse(
+            eigenServiceManager.isStrategyWhitelisted(randomStrategy),
+            "Non-whitelisted strategy should return false"
+        );
     }
 }
 

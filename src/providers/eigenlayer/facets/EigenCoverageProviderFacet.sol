@@ -293,16 +293,20 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
             // Update duration to reflect actual time coverage was active
             _claim.duration = elapsedTime;
 
-            // Calculate refund based on refundable policy (Full and TimeWeighted both use time-based refund)
+            // Both Full and TimeWeighted use time-proportional refund on early close.
+            // Full refund (100%) only applies during liquidation, not closeClaim.
             if (positionData.refundable != Refundable.None) {
-                // Calculate refund amount based on time elapsed divided by the total original duration of the claim
                 uint256 refundAmount = (_claim.reward * (originalDuration - elapsedTime)) / originalDuration;
+
+                // Reduce reward to match what remains for captureRewards distribution,
+                // preventing over-distribution of tokens that were already refunded.
+                _claim.reward -= refundAmount;
 
                 address coverageAgent = positionData.coverageAgent;
                 SafeERC20.safeTransfer(IERC20(ICoverageAgent(coverageAgent).asset()), coverageAgent, refundAmount);
-
                 ICoverageAgent(coverageAgent).onClaimRefunded(claimId, refundAmount);
             }
+            // Refundable.None: no refund — operator already earned the full reward via captureRewards
         }
 
         _claim.status = CoverageClaimStatus.Completed;
@@ -605,8 +609,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         uint256 closingStrategyAssetBalance = IERC20(strategyAsset).balanceOf(address(this));
 
         // If the closing strategy asset balance is less than the opening strategy asset balance then more than
-        // the slashed amount was used to swap for the coverage agent's asset. This is unlikely but is stil an edge case
-        // that needs to be handled.
+        // the slashed amount was used to swap for the coverage agent's asset. This is unlikely if the swapper is working as 
+        // intended but is stil an edge case that needs to be handled.
         if (closingStrategyAssetBalance < openingStrategyAssetBalance) revert SlashFailed(claimId);
 
         // Redistribute any remaining amount of staked assets back to the operator as a reward
