@@ -609,7 +609,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         uint256 closingStrategyAssetBalance = IERC20(strategyAsset).balanceOf(address(this));
 
         // If the closing strategy asset balance is less than the opening strategy asset balance then more than
-        // the slashed amount was used to swap for the coverage agent's asset. This is unlikely if the swapper is working as 
+        // the slashed amount was used to swap for the coverage agent's asset. This is unlikely if the swapper is working as
         // intended but is stil an edge case that needs to be handled.
         if (closingStrategyAssetBalance < openingStrategyAssetBalance) revert SlashFailed(claimId);
 

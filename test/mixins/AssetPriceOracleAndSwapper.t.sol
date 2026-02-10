@@ -160,9 +160,8 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         });
         // Use low-level call so the reverting branch (priceOracleRequired && swapperAccuracy == 0)
         // is executed and recorded by coverage
-        (bool success, bytes memory result) = address(assetPriceOracleAndSwapper).call(
-            abi.encodeWithSelector(IAssetPriceOracleAndSwapper.register.selector, pair)
-        );
+        (bool success, bytes memory result) = address(assetPriceOracleAndSwapper)
+            .call(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.register.selector, pair));
         assertFalse(success, "register should revert with InvalidSwapperAccuracy");
         assertEq(
             result.length >= 4 ? bytes4(result) : bytes4(0),

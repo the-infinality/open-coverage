@@ -149,6 +149,19 @@ contract EigenTest is EigenTestDeployer {
         );
     }
 
+    function test_setSwapSlippage() public {
+        uint16 slippageBps = 50; // 0.5%
+        eigenPriceOracle.setSwapSlippage(slippageBps);
+        assertEq(eigenPriceOracle.swapSlippage(), slippageBps);
+    }
+
+    function test_RevertWhen_setSwapSlippage_not_owner() public {
+        address nonOwner = makeAddr("nonOwner");
+        vm.prank(nonOwner);
+        vm.expectRevert(abi.encodeWithSelector(LibDiamond.NotContractOwner.selector, nonOwner, address(this)));
+        eigenPriceOracle.setSwapSlippage(50);
+    }
+
     function test_registerCoverageAgent() public {
         operator.registerCoverageAgent(address(eigenCoverageDiamond), address(coverageAgent), 10000);
     }
@@ -3348,13 +3361,7 @@ contract EigenTest is EigenTestDeployer {
 
         vm.expectRevert("Only internal calls");
         eigenServiceManager.submitOperatorReward(
-            address(operator),
-            strategy,
-            IERC20v5(asset),
-            1e6,
-            0,
-            1 days,
-            "Test reward"
+            address(operator), strategy, IERC20v5(asset), 1e6, 0, 1 days, "Test reward"
         );
     }
 
@@ -3366,9 +3373,7 @@ contract EigenTest is EigenTestDeployer {
         address strategy = address(_getTestStrategy());
 
         vm.expectRevert("Only internal calls");
-        eigenServiceManager.slashOperator(
-            address(operator), strategy, address(coverageAgent), 100e6
-        );
+        eigenServiceManager.slashOperator(address(operator), strategy, address(coverageAgent), 100e6);
     }
 
     // --- ensureAllocations ---
@@ -3565,8 +3570,7 @@ contract EigenTest is EigenTestDeployer {
     function test_isStrategyWhitelisted_nonWhitelisted() public {
         address randomStrategy = makeAddr("randomStrategy");
         assertFalse(
-            eigenServiceManager.isStrategyWhitelisted(randomStrategy),
-            "Non-whitelisted strategy should return false"
+            eigenServiceManager.isStrategyWhitelisted(randomStrategy), "Non-whitelisted strategy should return false"
         );
     }
 }
