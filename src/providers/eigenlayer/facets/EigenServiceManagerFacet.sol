@@ -35,7 +35,7 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
     /// @inheritdoc IEigenServiceManager
     function registerOperator(address, address _avs, uint32[] calldata, bytes calldata) external view {
         require(msg.sender != _eigenAddresses.delegationManager, "Not delegation manager");
-        if (_avs != address(this)) revert InvalidAVS();
+        if (_avs != address(this)) revert IEigenServiceManager.InvalidAVS(_avs);
     }
 
     /// @inheritdoc IEigenServiceManager
@@ -293,7 +293,7 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         IAllocationManagerTypes.Allocation memory allocation =
             allocationManager.getAllocation(operator, operatorSet, IStrategy(strategy));
 
-        if (allocation.currentMagnitude == 0) revert NotAllocated();
+        if (allocation.currentMagnitude == 0) revert NotAllocated(operator, strategy, coverageAgent);
     }
 
     /// @inheritdoc IEigenServiceManager

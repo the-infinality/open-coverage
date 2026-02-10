@@ -9,11 +9,9 @@ import {EigenAddresses} from "../Types.sol";
 interface IEigenServiceManager {
     error StrategyAssetAlreadyRegistered(address asset);
     error CoverageAgentAlreadyRegistered();
-    error InvalidAVS();
+    error InvalidAVS(address avs);
     error NotOperatorAuthorized(address operator, address handler);
-    error InvalidAsset(address strategyAsset, address positionAsset);
-    error NotAllocated();
-    error NotImplemented();
+    error NotAllocated(address operator, address strategy, address coverageAgent);
 
     function eigenAddresses() external view returns (EigenAddresses memory);
 

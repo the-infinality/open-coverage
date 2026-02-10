@@ -19,6 +19,7 @@ import {
 import {ICoverageAgent} from "src/interfaces/ICoverageAgent.sol";
 import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {EigenCoverageStorage, ClaimRewardDistribution} from "../EigenCoverageStorage.sol";
+import {NotImplemented} from "../Errors.sol";
 import {ISlashCoordinator, SlashStatus} from "src/interfaces/ISlashCoordinator.sol";
 import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
 
@@ -309,7 +310,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     /// @inheritdoc ICoverageProvider
     function liquidateClaim(uint256) external pure {
         //TODO: Implement liquidateClaim
-        revert IEigenServiceManager.NotImplemented();
+        revert NotImplemented();
     }
 
     /// @inheritdoc ICoverageProvider
