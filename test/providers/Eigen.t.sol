@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20 as IERC20v5} from "@openzeppelin-v5/contracts/token/ERC20/IERC20.sol";
+import {IERC173} from "src/diamond/interfaces/IERC173.sol";
 import {EigenTestDeployer} from "../utils/EigenTestDeployer.sol";
 import {EigenAddresses} from "src/providers/eigenlayer/Types.sol";
 import {CoveragePosition, Refundable} from "src/interfaces/ICoverageProvider.sol";
@@ -23,17 +24,14 @@ import {ExampleCoverageAgent} from "src/ExampleCoverageAgent.sol";
 import {IStrategyManager} from "eigenlayer-contracts/interfaces/IStrategyManager.sol";
 import {ISignatureUtilsMixinTypes} from "eigenlayer-contracts/interfaces/ISignatureUtilsMixin.sol";
 import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
-import {IDiamondOwner} from "src/diamond/interfaces/IDiamondOwner.sol";
 import {MockPriceOracle} from "../utils/MockPriceOracle.sol";
 import {CoverageClaim, CoverageClaimStatus} from "src/interfaces/ICoverageProvider.sol";
 import {UniswapV3SwapperEngine} from "src/swapper-engines/UniswapV3SwapperEngine.sol";
 import {UniswapAddressbook} from "utils/UniswapHelper.sol";
 import {ISwapperEngine} from "src/interfaces/ISwapperEngine.sol";
 import {PriceStrategy, AssetPair} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
-import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
 import {ISlashCoordinator, SlashCoordinationStatus} from "src/interfaces/ISlashCoordinator.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
-import {console2} from "forge-std/console2.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 contract EigenTest is EigenTestDeployer {
@@ -135,7 +133,7 @@ contract EigenTest is EigenTestDeployer {
         bytes memory poolInfo = abi.encodePacked(rETH, uint24(100), WETH, uint24(500), USDC);
 
         vm.prank(nonOwner);
-        vm.expectRevert(abi.encodeWithSelector(LibDiamond.NotContractOwner.selector, nonOwner, address(this)));
+        vm.expectRevert("LibDiamond: Must be contract owner");
         eigenPriceOracle.register(
             AssetPair({
                 assetA: rETH,
@@ -158,7 +156,7 @@ contract EigenTest is EigenTestDeployer {
     function test_RevertWhen_setSwapSlippage_not_owner() public {
         address nonOwner = makeAddr("nonOwner");
         vm.prank(nonOwner);
-        vm.expectRevert(abi.encodeWithSelector(LibDiamond.NotContractOwner.selector, nonOwner, address(this)));
+        vm.expectRevert("LibDiamond: Must be contract owner");
         eigenPriceOracle.setSwapSlippage(50);
     }
 
@@ -1577,13 +1575,14 @@ contract EigenTest is EigenTestDeployer {
     }
 
     function test_owner() public view {
-        assertEq(IDiamondOwner(address(eigenCoverageDiamond)).owner(), address(this));
+        assertEq(IERC173(address(eigenCoverageDiamond)).owner(), address(this));
     }
 
-    function test_setOwner() public {
+    function test_transferOwnership() public {
         address newOwner = makeAddr("newOwner");
-        IDiamondOwner(address(eigenCoverageDiamond)).setOwner(newOwner);
-        assertEq(IDiamondOwner(address(eigenCoverageDiamond)).owner(), newOwner);
+        vm.prank(address(this));
+        IERC173(address(eigenCoverageDiamond)).transferOwnership(newOwner);
+        assertEq(IERC173(address(eigenCoverageDiamond)).owner(), newOwner);
     }
 
     // ============ updateAVSMetadataURI Tests ============
@@ -1631,7 +1630,7 @@ contract EigenTest is EigenTestDeployer {
         string memory newMetadataURI = "https://new-coverage.example.com/metadata.json";
 
         vm.prank(nonOwner);
-        vm.expectRevert(abi.encodeWithSelector(LibDiamond.NotContractOwner.selector, nonOwner, address(this)));
+        vm.expectRevert("LibDiamond: Must be contract owner");
         eigenServiceManager.updateAVSMetadataURI(newMetadataURI);
     }
 
@@ -3433,7 +3432,7 @@ contract EigenTest is EigenTestDeployer {
         address nonOwner = makeAddr("nonOwner");
 
         vm.prank(nonOwner);
-        vm.expectRevert(abi.encodeWithSelector(LibDiamond.NotContractOwner.selector, nonOwner, address(this)));
+        vm.expectRevert("LibDiamond: Must be contract owner");
         eigenServiceManager.setStrategyWhitelist(address(_getTestStrategy()), false);
     }
 

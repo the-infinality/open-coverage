@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {AssetPriceOracleAndSwapperFacet} from "../../src/facets/AssetPriceOracleAndSwapperFacet.sol";
-import {IDiamondCut} from "../../src/diamond/interfaces/IDiamondCut.sol";
-import {IDiamond} from "../../src/diamond/interfaces/IDiamond.sol";
-import {IAssetPriceOracleAndSwapper} from "../../src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {AssetPriceOracleAndSwapperFacet} from "src/facets/AssetPriceOracleAndSwapperFacet.sol";
+import {IDiamondCut} from "src/diamond/interfaces/IDiamondCut.sol";
+import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 
 /// @title AssetPriceOracleAndSwapperFacetDeployer
 /// @notice Helper contract for deploying AssetPriceOracleAndSwapperFacet
@@ -25,9 +24,9 @@ library AssetPriceOracleAndSwapperFacetDeployer {
     function getAssetPriceOracleAndSwapperFacetCut(
         AssetPriceOracleAndSwapperFacet assetPriceOracleAndSwapperFacet
     ) internal pure returns (IDiamondCut.FacetCut memory cut) {
-        cut = IDiamond.FacetCut({
+        cut = IDiamondCut.FacetCut({
             facetAddress: address(assetPriceOracleAndSwapperFacet),
-            action: IDiamond.FacetCutAction.Add,
+            action: IDiamondCut.FacetCutAction.Add,
             functionSelectors: getAssetPriceOracleAndSwapperSelectors()
         });
     }

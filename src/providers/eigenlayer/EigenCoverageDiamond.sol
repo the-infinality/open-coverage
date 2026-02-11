@@ -3,9 +3,9 @@ pragma solidity ^0.8.24;
 
 import {IAllocationManager} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {IDiamondCut} from "src/diamond/interfaces/IDiamondCut.sol";
-import {IDiamondOwner} from "src/diamond/interfaces/IDiamondOwner.sol";
 import {IDiamondLoupe} from "src/diamond/interfaces/IDiamondLoupe.sol";
 import {IERC165} from "src/diamond/interfaces/IERC165.sol";
+import {IERC173} from "src/diamond/interfaces/IERC173.sol";
 import {Diamond} from "src/diamond/Diamond.sol";
 import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
 import {EigenAddresses} from "./Types.sol";
@@ -33,20 +33,8 @@ contract EigenCoverageDiamond is Diamond, EigenCoverageStorage, AssetPriceOracle
     /// @notice Initialize the diamond with facets and app-specific configuration
     /// @param _diamondCut The initial facet cuts to add
     /// @param _args The initialization arguments
-    constructor(IDiamondCut.FacetCut[] memory _diamondCut, DiamondArgs memory _args) {
-        // Execute the diamond cut to add initial facets
-        LibDiamond.diamondCut(_diamondCut, address(0), "");
-
-        // Set the contract owner
-        LibDiamond.setContractOwner(_args.owner);
-
+    constructor(IDiamondCut.FacetCut[] memory _diamondCut, DiamondArgs memory _args) Diamond(_diamondCut, _args.owner) {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
-
-        // Register supported interfaces
-        ds.supportedInterfaces[type(IDiamondCut).interfaceId] = true;
-        ds.supportedInterfaces[type(IDiamondOwner).interfaceId] = true;
-        ds.supportedInterfaces[type(IDiamondLoupe).interfaceId] = true;
-        ds.supportedInterfaces[type(IERC165).interfaceId] = true;
 
         ds.supportedInterfaces[type(IEigenServiceManager).interfaceId] = true;
         ds.supportedInterfaces[type(IAssetPriceOracleAndSwapper).interfaceId] = true;

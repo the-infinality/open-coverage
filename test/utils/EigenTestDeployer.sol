@@ -19,6 +19,7 @@ import {EigenFacetsDeployer} from "../../utils/deployments/EigenFacetsDeployer.s
 import {
     AssetPriceOracleAndSwapperFacetDeployer
 } from "../../utils/deployments/AssetPriceOracleAndSwapperFacetDeployer.sol";
+import {OwnershipFacet} from "src/diamond/facets/OwnershipFacet.sol";
 
 contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
     address public eigenOperatorInstance;
@@ -32,6 +33,7 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
     // Facets
     DiamondCutFacet diamondCutFacet;
     DiamondLoupeFacet diamondLoupeFacet;
+    OwnershipFacet ownershipFacet;
     EigenServiceManagerFacet eigenServiceManagerFacet;
     EigenCoverageProviderFacet eigenCoverageProviderFacet;
     AssetPriceOracleAndSwapperFacet assetPriceOracleAndSwapperFacet;
@@ -47,14 +49,14 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
         MAX_REWARDS_DURATION = rewardsCoordinator.MAX_REWARDS_DURATION();
 
         // Deploy facets using deployment helper libraries
-        (diamondCutFacet, diamondLoupeFacet) = DiamondFacetsDeployer.deployDiamondFacets();
+        (diamondCutFacet, diamondLoupeFacet, ownershipFacet) = DiamondFacetsDeployer.deployDiamondFacets();
         (eigenServiceManagerFacet, eigenCoverageProviderFacet) = EigenFacetsDeployer.deployEigenFacets();
         assetPriceOracleAndSwapperFacet =
             AssetPriceOracleAndSwapperFacetDeployer.deployAssetPriceOracleAndSwapperFacet();
 
         // Get facet cuts from deployment helper libraries
         IDiamondCut.FacetCut[] memory diamondCuts =
-            DiamondFacetsDeployer.getDiamondFacetCuts(diamondCutFacet, diamondLoupeFacet);
+            DiamondFacetsDeployer.getDiamondFacetCuts(diamondCutFacet, diamondLoupeFacet, ownershipFacet);
         IDiamondCut.FacetCut[] memory eigenCuts =
             EigenFacetsDeployer.getEigenFacetCuts(eigenServiceManagerFacet, eigenCoverageProviderFacet);
         IDiamondCut.FacetCut memory assetPriceOracleAndSwapperCut =
@@ -63,12 +65,13 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
             );
 
         // Combine all facet cuts (5 facets total)
-        IDiamondCut.FacetCut[] memory cuts = new IDiamondCut.FacetCut[](5);
+        IDiamondCut.FacetCut[] memory cuts = new IDiamondCut.FacetCut[](6);
         cuts[0] = diamondCuts[0]; // DiamondCutFacet
         cuts[1] = diamondCuts[1]; // DiamondLoupeFacet
-        cuts[2] = eigenCuts[0]; // EigenServiceManagerFacet
-        cuts[3] = eigenCuts[1]; // EigenCoverageProviderFacet
-        cuts[4] = assetPriceOracleAndSwapperCut; // AssetPriceOracleAndSwapperFacet
+        cuts[2] = diamondCuts[2]; // OwnershipFacet
+        cuts[3] = eigenCuts[0]; // EigenServiceManagerFacet
+        cuts[4] = eigenCuts[1]; // EigenCoverageProviderFacet
+        cuts[5] = assetPriceOracleAndSwapperCut; // AssetPriceOracleAndSwapperFacet
 
         // Deploy diamond with all facets
         EigenCoverageDiamond.DiamondArgs memory args = EigenCoverageDiamond.DiamondArgs({

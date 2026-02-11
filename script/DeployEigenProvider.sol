@@ -18,6 +18,7 @@ import {EigenFacetsDeployer} from "../utils/deployments/EigenFacetsDeployer.sol"
 import {
     AssetPriceOracleAndSwapperFacetDeployer
 } from "../utils/deployments/AssetPriceOracleAndSwapperFacetDeployer.sol";
+import {OwnershipFacet} from "../src/diamond/facets/OwnershipFacet.sol";
 
 /// @title DeployEigenProvider
 /// @notice Script to deploy EigenCoverageDiamond with all facets
@@ -53,7 +54,7 @@ contract DeployEigenProvider is Script, EigenHelper, UniswapHelper {
         console.log("\nDeploying facets...");
 
         // Deploy diamond core facets
-        (DiamondCutFacet diamondCutFacet, DiamondLoupeFacet diamondLoupeFacet) =
+        (DiamondCutFacet diamondCutFacet, DiamondLoupeFacet diamondLoupeFacet, OwnershipFacet ownershipFacet) =
             DiamondFacetsDeployer.deployDiamondFacets();
         console.log("DiamondCutFacet deployed at:", address(diamondCutFacet));
         console.log("DiamondLoupeFacet deployed at:", address(diamondLoupeFacet));
@@ -74,7 +75,7 @@ contract DeployEigenProvider is Script, EigenHelper, UniswapHelper {
 
         // Get facet cuts from helper libraries
         IDiamondCut.FacetCut[] memory diamondCuts =
-            DiamondFacetsDeployer.getDiamondFacetCuts(diamondCutFacet, diamondLoupeFacet);
+            DiamondFacetsDeployer.getDiamondFacetCuts(diamondCutFacet, diamondLoupeFacet, ownershipFacet);
         IDiamondCut.FacetCut[] memory eigenCuts =
             EigenFacetsDeployer.getEigenFacetCuts(eigenServiceManagerFacet, eigenCoverageProviderFacet);
         IDiamondCut.FacetCut memory assetPriceOracleAndSwapperCut =

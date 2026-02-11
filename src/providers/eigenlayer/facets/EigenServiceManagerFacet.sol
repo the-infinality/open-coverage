@@ -182,10 +182,6 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         IRewardsCoordinator rewardsCoordinator = IRewardsCoordinator(_eigenAddresses.rewardsCoordinator);
         uint32 calculationInterval = rewardsCoordinator.CALCULATION_INTERVAL_SECONDS();
 
-        // Calculate duration if not provided (0 means use calculation interval)
-        // Also align duration to calculation interval boundaries
-        resolvedDuration = duration;
-
         // Dividing before multiplying to avoid overflow since we are using it to as a floor division
         // forge-lint: disable-next-line(divide-before-multiply)
         resolvedDuration = uint32((duration / calculationInterval) * calculationInterval);

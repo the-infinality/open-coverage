@@ -1,20 +1,28 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IDiamondLoupe} from "../interfaces/IDiamondLoupe.sol";
-import {IERC165} from "../interfaces/IERC165.sol";
-import {LibDiamond} from "../libraries/LibDiamond.sol";
+/******************************************************************************\
+* Author: Nick Mudge <nick@perfectabstractions.com> (https://twitter.com/mudgen)
+* EIP-2535 Diamond Standard: https://eips.ethereum.org/EIPS/eip-2535
+/******************************************************************************/
 
-/// @title DiamondLoupeFacet
-/// @author EIP-2535 Diamonds
-/// @notice Facet for diamond introspection
-/// @dev Implements IDiamondLoupe and IERC165 interfaces as specified in EIP-2535.
-///      The loupe functions enable transparency by allowing inspection of a diamond's
-///      current facets and their function selectors. This is essential because a diamond's
-///      verified source code doesn't show what functions it has.
-///      See https://eips.ethereum.org/EIPS/eip-2535
+import "../libraries/LibDiamond.sol";
+import "../interfaces/IDiamondCut.sol";
+import "../interfaces/IDiamondLoupe.sol";
+import "../interfaces/IERC165.sol";
+
 contract DiamondLoupeFacet is IDiamondLoupe, IERC165 {
-    /// @inheritdoc IDiamondLoupe
+    // Diamond Loupe Functions
+    ////////////////////////////////////////////////////////////////////
+    /// These functions are expected to be called frequently by tools.
+    //
+    // struct Facet {
+    //     address facetAddress;
+    //     bytes4[] functionSelectors;
+    // }
+
+    /// @notice Gets all facets and their selectors.
+    /// @return facets_ Facet
     function facets() external view override returns (Facet[] memory facets_) {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
         uint256 numFacets = ds.facetAddresses.length;
@@ -26,7 +34,9 @@ contract DiamondLoupeFacet is IDiamondLoupe, IERC165 {
         }
     }
 
-    /// @inheritdoc IDiamondLoupe
+    /// @notice Gets all the function selectors provided by a facet.
+    /// @param _facet The facet address.
+    /// @return facetFunctionSelectors_
     function facetFunctionSelectors(address _facet)
         external
         view
@@ -37,19 +47,23 @@ contract DiamondLoupeFacet is IDiamondLoupe, IERC165 {
         facetFunctionSelectors_ = ds.facetFunctionSelectors[_facet].functionSelectors;
     }
 
-    /// @inheritdoc IDiamondLoupe
+    /// @notice Get all the facet addresses used by a diamond.
+    /// @return facetAddresses_
     function facetAddresses() external view override returns (address[] memory facetAddresses_) {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
         facetAddresses_ = ds.facetAddresses;
     }
 
-    /// @inheritdoc IDiamondLoupe
+    /// @notice Gets the facet that supports the given selector.
+    /// @dev If facet is not found return address(0).
+    /// @param _functionSelector The function selector.
+    /// @return facetAddress_ The facet address.
     function facetAddress(bytes4 _functionSelector) external view override returns (address facetAddress_) {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
         facetAddress_ = ds.selectorToFacetAndPosition[_functionSelector].facetAddress;
     }
 
-    /// @inheritdoc IERC165
+    // This implements ERC-165.
     function supportsInterface(bytes4 _interfaceId) external view override returns (bool) {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
         return ds.supportedInterfaces[_interfaceId];

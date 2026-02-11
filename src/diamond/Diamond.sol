@@ -2,6 +2,10 @@
 pragma solidity ^0.8.24;
 
 import {LibDiamond} from "./libraries/LibDiamond.sol";
+import {IDiamondCut} from "./interfaces/IDiamondCut.sol";
+import {IDiamondLoupe} from "./interfaces/IDiamondLoupe.sol";
+import {IERC165} from "./interfaces/IERC165.sol";
+import {IERC173} from "./interfaces/IERC173.sol";
 
 /// @title Diamond
 /// @notice Abstract base contract for EIP-2535 Diamond implementations
@@ -14,6 +18,19 @@ abstract contract Diamond {
     /// @dev This error is thrown when a function is called that doesn't exist in any facet
     /// @param _functionSelector The function selector that was not found
     error FunctionNotFound(bytes4 _functionSelector);
+
+    constructor(IDiamondCut.FacetCut[] memory _diamondCut, address _owner) payable {
+        LibDiamond.diamondCut(_diamondCut, address(0), new bytes(0));
+        LibDiamond.setContractOwner(_owner);
+
+        LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
+
+        // adding ERC165 data
+        ds.supportedInterfaces[type(IERC165).interfaceId] = true;
+        ds.supportedInterfaces[type(IDiamondCut).interfaceId] = true;
+        ds.supportedInterfaces[type(IDiamondLoupe).interfaceId] = true;
+        ds.supportedInterfaces[type(IERC173).interfaceId] = true;
+    }
 
     /// @notice Fallback function that delegates calls to facets based on function selector
     /// @dev As specified in EIP-2535, the fallback function:

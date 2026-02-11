@@ -4,7 +4,6 @@ pragma solidity ^0.8.24;
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {IDiamondCut} from "../src/diamond/interfaces/IDiamondCut.sol";
-import {IDiamond} from "../src/diamond/interfaces/IDiamond.sol";
 import {IDiamondLoupe} from "../src/diamond/interfaces/IDiamondLoupe.sol";
 import {IAssetPriceOracleAndSwapper} from "../src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {
@@ -36,9 +35,9 @@ contract UpgradeAssetPriceOracleAndSwapperFacet is Script {
         IDiamondCut.FacetCut[] memory cuts = new IDiamondCut.FacetCut[](1);
 
         // Determine the action: Replace if facet exists, Add if it doesn't
-        IDiamond.FacetCutAction action = IDiamond.FacetCutAction.Replace;
+        IDiamondCut.FacetCutAction action = IDiamondCut.FacetCutAction.Replace;
 
-        cuts[0] = IDiamond.FacetCut({
+        cuts[0] = IDiamondCut.FacetCut({
             facetAddress: newFacet,
             action: action,
             functionSelectors: AssetPriceOracleAndSwapperFacetDeployer.getAssetPriceOracleAndSwapperSelectors()
@@ -46,7 +45,7 @@ contract UpgradeAssetPriceOracleAndSwapperFacet is Script {
 
         // Execute the diamond cut
         console.log("\nExecuting diamond cut...");
-        console.log("Action:", action == IDiamond.FacetCutAction.Replace ? "Replace" : "Add");
+        console.log("Action:", action == IDiamondCut.FacetCutAction.Replace ? "Replace" : "Add");
 
         IDiamondCut(diamondAddress).diamondCut(cuts, address(0), "");
 

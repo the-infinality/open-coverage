@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {EigenServiceManagerFacet} from "../../src/providers/eigenlayer/facets/EigenServiceManagerFacet.sol";
-import {EigenCoverageProviderFacet} from "../../src/providers/eigenlayer/facets/EigenCoverageProviderFacet.sol";
-import {IDiamondCut} from "../../src/diamond/interfaces/IDiamondCut.sol";
-import {IDiamond} from "../../src/diamond/interfaces/IDiamond.sol";
-import {IEigenServiceManager} from "../../src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
-import {ICoverageProvider} from "../../src/interfaces/ICoverageProvider.sol";
+import {EigenServiceManagerFacet} from "src/providers/eigenlayer/facets/EigenServiceManagerFacet.sol";
+import {EigenCoverageProviderFacet} from "src/providers/eigenlayer/facets/EigenCoverageProviderFacet.sol";
+import {IDiamondCut} from "src/diamond/interfaces/IDiamondCut.sol";
+import {IEigenServiceManager} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
+import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
 
 /// @title EigenFacetsDeployer
 /// @notice Helper contract for deploying Eigen-specific facets
@@ -37,16 +36,16 @@ library EigenFacetsDeployer {
         cuts = new IDiamondCut.FacetCut[](2);
 
         // EigenServiceManagerFacet
-        cuts[0] = IDiamond.FacetCut({
+        cuts[0] = IDiamondCut.FacetCut({
             facetAddress: address(eigenServiceManagerFacet),
-            action: IDiamond.FacetCutAction.Add,
+            action: IDiamondCut.FacetCutAction.Add,
             functionSelectors: getEigenServiceManagerSelectors()
         });
 
         // EigenCoverageProviderFacet
-        cuts[1] = IDiamond.FacetCut({
+        cuts[1] = IDiamondCut.FacetCut({
             facetAddress: address(eigenCoverageProviderFacet),
-            action: IDiamond.FacetCutAction.Add,
+            action: IDiamondCut.FacetCutAction.Add,
             functionSelectors: getEigenCoverageProviderSelectors()
         });
     }

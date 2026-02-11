@@ -1,36 +1,23 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IDiamondCut} from "../interfaces/IDiamondCut.sol";
-import {IDiamondOwner} from "../interfaces/IDiamondOwner.sol";
-import {LibDiamond} from "../libraries/LibDiamond.sol";
+/******************************************************************************\
+* Author: Nick Mudge <nick@perfectabstractions.com> (https://twitter.com/mudgen)
+* EIP-2535 Diamond Standard: https://eips.ethereum.org/EIPS/eip-2535
+/******************************************************************************/
 
-/// @title DiamondCutFacet
-/// @author EIP-2535 Diamonds
-/// @notice Facet for adding/replacing/removing diamond functions
-/// @dev Implements IDiamondCut interface as specified in EIP-2535.
-///      This facet provides the diamondCut function which allows adding, replacing,
-///      or removing functions atomically. Access to this function must be carefully
-///      restricted (typically to contract owner) as it allows arbitrary execution.
-///      See https://eips.ethereum.org/EIPS/eip-2535
+import "../interfaces/IDiamondCut.sol";
+import "../libraries/LibDiamond.sol";
+
 contract DiamondCutFacet is IDiamondCut {
-    /// @inheritdoc IDiamondCut
-    /// @dev Only callable by the contract owner
+    /// @notice Add/replace/remove any number of functions and optionally execute
+    ///         a function with delegatecall
+    /// @param _diamondCut Contains the facet addresses and function selectors
+    /// @param _init The address of the contract or facet to execute _calldata
+    /// @param _calldata A function call, including function selector and arguments
+    ///                  _calldata is executed with delegatecall on _init
     function diamondCut(FacetCut[] calldata _diamondCut, address _init, bytes calldata _calldata) external override {
         LibDiamond.enforceIsContractOwner();
         LibDiamond.diamondCut(_diamondCut, _init, _calldata);
-    }
-
-    /// @inheritdoc IDiamondOwner
-    /// @dev As specified in EIP-2535. This function returns the address of the contract owner.
-    /// @return owner The address of the contract owner
-    function owner() external view override returns (address) {
-        return LibDiamond.contractOwner();
-    }
-
-    /// @inheritdoc IDiamondOwner
-    function setOwner(address newOwner) external override {
-        LibDiamond.enforceIsContractOwner();
-        LibDiamond.setContractOwner(newOwner);
     }
 }
