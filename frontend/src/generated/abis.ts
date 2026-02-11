@@ -153,6 +153,7 @@ export const iAssetPriceOracleAndSwapperAbi = [
     { type: "error", inputs: [], name: "InvalidAssetPair" },
     { type: "error", inputs: [], name: "InvalidPoolInfo" },
     { type: "error", inputs: [], name: "InvalidSwapSlippage" },
+    { type: "error", inputs: [], name: "InvalidSwapperAccuracy" },
     { type: "error", inputs: [], name: "PriceMismatch" },
     { type: "error", inputs: [], name: "PriceOracleRequired" },
     { type: "error", inputs: [], name: "SwapFailed" },
@@ -782,6 +783,14 @@ export const iCoverageProviderAbi = [
             { name: "reserved", internalType: "uint256", type: "uint256" },
         ],
         name: "AmountExceedsReserved",
+    },
+    {
+        type: "error",
+        inputs: [
+            { name: "claimId", internalType: "uint256", type: "uint256" },
+            { name: "expiredAt", internalType: "uint256", type: "uint256" },
+        ],
+        name: "ClaimExpired",
     },
     {
         type: "error",
