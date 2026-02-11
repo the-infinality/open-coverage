@@ -3,9 +3,6 @@ pragma solidity ^0.8.24;
 
 import {IAllocationManager} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {IDiamondCut} from "src/diamond/interfaces/IDiamondCut.sol";
-import {IDiamondLoupe} from "src/diamond/interfaces/IDiamondLoupe.sol";
-import {IERC165} from "src/diamond/interfaces/IERC165.sol";
-import {IERC173} from "src/diamond/interfaces/IERC173.sol";
 import {Diamond} from "src/diamond/Diamond.sol";
 import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
 import {EigenAddresses} from "./Types.sol";

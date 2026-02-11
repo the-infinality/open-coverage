@@ -164,7 +164,9 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
             .call(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.register.selector, pair));
         assertFalse(success, "register should revert with InvalidSwapperAccuracy");
         assertEq(
-            result.length >= 4 ? bytes4(result) : bytes4(0),
+            // casting to 'bytes4' is safe because selector are always 4 bytes
+            // forge-lint: disable-next-line(unsafe-typecast)
+            bytes4(result),
             IAssetPriceOracleAndSwapper.InvalidSwapperAccuracy.selector,
             "revert reason should be InvalidSwapperAccuracy"
         );

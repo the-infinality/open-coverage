@@ -69,6 +69,7 @@ contract DeployEigenProvider is Script, EigenHelper, UniswapHelper {
 
     /// @notice Reads deployments.json and returns the six required facet addresses for the current chain. Reverts listing any missing.
     function _getRequiredFacetAddresses() internal view returns (address[6] memory addrs) {
+        // forge-lint: disable-next-line(unsafe-cheatcode)
         string memory json = vm.readFile(DEPLOYMENTS_PATH);
         string memory chainId = vm.toString(block.chainid);
         string memory chainPath = string.concat(".", chainId);

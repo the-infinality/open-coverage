@@ -62,6 +62,7 @@ contract DeployDiamondFacets is Script {
     }
 
     function _requireOverrideIfExistingDeployments() internal {
+        // forge-lint: disable-next-line(unsafe-cheatcode)
         try vm.readFile(DEPLOYMENTS_PATH) returns (string memory json) {
             string memory chainId = vm.toString(block.chainid);
             string memory chainPath = string.concat(".", chainId);

@@ -3,6 +3,7 @@ This is the diamond implementation taken from @mudgen's diamond-3 repository you
 ## Changes made
 - Updated all contracts to use the latest version of Solidity (0.8.24)
 - Removed the `pragma experimental ABIEncoderV2;` directive from the contracts since it is no longer experimental in solidity ^8.
+- Updated imports to named imports
 
 The documentation below is a copy pasta of the README from the diamond-3 repository.
 

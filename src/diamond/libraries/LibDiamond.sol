@@ -6,7 +6,7 @@ pragma solidity ^0.8.24;
 * EIP-2535 Diamond Standard: https://eips.ethereum.org/EIPS/eip-2535
 /******************************************************************************/
 
-import "../interfaces/IDiamondCut.sol";
+import {IDiamondCut} from "../interfaces/IDiamondCut.sol";
 
 library LibDiamond {
     bytes32 constant DIAMOND_STORAGE_POSITION = keccak256("diamond.standard.diamond.storage");
@@ -151,6 +151,8 @@ library LibDiamond {
         if (selectorPosition != lastSelectorPosition) {
             bytes4 lastSelector = ds.facetFunctionSelectors[_facetAddress].functionSelectors[lastSelectorPosition];
             ds.facetFunctionSelectors[_facetAddress].functionSelectors[selectorPosition] = lastSelector;
+            // casting to 'uint16' is safe because we can assume selectorPosition is less than 65536
+            // forge-lint: disable-next-line(unsafe-typecast)
             ds.selectorToFacetAndPosition[lastSelector].functionSelectorPosition = uint16(selectorPosition);
         }
         // delete the last selector
@@ -165,6 +167,8 @@ library LibDiamond {
             if (facetAddressPosition != lastFacetAddressPosition) {
                 address lastFacetAddress = ds.facetAddresses[lastFacetAddressPosition];
                 ds.facetAddresses[facetAddressPosition] = lastFacetAddress;
+                // casting to 'uint16' is safe because we can assume facetAddressPosition is less than 65536
+                // forge-lint: disable-next-line(unsafe-typecast)
                 ds.facetFunctionSelectors[lastFacetAddress].facetAddressPosition = uint16(facetAddressPosition);
             }
             ds.facetAddresses.pop();
