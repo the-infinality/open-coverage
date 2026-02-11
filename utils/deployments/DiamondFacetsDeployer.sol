@@ -34,25 +34,36 @@ library DiamondFacetsDeployer {
         DiamondLoupeFacet diamondLoupeFacet,
         OwnershipFacet ownershipFacet
     ) internal pure returns (IDiamondCut.FacetCut[] memory cuts) {
-        cuts = new IDiamondCut.FacetCut[](3);
+        return getDiamondFacetCutsFromAddresses(
+            address(diamondCutFacet),
+            address(diamondLoupeFacet),
+            address(ownershipFacet)
+        );
+    }
 
-        // DiamondCutFacet
+    /// @notice Creates facet cuts from pre-deployed facet addresses (e.g. from deployments.json)
+    /// @param diamondCutFacetAddress Address of deployed DiamondCutFacet
+    /// @param diamondLoupeFacetAddress Address of deployed DiamondLoupeFacet
+    /// @param ownershipFacetAddress Address of deployed OwnershipFacet
+    /// @return cuts Array of facet cuts for diamond core facets
+    function getDiamondFacetCutsFromAddresses(
+        address diamondCutFacetAddress,
+        address diamondLoupeFacetAddress,
+        address ownershipFacetAddress
+    ) internal pure returns (IDiamondCut.FacetCut[] memory cuts) {
+        cuts = new IDiamondCut.FacetCut[](3);
         cuts[0] = IDiamondCut.FacetCut({
-            facetAddress: address(diamondCutFacet),
+            facetAddress: diamondCutFacetAddress,
             action: IDiamondCut.FacetCutAction.Add,
             functionSelectors: getDiamondCutSelectors()
         });
-
-        // DiamondLoupeFacet
         cuts[1] = IDiamondCut.FacetCut({
-            facetAddress: address(diamondLoupeFacet),
+            facetAddress: diamondLoupeFacetAddress,
             action: IDiamondCut.FacetCutAction.Add,
             functionSelectors: getDiamondLoupeSelectors()
         });
-
-        // OwnershipFacet
         cuts[2] = IDiamondCut.FacetCut({
-            facetAddress: address(ownershipFacet),
+            facetAddress: ownershipFacetAddress,
             action: IDiamondCut.FacetCutAction.Add,
             functionSelectors: getOwnershipSelectors()
         });

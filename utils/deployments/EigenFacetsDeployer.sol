@@ -33,18 +33,28 @@ library EigenFacetsDeployer {
         EigenServiceManagerFacet eigenServiceManagerFacet,
         EigenCoverageProviderFacet eigenCoverageProviderFacet
     ) internal pure returns (IDiamondCut.FacetCut[] memory cuts) {
-        cuts = new IDiamondCut.FacetCut[](2);
+        return getEigenFacetCutsFromAddresses(
+            address(eigenServiceManagerFacet),
+            address(eigenCoverageProviderFacet)
+        );
+    }
 
-        // EigenServiceManagerFacet
+    /// @notice Creates facet cuts from pre-deployed facet addresses (e.g. from deployments.json)
+    /// @param eigenServiceManagerFacetAddress Address of deployed EigenServiceManagerFacet
+    /// @param eigenCoverageProviderFacetAddress Address of deployed EigenCoverageProviderFacet
+    /// @return cuts Array of facet cuts for Eigen facets
+    function getEigenFacetCutsFromAddresses(
+        address eigenServiceManagerFacetAddress,
+        address eigenCoverageProviderFacetAddress
+    ) internal pure returns (IDiamondCut.FacetCut[] memory cuts) {
+        cuts = new IDiamondCut.FacetCut[](2);
         cuts[0] = IDiamondCut.FacetCut({
-            facetAddress: address(eigenServiceManagerFacet),
+            facetAddress: eigenServiceManagerFacetAddress,
             action: IDiamondCut.FacetCutAction.Add,
             functionSelectors: getEigenServiceManagerSelectors()
         });
-
-        // EigenCoverageProviderFacet
         cuts[1] = IDiamondCut.FacetCut({
-            facetAddress: address(eigenCoverageProviderFacet),
+            facetAddress: eigenCoverageProviderFacetAddress,
             action: IDiamondCut.FacetCutAction.Add,
             functionSelectors: getEigenCoverageProviderSelectors()
         });

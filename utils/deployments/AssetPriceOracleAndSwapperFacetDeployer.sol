@@ -24,8 +24,19 @@ library AssetPriceOracleAndSwapperFacetDeployer {
     function getAssetPriceOracleAndSwapperFacetCut(
         AssetPriceOracleAndSwapperFacet assetPriceOracleAndSwapperFacet
     ) internal pure returns (IDiamondCut.FacetCut memory cut) {
+        return getAssetPriceOracleAndSwapperFacetCutFromAddress(address(assetPriceOracleAndSwapperFacet));
+    }
+
+    /// @notice Creates facet cut from pre-deployed facet address (e.g. from deployments.json)
+    /// @param facetAddress Address of deployed AssetPriceOracleAndSwapperFacet
+    /// @return cut Facet cut for AssetPriceOracleAndSwapperFacet
+    function getAssetPriceOracleAndSwapperFacetCutFromAddress(address facetAddress)
+        internal
+        pure
+        returns (IDiamondCut.FacetCut memory cut)
+    {
         cut = IDiamondCut.FacetCut({
-            facetAddress: address(assetPriceOracleAndSwapperFacet),
+            facetAddress: facetAddress,
             action: IDiamondCut.FacetCutAction.Add,
             functionSelectors: getAssetPriceOracleAndSwapperSelectors()
         });

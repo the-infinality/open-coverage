@@ -6,14 +6,18 @@ import {console} from "forge-std/console.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 import {UniswapHelper, UniswapAddressbook} from "../utils/UniswapHelper.sol";
 import {UniswapV3SwapperEngine} from "../src/swapper-engines/UniswapV3SwapperEngine.sol";
+import {DeploymentUtils} from "../utils/deployments/DeploymentUtils.sol";
 
 /// @title DeployUniswapV3SwapperEngine
 /// @notice Script to deploy UniswapV3SwapperEngine
-/// @dev Uses UniswapHelper to get chain-specific addresses from config
+/// @dev Uses UniswapHelper to get chain-specific addresses from config. If a deployment already exists for the chain, prompts to type 'y' to override.
 contract DeployUniswapV3SwapperEngine is Script, UniswapHelper {
     string constant DEPLOYMENTS_PATH = "config/deployments.json";
+    string constant UNISWAP_V3_SWAPPER_ENGINE = "UniswapV3SwapperEngine";
 
     function run() public returns (address swapperEngineAddress) {
+        _requireOverrideIfExistingDeployment();
+
         vm.startBroadcast();
 
         console.log("Deploying UniswapV3SwapperEngine...");
@@ -47,6 +51,59 @@ contract DeployUniswapV3SwapperEngine is Script, UniswapHelper {
         }
 
         return swapperEngineAddress;
+    }
+
+    function _requireOverrideIfExistingDeployment() internal {
+        try vm.readFile(DEPLOYMENTS_PATH) returns (string memory json) {
+            string memory chainId = vm.toString(block.chainid);
+            string memory chainPath = string.concat(".", chainId);
+            try vm.parseJsonKeys(json, chainPath) returns (string[] memory keys) {
+                bool exists;
+                for (uint256 k = 0; k < keys.length; k++) {
+                    if (keccak256(abi.encodePacked(keys[k])) == keccak256(abi.encodePacked(UNISWAP_V3_SWAPPER_ENGINE)))
+                    {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) return;
+                address existingAddr =
+                    vm.parseJsonAddress(json, string.concat(chainPath, ".", UNISWAP_V3_SWAPPER_ENGINE));
+                bytes memory onChain = existingAddr.code;
+                bytes memory compiled =
+                    vm.getDeployedCode("src/swapper-engines/UniswapV3SwapperEngine.sol:UniswapV3SwapperEngine");
+                bool bytecodeSame =
+                    onChain.length > 0 && compiled.length > 0 && DeploymentUtils.bytecodeMatches(onChain, compiled);
+                if (bytecodeSame) {
+                    string memory input = vm.prompt(
+                        string.concat(
+                            "UniswapV3SwapperEngine deployment already exists for chain ",
+                            chainId,
+                            ".\n",
+                            "Bytecode is identical. Recommended to use the existing contract.\n",
+                            "Type 'y' to deploy anyway (override): "
+                        )
+                    );
+                    require(
+                        keccak256(abi.encodePacked(input)) == keccak256(abi.encodePacked("y")),
+                        "Deployment cancelled (expected 'y' to override)"
+                    );
+                } else {
+                    string memory input = vm.prompt(
+                        string.concat(
+                            "UniswapV3SwapperEngine deployment already exists for chain ",
+                            chainId,
+                            ".\n",
+                            "Type 'y' to override existing deployment and continue: "
+                        )
+                    );
+                    require(
+                        keccak256(abi.encodePacked(input)) == keccak256(abi.encodePacked("y")),
+                        "Deployment cancelled (expected 'y' to override)"
+                    );
+                }
+            } catch {}
+        } catch {}
     }
 
     function _logDeploymentSummary(address swapperEngineAddress) internal view {

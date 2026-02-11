@@ -5,6 +5,11 @@
     "UniswapV3SwapperEngine": "0x37b8f1d33f63242f365dafa353473bdffa85c31b"
   },
   "31337": {
-    "AssetPriceOracleAndSwapperFacet": "0xF63Ee1F31fa7Ed8901681CE5D4CdA10bBa6b95e7"
+    "DiamondCutFacet": "0xeC7F4E17BdaEdB6DB576740fB60B925ea0AD5Bbf",
+    "DiamondLoupeFacet": "0x4da5667C312C567fE50c8e03f73CD53E59947639",
+    "OwnershipFacet": "0xF63Ee1F31fa7Ed8901681CE5D4CdA10bBa6b95e7",
+    "AssetPriceOracleAndSwapperFacet": "0x1A626B1e8320391956Fd81EdDa5B2a7b4683AA9F",
+    "EigenServiceManagerFacet": "0x350273823f14F533dC8F2fCBd8a230dEDCeCF2fd",
+    "EigenCoverageProviderFacet": "0x510038dB0f8f4751bff02C51D15e9A080838914B"
   }
 }
