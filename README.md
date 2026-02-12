@@ -1,6 +1,6 @@
 ## Open Coverage
 
-A risk coverage standard focussed on simplifying the process of purchasing coverage. Further documentation can be found in the Open Coverage [docs](docs/HOME.md).
+A risk coverage standard focussed on simplifying the process of purchasing coverage. Further documentation can be found in the Open Coverage [docs](docs/home.md).
 
 ## Foundry
 

@@ -33,4 +33,4 @@ Covearge Agents are responsible for purchasing the coverage and handling their c
 
 ### [AssetPriceOracleAndSwapper](mixins/asset-price-oracle-and-swapper.md)
 
-### [Swapper Engines](swapper-engines/INDEX.md)
+### [Swapper Engines](swapper-engines/index.md)
