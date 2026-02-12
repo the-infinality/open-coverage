@@ -97,6 +97,16 @@ interface IEigenServiceManager {
     /// @param strategy The strategy to ensure is allocated
     function ensureAllocations(address operator, address coverageAgent, address strategy) external;
 
+    /// @notice Sets the coverage threshold for an operator
+    /// @param operator The operator to set the coverage threshold for
+    /// @param coverageThreshold The coverage threshold to set for the operator
+    function setCoverageThreshold(address operator, uint16 coverageThreshold) external;
+
+    /// @notice Returns the coverage threshold for an operator
+    /// @param operator The operator to get the coverage threshold for
+    /// @return coverageThreshold The coverage threshold for the operator
+    function getCoverageThreshold(address operator) external view returns (uint16 coverageThreshold);
+
     /// @notice Returns the strategies allocated to by any operator for a coverage agent
     /// @param operator The operator to get the allocated strategies for
     /// @param coverageAgent The coverage agent to get the allocated strategies for

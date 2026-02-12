@@ -524,4 +524,58 @@ contract EigenServiceManagerTest is EigenTestDeployer {
             eigenServiceManager.isStrategyWhitelisted(randomStrategy), "Non-whitelisted strategy should return false"
         );
     }
+
+    // ============ setCoverageThreshold / getCoverageThreshold ============
+
+    function test_getCoverageThreshold_defaultAfterRegistration() public {
+        uint32[] memory operatorSetIds = new uint32[](0);
+        eigenServiceManager.registerOperator(address(operator), address(eigenCoverageDiamond), operatorSetIds, "");
+
+        uint16 threshold = eigenServiceManager.getCoverageThreshold(address(operator));
+        assertEq(threshold, 7000, "Default coverage threshold should be 7000 (70%)");
+    }
+
+    function test_setCoverageThreshold() public {
+        _setupwithAllocations();
+
+        uint16 newThreshold = 8500;
+        eigenServiceManager.setCoverageThreshold(address(operator), newThreshold);
+
+        uint16 threshold = eigenServiceManager.getCoverageThreshold(address(operator));
+        assertEq(threshold, newThreshold, "Coverage threshold should be updated to 8500");
+    }
+
+    function test_setCoverageThreshold_updatesValue() public {
+        _setupwithAllocations();
+
+        eigenServiceManager.setCoverageThreshold(address(operator), 5000);
+        assertEq(eigenServiceManager.getCoverageThreshold(address(operator)), 5000);
+
+        eigenServiceManager.setCoverageThreshold(address(operator), 9000);
+        assertEq(eigenServiceManager.getCoverageThreshold(address(operator)), 9000);
+    }
+
+    function test_setCoverageThreshold_zeroValue() public {
+        _setupwithAllocations();
+
+        eigenServiceManager.setCoverageThreshold(address(operator), 0);
+        assertEq(eigenServiceManager.getCoverageThreshold(address(operator)), 0, "Coverage threshold should be 0");
+    }
+
+    function test_setCoverageThreshold_maxValue() public {
+        _setupwithAllocations();
+
+        eigenServiceManager.setCoverageThreshold(address(operator), type(uint16).max);
+        assertEq(
+            eigenServiceManager.getCoverageThreshold(address(operator)),
+            type(uint16).max,
+            "Coverage threshold should be max uint16"
+        );
+    }
+
+    function test_getCoverageThreshold_unregisteredOperator() public {
+        address unregistered = makeAddr("unregistered");
+        uint16 threshold = eigenServiceManager.getCoverageThreshold(unregistered);
+        assertEq(threshold, 0, "Unregistered operator should have 0 threshold");
+    }
 }

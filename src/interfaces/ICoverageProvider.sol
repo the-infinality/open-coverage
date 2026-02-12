@@ -91,7 +91,8 @@ interface ICoverageProvider {
     error MinRateInvalid(uint16 minRate);
     error NotCoverageAgent(address caller, address required);
     error InsufficientReward(uint256 minimumReward, uint256 reward);
-    error InsufficientCoverageAvailable(uint256 deficit);
+    error InsufficientCoverageAvailable(uint256 deficit, uint16 coveragePercentage);
+    error InsufficientSlashableCoverageAvailable(uint256 deficit);
     error DurationExceedsMax(uint256 maxDuration, uint256 duration);
     error DurationExceedsExpiry(uint256 expiryTimestamp, uint256 completionTimestamp);
     error InvalidClaim(uint256 claimId, CoverageClaimStatus currentStatus);

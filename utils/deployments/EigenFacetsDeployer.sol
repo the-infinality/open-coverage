@@ -63,7 +63,7 @@ library EigenFacetsDeployer {
     /// @notice Gets function selectors for EigenServiceManagerFacet
     /// @return selectors Array of function selectors
     function getEigenServiceManagerSelectors() internal pure returns (bytes4[] memory selectors) {
-        selectors = new bytes4[](13);
+        selectors = new bytes4[](15);
         selectors[0] = IEigenServiceManager.eigenAddresses.selector;
         selectors[1] = IEigenServiceManager.registerOperator.selector;
         selectors[2] = IEigenServiceManager.setStrategyWhitelist.selector;
@@ -77,6 +77,8 @@ library EigenFacetsDeployer {
         selectors[10] = IEigenServiceManager.slashOperator.selector;
         selectors[11] = IEigenServiceManager.ensureAllocations.selector;
         selectors[12] = IEigenServiceManager.getAllocationedStrategies.selector;
+        selectors[13] = IEigenServiceManager.setCoverageThreshold.selector;
+        selectors[14] = IEigenServiceManager.getCoverageThreshold.selector;
     }
 
     /// @notice Gets function selectors for EigenCoverageProviderFacet

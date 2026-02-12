@@ -30,7 +30,7 @@ import {IEigenServiceManager} from "src/providers/eigenlayer/interfaces/IEigenSe
 import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
 import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {ISwapperEngine} from "src/interfaces/ISwapperEngine.sol";
-import {CoveragePosition, CoverageClaim, CoverageClaimStatus, Refundable} from "src/interfaces/ICoverageProvider.sol";
+import {CoveragePosition, CoverageClaimStatus, Refundable} from "src/interfaces/ICoverageProvider.sol";
 import {PriceStrategy, AssetPair} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {MockPriceOracle} from "./MockPriceOracle.sol";
 import {UniswapV3SwapperEngine} from "src/swapper-engines/UniswapV3SwapperEngine.sol";

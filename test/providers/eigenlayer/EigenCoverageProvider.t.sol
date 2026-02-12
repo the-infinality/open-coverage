@@ -10,7 +10,7 @@ import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
 import {ICoverageAgent} from "src/interfaces/ICoverageAgent.sol";
 import {IExampleCoverageAgent} from "src/interfaces/IExampleCoverageAgent.sol";
 import {ExampleCoverageAgent} from "src/ExampleCoverageAgent.sol";
-import {ISlashCoordinator, SlashCoordinationStatus} from "src/interfaces/ISlashCoordinator.sol";
+import {SlashCoordinationStatus} from "src/interfaces/ISlashCoordinator.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {MockSlashCoordinator, MockSlashCoordinatorImmediate} from "../../utils/mocks/MockSlashCoordinator.sol";
@@ -207,9 +207,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
             address(operator), address(_getTestStrategy()), address(coverageAgent)
         );
 
-        // Bound claimAmountBps to 1-10000 (0.01% to 100% of max coverage)
-        // Ensure we have at least 1 unit of claim amount
-        claimAmountBps = bound(claimAmountBps, 1, 10000);
+        // Bound claimAmountBps to 1-7000 (0.01% to 70% of max coverage)
+        // Coverage utilization must stay at or below the operator's 70% coverage threshold
+        claimAmountBps = bound(claimAmountBps, 1, 7000);
         uint256 claimAmount = (maxCoverage * claimAmountBps) / 10000;
 
         // Ensure claimAmount is at least 1 to pass validation
@@ -304,15 +304,19 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
 
+        uint16 coveragePercentage = uint16((claimAmount * 10000) / coverageAllocated);
         vm.expectRevert(
             abi.encodeWithSelector(
-                ICoverageProvider.InsufficientCoverageAvailable.selector, claimAmount - coverageAllocated
+                ICoverageProvider.InsufficientCoverageAvailable.selector,
+                claimAmount - coverageAllocated,
+                coveragePercentage
             )
         );
         eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, 10e6);
     }
 
     /// @notice Fuzz test to verify insufficient coverage error with various stake amounts
+    /// @param stakePercentBps The stake amount as a percentage of required stake in basis points (0-10000)
     /// @param stakePercentBps The stake amount as a percentage of required stake in basis points (0-10000)
     ///                         Values < 10000 (100%) will trigger insufficient coverage
     function testFuzz_RevertWhen_claimPosition_insufficientCoverageOnClaim(uint256 stakePercentBps) public {
@@ -325,13 +329,13 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         // Calculate the minimum stake needed to cover the claim amount
         (uint256 requiredStake,) = eigenPriceOracle.getQuote(claimAmount, strategyAsset, coverageAsset);
 
-        // Bound stakePercentBps to a reasonable range: 0-99% of required stake
+        // Bound stakePercentBps to a reasonable range: 1-99% of required stake
         // This ensures we always have insufficient coverage
-        // Using basis points: 0 = 0%, 9900 = 99%
-        stakePercentBps = bound(stakePercentBps, 0, 9900);
+        // Using basis points: 1 = 0.01%, 9900 = 99%
+        stakePercentBps = bound(stakePercentBps, 1, 9900);
         uint256 stakeAmount = (requiredStake * stakePercentBps) / 10000;
 
-        // Skip if stakeAmount is 0 (would cause issues with staking)
+        // Skip if stakeAmount is too small (would cause issues with staking)
         if (stakeAmount < 1e3) {
             stakeAmount = 1e3;
         }
@@ -359,9 +363,13 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
 
+        uint16 coveragePercentage =
+            coverageAllocated == 0 ? type(uint16).max : uint16((claimAmount * 10000) / coverageAllocated);
         vm.expectRevert(
             abi.encodeWithSelector(
-                ICoverageProvider.InsufficientCoverageAvailable.selector, claimAmount - coverageAllocated
+                ICoverageProvider.InsufficientCoverageAvailable.selector,
+                claimAmount - coverageAllocated,
+                coveragePercentage
             )
         );
         eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, 10e6);
@@ -1511,8 +1519,8 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         assertEq(backing3, expectedBacking, "Backing should equal allocated minus claimed");
     }
 
-    /// @notice Test that backing is zero when claims exactly match allocated coverage
-    function test_claimBacking_zeroWhenFullyUtilized() public {
+    /// @notice Test that claiming at exactly the coverage threshold succeeds and has positive backing
+    function test_claimBacking_atCoverageThreshold() public {
         _setupwithAllocations();
 
         // Get allocated coverage amount
@@ -1549,13 +1557,16 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
 
-        // Issue claim for exactly the allocated amount
-        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, totalAllocated, 30 days, 10e6);
+        // Issue claim for 70% of the allocated amount (at the coverage threshold)
+        uint256 claimAmount = (totalAllocated * 70) / 100;
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, 10e6);
         vm.stopPrank();
 
-        // Backing should be exactly zero (fully utilized)
+        // Backing should be positive (30% buffer remaining)
         int256 backing = eigenCoverageProvider.claimBacking(claimId);
-        assertEq(backing, 0, "Backing should be zero when fully utilized");
+        assertGt(backing, 0, "Backing should be positive at the coverage threshold");
+        // forge-lint: disable-next-line(unsafe-typecast)
+        assertEq(backing, int256(totalAllocated - claimAmount), "Backing should equal remaining allocation");
     }
 
     /// @notice Test that positionMaxAmount reflects remaining coverage correctly
@@ -1607,7 +1618,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.stopPrank();
     }
 
-    /// @notice Test that InsufficientCoverageAvailable error includes correct deficit amount
+    /// @notice Test that InsufficientCoverageAvailable error includes correct deficit amount and coverage percentage
     function test_RevertWhen_claimBacking_insufficientCoverage_correctDeficit() public {
         _setupwithAllocations();
 
@@ -1639,8 +1650,11 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         // The deficit should be exactly the amount over the allocation
         uint256 expectedDeficit = excessiveClaimAmount - allocatedCoverage;
+        uint16 coveragePercentage = uint16((excessiveClaimAmount * 10000) / allocatedCoverage);
         vm.expectRevert(
-            abi.encodeWithSelector(ICoverageProvider.InsufficientCoverageAvailable.selector, expectedDeficit)
+            abi.encodeWithSelector(
+                ICoverageProvider.InsufficientCoverageAvailable.selector, expectedDeficit, coveragePercentage
+            )
         );
         eigenCoverageProvider.issueClaim(positionId, excessiveClaimAmount, 30 days, 10e6);
         vm.stopPrank();
@@ -1711,8 +1725,8 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
             address(operator), address(_getTestStrategy()), address(coverageAgent)
         );
 
-        // Claim 75% of the initial allocation - after 50% deallocation, this will be 25% deficient
-        uint256 claimAmount = (initialAllocated * 75) / 100;
+        // Claim 60% of the initial allocation (within 70% threshold) - after 50% deallocation, this will be deficient
+        uint256 claimAmount = (initialAllocated * 60) / 100;
 
         // Calculate minimum reward: (amount * minRate * duration) / (10000 * 365 days)
         // Position minRate is 100, duration is 30 days
@@ -1756,8 +1770,8 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         // Verify deallocation occurred (allocation should be roughly half)
         assertLt(allocatedAfterDeallocation, initialAllocated, "Allocation should have decreased");
 
-        // After 50% deallocation: allocation is ~50% of initial, claim is 75% of initial
-        // So claim (75%) > allocation (50%), resulting in a deficit of ~25% of initial
+        // After 50% deallocation: allocation is ~50% of initial, claim is 60% of initial
+        // So claim (60%) > allocation (50%), resulting in a deficit of ~10% of initial
         int256 backingAfter = eigenCoverageProvider.claimBacking(claimId);
 
         // Backing should be negative (deficient)

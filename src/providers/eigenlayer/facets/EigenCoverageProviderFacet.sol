@@ -450,7 +450,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         CoveragePosition memory _position = positions[claims[claimId].positionId];
         address operator = address(uint160(uint256(_position.operatorId)));
         address strategy = assetToStrategy[_position.asset];
-        return _coverageBackingAmount(operator, strategy, _position.coverageAgent);
+        (backing, ) = _coverageBackingAmount(operator, strategy, _position.coverageAgent);
+        return backing;
     }
 
     /// @inheritdoc ICoverageProvider
@@ -513,12 +514,10 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     /// @notice Checks if the operator has sufficient coverage available for the coverage agent
     /// @dev Reverts only if the operator does not have enough allocated to safely cover the agent.
     function _checkCoverageForAgent(address operator, address strategy, address coverageAgent) private view {
-        int256 backing = _coverageBackingAmount(operator, strategy, coverageAgent);
-        // Check to see if agent has a deficit of coverage (negative backing)
-        if (backing < 0) {
-            // casting to 'uint256' is safe because backing is negative and we are converting it to a positive value
-            // forge-lint: disable-next-line(unsafe-typecast)
-            revert InsufficientCoverageAvailable(uint256(-backing));
+        (int256 backing, uint16 coveragePercentage) = _coverageBackingAmount(operator, strategy, coverageAgent);
+
+        if (coveragePercentage > operators[operator].coverageThreshold || backing < 0) {
+            revert InsufficientCoverageAvailable(uint256(-backing), coveragePercentage);
         }
     }
 
@@ -528,10 +527,11 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     /// @param strategy The strategy address.
     /// @param coverageAgent The coverage agent address.
     /// @return backing The coverage backing (positive = fully backed, negative = deficit).
+    /// @return coveragePercentage The utilization percentage of the operator's allocated coverage where 10000 = 100%.
     function _coverageBackingAmount(address operator, address strategy, address coverageAgent)
         private
         view
-        returns (int256 backing)
+        returns (int256 backing, uint16 coveragePercentage)
     {
         uint256 totalAllocatedCoverage =
             IEigenServiceManager(address(this)).coverageAllocated(operator, strategy, coverageAgent);
@@ -541,6 +541,14 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         // casting to 'int256' is safe because both won't possibly hold more than 2^256 - 1
         // forge-lint: disable-next-line(unsafe-typecast)
         backing = int256(totalAllocatedCoverage) - int256(totalCoverageByOperator);
+        // Calculate coverage utilization: percentage of allocated coverage being used by claims
+        if (totalAllocatedCoverage == 0) {
+            coveragePercentage = type(uint16).max;
+        } else {
+            // casting to 'uint16' is safe because utilization percentage won't realistically exceed type(uint16).max
+            // forge-lint: disable-next-line(unsafe-typecast)
+            coveragePercentage = uint16((totalCoverageByOperator * 10000) / totalAllocatedCoverage);
+        }
     }
 
     /// @notice Returns the total coverage by an operator for a strategy in the operators asset

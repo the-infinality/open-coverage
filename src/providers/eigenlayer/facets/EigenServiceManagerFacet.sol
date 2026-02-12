@@ -5,6 +5,7 @@ import {IERC20 as EigenIERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.
 import {IERC20} from "@openzeppelin-v5/contracts/token/ERC20/IERC20.sol";
 import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/EnumerableMap.sol";
 import {IAllocationManager, IAllocationManagerTypes} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
+import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermissionController.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
 import {IStrategyManager} from "eigenlayer-contracts/interfaces/IStrategyManager.sol";
 import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
@@ -33,9 +34,11 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
     }
 
     /// @inheritdoc IEigenServiceManager
-    function registerOperator(address, address _avs, uint32[] calldata, bytes calldata) external view {
+    function registerOperator(address operator, address _avs, uint32[] calldata, bytes calldata) external {
         require(msg.sender != _eigenAddresses.delegationManager, "Not delegation manager");
         if (_avs != address(this)) revert IEigenServiceManager.InvalidAVS(_avs);
+
+        operators[operator].coverageThreshold = 7000; // Default coverage threshold to 70%
     }
 
     /// @inheritdoc IEigenServiceManager
@@ -320,6 +323,22 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         return strategiesAddresses;
     }
 
+    /// @inheritdoc IEigenServiceManager
+    function setCoverageThreshold(address operator, uint16 coverageThreshold) external {
+        if (
+            !_checkOperatorPermissions(
+                operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector
+            )
+        ) revert IEigenServiceManager.NotOperatorAuthorized(operator, msg.sender);
+
+        operators[operator].coverageThreshold = coverageThreshold;
+    }
+
+    /// @inheritdoc IEigenServiceManager
+    function getCoverageThreshold(address operator) external view returns (uint16 coverageThreshold) {
+        return operators[operator].coverageThreshold;
+    }
+
     /// ============ Internal functions ============ //
 
     /// @notice Returns the minimum of two uint256 values
@@ -347,6 +366,11 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
             );
         (total,) =
             IAssetPriceOracleAndSwapper(address(this)).getQuote(allocatedStake[0][0], coverageAsset, strategyAsset);
+    }
+
+    function _checkOperatorPermissions(address operator, address target, bytes4 selector) private returns (bool) {
+        return
+            IPermissionController(_eigenAddresses.permissionController).canCall(operator, msg.sender, target, selector);
     }
 
     /// @notice Calculates the WAD proportion to slash based on the amount
@@ -383,9 +407,9 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
 
             // Capture edge case rounding issues
             if (totalAllocatedStakeValue > amount) {
-                revert ICoverageProvider.InsufficientCoverageAvailable(0);
+                revert ICoverageProvider.InsufficientSlashableCoverageAvailable(0);
             }
-            revert ICoverageProvider.InsufficientCoverageAvailable(amount - totalAllocatedStakeValue);
+            revert ICoverageProvider.InsufficientSlashableCoverageAvailable(amount - totalAllocatedStakeValue);
         }
     }
 }
