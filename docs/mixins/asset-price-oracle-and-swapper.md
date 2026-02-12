@@ -2,9 +2,9 @@
 
 ## Links
 
-- [Interface](src/interfaces/IAssetPriceOracleAndSwapper.sol)
-- [Implementation](src/mixins/AssetPriceOracleAndSwapper.sol)
-- [Diamond Facet](src/facets/AssetPriceOracleAndSwapperFacet.sol)
+- [Interface](../../src/interfaces/IAssetPriceOracleAndSwapper.sol)
+- [Implementation](../../src/mixins/AssetPriceOracleAndSwapper.sol)
+- [Diamond Facet](../../src/facets/AssetPriceOracleAndSwapperFacet.sol)
 
 ## Overview
 

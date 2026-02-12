@@ -6,8 +6,8 @@ Open Coverage is a risk coverage standard focussed on simplifying the process of
 
 There are two core concepts in Open Coverage:
 
-1. **Coverage Providers** - These are the entities that provide risk coverage.
-2. **Coverage Agents** - These are the entities that purchase risk coverage.
+1. [**Coverage Providers**](coverage-provider.md) - These are the entities that provide risk coverage.
+2. [**Coverage Agents**](coverage-agent.md) - These are the entities that purchase risk coverage.
 
 ### Coverage Providers
 
@@ -31,6 +31,5 @@ Covearge Agents are responsible for purchasing the coverage and handling their c
 
 ## Auxiliary Contracts
 
-### [AssetPriceOracleAndSwapper](mixins/asset-price-oracle-and-swapper.md)
-
-### [Swapper Engines](swapper-engines/index.md)
+- [AssetPriceOracleAndSwapper](mixins/asset-price-oracle-and-swapper.md)
+- [Swapper Engines](swapper-engines/index.md)

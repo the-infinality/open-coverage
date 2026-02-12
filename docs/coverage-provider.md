@@ -2,7 +2,7 @@
 
 ## Links
 
-- [Interface](src/interfaces/ICoverageProvider.sol)
+- [Interface](../src/interfaces/ICoverageProvider.sol)
 
 ## Overview
 
