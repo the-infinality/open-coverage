@@ -94,7 +94,7 @@ $ anvil
 ### Deploy
 
 ```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+$ forge script script/DeployEigenProvider.sol:DeployEigenProvider --account <account> --sender <sender> --rpc-url <rpc-url> --chain-id <chain-id> --broadcast
 ```
 
 ### Cast
