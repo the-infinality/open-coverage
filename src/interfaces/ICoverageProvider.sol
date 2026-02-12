@@ -78,7 +78,7 @@ interface ICoverageProvider {
     event ClaimIssued(uint256 indexed positionId, uint256 indexed claimId, uint256 amount, uint256 duration);
     event ClaimReserved(uint256 indexed positionId, uint256 indexed claimId, uint256 amount, uint256 duration);
     event ClaimClosed(uint256 indexed claimId);
-    event ClaimLiquidated(uint256 indexed claimId);
+    event ClaimLiquidated(uint256 indexed claimId, uint256 indexed oldPositionId, uint256 indexed newPositionId);
     event ClaimSlashed(uint256 indexed claimId, uint256 amount);
     event ClaimSlashPending(uint256 indexed claimId, address slashCoordinator);
     event ClaimRepayment(uint256 indexed claimId, uint256 amount);
@@ -93,6 +93,8 @@ interface ICoverageProvider {
     error InsufficientReward(uint256 minimumReward, uint256 reward);
     error InsufficientCoverageAvailable(uint256 deficit, uint16 coveragePercentage);
     error InsufficientSlashableCoverageAvailable(uint256 deficit);
+    error InvalidCoverageAgent(address requiredCoverageAgent, address providedCoverageAgent);
+    error InvalidCoverageAsset(address requiredAsset, address providedAsset);
     error DurationExceedsMax(uint256 maxDuration, uint256 duration);
     error DurationExceedsExpiry(uint256 expiryTimestamp, uint256 completionTimestamp);
     error InvalidClaim(uint256 claimId, CoverageClaimStatus currentStatus);
@@ -105,6 +107,8 @@ interface ICoverageProvider {
     error ClaimNotReserved(uint256 claimId);
     error ClaimNotExpired(uint256 claimId, uint256 expiresAt);
     error ClaimExpired(uint256 claimId, uint256 expiredAt);
+    error MeetsLiquidationThreshold(uint16 liquidationThreshold, uint16 coveragePercentage);
+    error SamePosition(uint256 positionId);
 
     /// ============ Hooks ============
 
@@ -171,7 +175,8 @@ interface ICoverageProvider {
     /// @notice Liquidate a coverage claim if it doesn't meet its obligations.
     /// @dev This should be called by the coverage agent if the coverage position doesn't meet its obligations.
     /// @param claimId The id of the coverage position to liquidate.
-    function liquidateClaim(uint256 claimId) external;
+    /// @param positionId The id of the coverage position to replace the liquidated claim with.
+    function liquidateClaim(uint256 claimId, uint256 positionId) external;
 
     /// @notice Slash on coverage claims.
     /// @dev Can only be called by a coverage agent. Should take a slash coordinator into account if set.
@@ -222,12 +227,16 @@ interface ICoverageProvider {
     /// @dev A negative value indicates a backing deficit, while a positive value means the claim is fully backed.
     /// @param claimId The claim id to check backing for.
     /// @return backing The total available backing for the claim (negative = deficit, positive = fully backed).
-    function claimBacking(uint256 claimId) external view returns (int256 backing);
+    function claimBacking(uint256 claimId) external view returns (int256 backing, uint16 coveragePercentage);
 
     /// @notice Get the total amount slashed for a given claim.
     /// @param claimId The claim id to get the total slash amount for.
     /// @return slashAmount The total amount slashed for the claim.
     function claimTotalSlashAmount(uint256 claimId) external view returns (uint256 slashAmount);
+
+    // /// @notice Get the liquidation threshold for the coverage provider.
+    // /// @return threshold The liquidation threshold for the coverage provider.
+    // function liquidationThreshold() external view returns (uint16 threshold);
 
     /// @notice Get the ID representing the type of coverage provider
     /// @dev This is similar to a chain ID in blockchain nomenclature.

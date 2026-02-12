@@ -14,6 +14,7 @@ import {SlashCoordinationStatus} from "src/interfaces/ISlashCoordinator.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {MockSlashCoordinator, MockSlashCoordinatorImmediate} from "../../utils/mocks/MockSlashCoordinator.sol";
+import {EigenCoverageProviderFacet} from "src/providers/eigenlayer/facets/EigenCoverageProviderFacet.sol";
 
 contract EigenCoverageProviderTest is EigenTestDeployer {
     /// @notice Test that coverage agent emits MetadataUpdated on deployment
@@ -174,9 +175,14 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         assertEq(claim.reward, 10e6);
         assertEq(claim.positionId, positionId);
 
-        // Verify claim backing is positive (fully backed)
-        int256 backing = eigenCoverageProvider.claimBacking(claimId);
+        // Verify claim backing and coverage percentage
+        uint256 totalAllocated = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+        (int256 backing, uint16 coveragePercentage) = eigenCoverageProvider.claimBacking(claimId);
         assertGt(backing, 0, "Claim should be fully backed after issuance");
+        uint256 expectedCoverageBps = (1000e6 * 10000) / totalAllocated;
+        assertApproxEqAbs(coveragePercentage, uint16(expectedCoverageBps), 1, "Coverage utilization should match");
     }
 
     /// @notice Fuzz test to verify claim coverage with various claim amounts up to the maximum staked coverage
@@ -250,9 +256,11 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         assertEq(claim.reward, reward);
         assertEq(claim.positionId, positionId);
 
-        // Verify claim backing is non-negative (fully backed or at least not in deficit)
-        int256 backing = eigenCoverageProvider.claimBacking(claimId);
+        // Verify claim backing and coverage percentage (utilization = claimAmount/maxCoverage in bps)
+        (int256 backing, uint16 coveragePercentage) = eigenCoverageProvider.claimBacking(claimId);
         assertGe(backing, 0, "Claim should be fully backed after issuance");
+        uint256 expectedCoverageBps = (claimAmount * 10000) / maxCoverage;
+        assertApproxEqAbs(coveragePercentage, uint16(expectedCoverageBps), 1, "Coverage utilization should match");
     }
 
     function test_providerTypeId() public view {
@@ -513,7 +521,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
 
         // Verify claim backing before slashing
-        int256 backingBeforeSlash = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingBeforeSlash,) = eigenCoverageProvider.claimBacking(claimId);
         assertGt(backingBeforeSlash, 0, "Claim should be fully backed before slashing");
 
         // Get asset addresses
@@ -577,7 +585,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
 
         // Verify claim backing before slashing
-        int256 backingBeforeSlash = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingBeforeSlash,) = eigenCoverageProvider.claimBacking(claimId);
         assertGt(backingBeforeSlash, 0, "Claim should be fully backed before slashing");
 
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 500e6);
@@ -604,11 +612,17 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId2 = eigenCoverageProvider.issueClaim(positionId, 500e6, 30 days, 5e6);
         vm.stopPrank();
 
-        // Verify both claims are fully backed after issuance
-        int256 backing1 = eigenCoverageProvider.claimBacking(claimId1);
-        int256 backing2 = eigenCoverageProvider.claimBacking(claimId2);
+        // Verify both claims are fully backed after issuance and share same coverage utilization
+        uint256 totalAllocated = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+        (int256 backing1, uint16 coveragePct1) = eigenCoverageProvider.claimBacking(claimId1);
+        (int256 backing2, uint16 coveragePct2) = eigenCoverageProvider.claimBacking(claimId2);
         assertGt(backing1, 0, "First claim should be fully backed");
         assertGt(backing2, 0, "Second claim should be fully backed");
+        uint256 expectedCoveragePct = (1500e6 * 10000) / totalAllocated;
+        assertApproxEqAbs(coveragePct1, uint16(expectedCoveragePct), 1, "Coverage % for claim1");
+        assertApproxEqAbs(coveragePct2, uint16(expectedCoveragePct), 1, "Coverage % for claim2");
 
         uint256[] memory claimIds = new uint256[](2);
         uint256[] memory amounts = new uint256[](2);
@@ -695,7 +709,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
 
         // Verify claim backing immediately after creation
-        int256 backingBeforeSlash = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingBeforeSlash,) = eigenCoverageProvider.claimBacking(claimId);
         assertGt(backingBeforeSlash, 0, "Claim should be fully backed immediately after creation");
 
         // Slash immediately after creation (should succeed)
@@ -902,7 +916,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
 
         // Verify claim backing before slashing
-        int256 backingBeforeSlash = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingBeforeSlash,) = eigenCoverageProvider.claimBacking(claimId);
         assertGt(backingBeforeSlash, 0, "Claim should be fully backed before slashing");
 
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1000e6);
@@ -1075,7 +1089,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         assertEq(claim.reward, 10e6);
 
         // Verify claim backing is positive (fully backed even for reservation)
-        int256 backing = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backing,) = eigenCoverageProvider.claimBacking(claimId);
         assertGt(backing, 0, "Reserved claim should be fully backed");
     }
 
@@ -1133,7 +1147,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
 
         // Verify backing after reservation
-        int256 backingAfterReservation = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingAfterReservation,) = eigenCoverageProvider.claimBacking(claimId);
         assertGt(backingAfterReservation, 0, "Reserved claim should be fully backed");
 
         // Approve tokens for the reward
@@ -1152,7 +1166,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         assertEq(claim.duration, 30 days);
 
         // Verify backing after conversion (should remain the same since amount didn't change)
-        int256 backingAfterConversion = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingAfterConversion,) = eigenCoverageProvider.claimBacking(claimId);
         assertEq(
             backingAfterConversion,
             backingAfterReservation,
@@ -1168,7 +1182,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
 
         // Verify backing after reservation
-        int256 backingAfterReservation = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingAfterReservation,) = eigenCoverageProvider.claimBacking(claimId);
         assertGt(backingAfterReservation, 0, "Reserved claim should be fully backed");
 
         // Approve tokens for a smaller reward (pro-rata)
@@ -1184,7 +1198,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         assertEq(claim.duration, 15 days);
 
         // Verify backing increased after partial conversion (released 500e6 of coverage)
-        int256 backingAfterConversion = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingAfterConversion,) = eigenCoverageProvider.claimBacking(claimId);
         assertGt(backingAfterConversion, backingAfterReservation, "Backing should increase after partial conversion");
     }
 
@@ -1248,7 +1262,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.stopPrank();
 
         // Verify backing after reservation
-        int256 backingBeforeClose = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingBeforeClose,) = eigenCoverageProvider.claimBacking(claimId);
         assertGt(backingBeforeClose, 0, "Reserved claim should be fully backed");
 
         // Warp past reservation time
@@ -1291,7 +1305,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
 
         // Verify backing after reservation
-        int256 backingBeforeClose = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingBeforeClose,) = eigenCoverageProvider.claimBacking(claimId);
         assertGt(backingBeforeClose, 0, "Reserved claim should be fully backed");
 
         // Coverage agent can close their own claim even before expiration
@@ -1314,14 +1328,14 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
 
         // Verify backing after reservation
-        int256 backingAfterReservation = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingAfterReservation,) = eigenCoverageProvider.claimBacking(claimId);
         assertGt(backingAfterReservation, 0, "Reserved claim should be fully backed");
 
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
         eigenCoverageProvider.convertReservedClaim(claimId, 1000e6, 30 days, 10e6);
 
         // Verify backing after conversion
-        int256 backingAfterConversion = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingAfterConversion,) = eigenCoverageProvider.claimBacking(claimId);
         assertEq(
             backingAfterConversion,
             backingAfterReservation,
@@ -1345,7 +1359,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 30 days, 10e6, 0);
 
         // Verify backing after issuance
-        int256 backingBeforeClose = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingBeforeClose,) = eigenCoverageProvider.claimBacking(claimId);
         assertGt(backingBeforeClose, 0, "Claim should be fully backed");
 
         // Warp past duration
@@ -1494,20 +1508,26 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         // Issue first claim
         uint256 claimId1 = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
-        int256 backing1 = eigenCoverageProvider.claimBacking(claimId1);
+        (int256 backing1, uint16 coveragePct1) = eigenCoverageProvider.claimBacking(claimId1);
         assertGt(backing1, 0, "First claim should be fully backed");
+        uint256 expectedPct1 = (1000e6 * 10000) / totalAllocated;
+        assertApproxEqAbs(coveragePct1, uint16(expectedPct1), 1, "Coverage % after first claim");
 
         // Issue second claim - backing should decrease
         uint256 claimId2 = eigenCoverageProvider.issueClaim(positionId, 500e6, 30 days, 5e6);
-        int256 backing2 = eigenCoverageProvider.claimBacking(claimId2);
+        (int256 backing2, uint16 coveragePct2) = eigenCoverageProvider.claimBacking(claimId2);
         assertGt(backing2, 0, "Second claim should still be backed");
         assertLt(backing2, backing1, "Backing should decrease with more claims");
+        uint256 expectedPct2 = (1500e6 * 10000) / totalAllocated;
+        assertApproxEqAbs(coveragePct2, uint16(expectedPct2), 1, "Coverage % after second claim");
 
         // Issue third claim - further decrease
         uint256 claimId3 = eigenCoverageProvider.issueClaim(positionId, 500e6, 30 days, 5e6);
-        int256 backing3 = eigenCoverageProvider.claimBacking(claimId3);
+        (int256 backing3, uint16 coveragePct3) = eigenCoverageProvider.claimBacking(claimId3);
         assertGt(backing3, 0, "Third claim should still be backed");
         assertLt(backing3, backing2, "Backing should continue decreasing");
+        uint256 expectedPct3 = (2000e6 * 10000) / totalAllocated;
+        assertApproxEqAbs(coveragePct3, uint16(expectedPct3), 1, "Coverage % after third claim");
 
         vm.stopPrank();
 
@@ -1563,8 +1583,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.stopPrank();
 
         // Backing should be positive (30% buffer remaining)
-        int256 backing = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backing, uint16 coveragePercentage) = eigenCoverageProvider.claimBacking(claimId);
         assertGt(backing, 0, "Backing should be positive at the coverage threshold");
+        assertApproxEqAbs(coveragePercentage, 7000, 1, "Coverage utilization should be ~70% (7000 bps)");
         // forge-lint: disable-next-line(unsafe-typecast)
         assertEq(backing, int256(totalAllocated - claimAmount), "Backing should equal remaining allocation");
     }
@@ -1599,6 +1620,10 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         deal(rETH, staker, 2000e18);
         uint256 positionId = _setupSlashingPosition(2000e18);
 
+        uint256 totalAllocated = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 20e6);
 
@@ -1606,15 +1631,19 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId1 = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
         uint256 claimId2 = eigenCoverageProvider.issueClaim(positionId, 500e6, 30 days, 5e6);
 
-        int256 backingWithBothClaims = eigenCoverageProvider.claimBacking(claimId1);
+        (int256 backingWithBothClaims, uint16 coveragePctWithBoth) = eigenCoverageProvider.claimBacking(claimId1);
+        uint256 expectedPctBoth = (1500e6 * 10000) / totalAllocated;
+        assertApproxEqAbs(coveragePctWithBoth, uint16(expectedPctBoth), 1, "Coverage % with both claims");
 
         // Close the second claim
         eigenCoverageProvider.closeClaim(claimId2);
 
         // Backing should increase for remaining claims
-        int256 backingAfterClose = eigenCoverageProvider.claimBacking(claimId1);
+        (int256 backingAfterClose, uint16 coveragePctAfterClose) = eigenCoverageProvider.claimBacking(claimId1);
         assertGt(backingAfterClose, backingWithBothClaims, "Backing should increase when claims are closed");
         assertEq(backingAfterClose, backingWithBothClaims + 500e6, "Backing should increase by closed claim amount");
+        uint256 expectedPctAfterClose = (1000e6 * 10000) / totalAllocated;
+        assertApproxEqAbs(coveragePctAfterClose, uint16(expectedPctAfterClose), 1, "Coverage % after closing one");
         vm.stopPrank();
     }
 
@@ -1679,9 +1708,11 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId = eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, 10e6);
         vm.stopPrank();
 
-        // Verify claim is initially backed
-        int256 backingBefore = eigenCoverageProvider.claimBacking(claimId);
+        // Verify claim is initially backed and coverage % matches
+        (int256 backingBefore, uint16 coveragePctBefore) = eigenCoverageProvider.claimBacking(claimId);
         assertGt(backingBefore, 0, "Claim should be backed initially");
+        uint256 expectedPctBefore = (claimAmount * 10000) / initialAllocated;
+        assertApproxEqAbs(coveragePctBefore, uint16(expectedPctBefore), 1, "Initial coverage %");
 
         // Operator deallocates all coverage (sets magnitude to 0)
         address[] memory strategyAddresses = new address[](1);
@@ -1708,9 +1739,10 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         );
         assertEq(allocatedAfterDeallocation, 0, "Allocation should be zero after deallocation");
 
-        // Now backing should be negative (deficient)
-        int256 backingAfter = eigenCoverageProvider.claimBacking(claimId);
+        // Now backing should be negative (deficient); allocation is 0 so coverage % is type(uint16).max
+        (int256 backingAfter, uint16 coveragePctAfter) = eigenCoverageProvider.claimBacking(claimId);
         assertLt(backingAfter, 0, "Backing should be negative (deficient) after deallocation");
+        assertEq(coveragePctAfter, type(uint16).max, "Coverage % should be max when allocation is zero");
         // forge-lint: disable-next-line(unsafe-typecast)
         assertEq(backingAfter, -int256(claimAmount), "Backing deficit should equal claimed amount");
     }
@@ -1739,9 +1771,10 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId = eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, minReward);
         vm.stopPrank();
 
-        // Verify claim is initially backed
-        int256 backingBefore = eigenCoverageProvider.claimBacking(claimId);
+        // Verify claim is initially backed (60% utilization = 6000 bps)
+        (int256 backingBefore, uint16 coveragePctBefore) = eigenCoverageProvider.claimBacking(claimId);
         assertGt(backingBefore, 0, "Claim should be backed initially");
+        assertApproxEqAbs(coveragePctBefore, 6000, 1, "Initial coverage % should be 60%");
 
         // Operator partially deallocates (reduces magnitude to 50%)
         address[] memory strategyAddresses = new address[](1);
@@ -1771,8 +1804,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         assertLt(allocatedAfterDeallocation, initialAllocated, "Allocation should have decreased");
 
         // After 50% deallocation: allocation is ~50% of initial, claim is 60% of initial
-        // So claim (60%) > allocation (50%), resulting in a deficit of ~10% of initial
-        int256 backingAfter = eigenCoverageProvider.claimBacking(claimId);
+        // So claim (60%) > allocation (50%), resulting in a deficit; utilization > 100% (> 10000 bps)
+        (int256 backingAfter, uint16 coveragePctAfter) = eigenCoverageProvider.claimBacking(claimId);
+        assertGt(coveragePctAfter, 10000, "Coverage % should exceed 100% when deficient");
 
         // Backing should be negative (deficient)
         assertLt(backingAfter, 0, "Backing should be negative after partial deallocation");
@@ -1805,9 +1839,10 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId = eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, minReward);
         vm.stopPrank();
 
-        // Verify claim is initially backed
-        int256 backingBefore = eigenCoverageProvider.claimBacking(claimId);
+        // Verify claim is initially backed (25% utilization = 2500 bps)
+        (int256 backingBefore, uint16 coveragePctBefore) = eigenCoverageProvider.claimBacking(claimId);
         assertGt(backingBefore, 0, "Claim should be backed initially");
+        assertApproxEqAbs(coveragePctBefore, 2500, 1, "Initial coverage % should be 25%");
 
         // Operator partially deallocates (reduces magnitude to 50%)
         address[] memory strategyAddresses = new address[](1);
@@ -1834,8 +1869,10 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         );
 
         // After 50% deallocation: allocation is ~50% of initial, claim is 25% of initial
-        // So allocation (50%) > claim (25%), backing remains positive
-        int256 backingAfter = eigenCoverageProvider.claimBacking(claimId);
+        // So allocation (50%) > claim (25%), backing remains positive; utilization ~50% (5000 bps)
+        (int256 backingAfter, uint16 coveragePctAfter) = eigenCoverageProvider.claimBacking(claimId);
+        uint256 expectedPctAfter = (claimAmount * 10000) / allocatedAfterDeallocation;
+        assertApproxEqAbs(coveragePctAfter, uint16(expectedPctAfter), 1, "Coverage % after partial deallocation");
 
         // Backing should still be positive
         assertGt(backingAfter, 0, "Backing should remain positive when allocation > claim");
@@ -2470,12 +2507,665 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         eigenCoverageProvider.closeClaim(claimId);
     }
 
-    // --- liquidateClaim (line 313-315) ---
+    // ============ liquidateClaim ============
 
-    /// @notice Test that liquidateClaim reverts with NotImplemented
-    function test_RevertWhen_liquidateClaim_notImplemented() public {
-        vm.expectRevert();
-        eigenCoverageProvider.liquidateClaim(0);
+    // --- Revert Cases ---
+
+    /// @notice Test 1: Revert when attempting to liquidate to the same position
+    function test_RevertWhen_liquidateClaim_samePosition() public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.SamePosition.selector, positionId));
+        eigenCoverageProvider.liquidateClaim(claimId, positionId);
+    }
+
+    /// @notice Test 2: Revert when old and new positions have different coverage agents
+    function test_RevertWhen_liquidateClaim_differentCoverageAgent() public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        // Create a second position (same agent/asset) then override its coverageAgent via vm.store
+        uint256 newPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+
+        // Overwrite coverageAgent (lower 160 bits of struct slot 0) to a different address
+        bytes32 slot = _positionStorageSlot(newPositionId, 0);
+        bytes32 currentValue = vm.load(address(eigenCoverageDiamond), slot);
+        address fakeAgent = address(0xBEEF);
+        bytes32 newValue = (currentValue & bytes32(~uint256(type(uint160).max))) | bytes32(uint256(uint160(fakeAgent)));
+        vm.store(address(eigenCoverageDiamond), slot, newValue);
+
+        // Verify the override worked
+        CoveragePosition memory newPos = eigenCoverageProvider.position(newPositionId);
+        assertEq(newPos.coverageAgent, fakeAgent);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.InvalidCoverageAgent.selector, address(coverageAgent), fakeAgent)
+        );
+        eigenCoverageProvider.liquidateClaim(claimId, newPositionId);
+    }
+
+    /// @notice Test 3: Revert when old and new positions have different assets
+    function test_RevertWhen_liquidateClaim_differentAsset() public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        // Create a second position (same agent/asset) then override its asset via vm.store
+        uint256 newPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+
+        // Overwrite asset (lower 160 bits of struct slot 3) to a different address
+        bytes32 slot = _positionStorageSlot(newPositionId, 3);
+        bytes32 currentValue = vm.load(address(eigenCoverageDiamond), slot);
+        address fakeAsset = address(0xDEAD);
+        bytes32 newValue = (currentValue & bytes32(~uint256(type(uint160).max))) | bytes32(uint256(uint160(fakeAsset)));
+        vm.store(address(eigenCoverageDiamond), slot, newValue);
+
+        // Verify the override worked
+        CoveragePosition memory newPos = eigenCoverageProvider.position(newPositionId);
+        assertEq(newPos.coverageAgent, address(coverageAgent), "Coverage agent should still match");
+        assertEq(newPos.asset, fakeAsset, "Asset should be overridden");
+
+        address realAsset = address(_getTestStrategy().underlyingToken());
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.InvalidCoverageAsset.selector, realAsset, fakeAsset));
+        eigenCoverageProvider.liquidateClaim(claimId, newPositionId);
+    }
+
+    /// @notice Test 4: Revert when caller is not authorized by the new position's operator
+    function test_RevertWhen_liquidateClaim_notOperatorAuthorized() public {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(1000e18);
+
+        uint256 oldPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+        uint256 newPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+        uint256 claimId = _createAndApproveClaim(oldPositionId, 1000e6, 10e6);
+
+        address unauthorizedCaller = makeAddr("unauthorized");
+        vm.prank(unauthorizedCaller);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IEigenServiceManager.NotOperatorAuthorized.selector, address(operator), unauthorizedCaller
+            )
+        );
+        eigenCoverageProvider.liquidateClaim(claimId, newPositionId);
+    }
+
+    /// @notice Test 5: Revert when claim status is Completed
+    function test_RevertWhen_liquidateClaim_invalidClaim_completed() public {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(1000e18);
+
+        uint256 oldPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+        uint256 newPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+        uint256 claimId = _createAndApproveClaim(oldPositionId, 1000e6, 10e6);
+
+        // Close the claim by warping past duration
+        vm.warp(block.timestamp + 31 days);
+        eigenCoverageProvider.closeClaim(claimId);
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Completed));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId, CoverageClaimStatus.Completed)
+        );
+        eigenCoverageProvider.liquidateClaim(claimId, newPositionId);
+    }
+
+    /// @notice Test 6: Revert when claim status is PendingSlash
+    function test_RevertWhen_liquidateClaim_invalidClaim_pendingSlash() public {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(1000e18);
+
+        // Create position with a slash coordinator that holds slashes as pending
+        MockSlashCoordinator mockCoordinator = new MockSlashCoordinator();
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(mockCoordinator),
+            maxReservationTime: 0,
+            operatorId: bytes32(uint256(uint160(address(operator))))
+        });
+        uint256 oldPositionId = eigenCoverageProvider.createPosition(data, "");
+        uint256 newPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+        uint256 claimId = _createAndApproveClaim(oldPositionId, 1000e6, 10e6);
+
+        // Slash to get PendingSlash status
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 500e6);
+        _executeSlash(claimIds, amounts);
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.PendingSlash));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId, CoverageClaimStatus.PendingSlash)
+        );
+        eigenCoverageProvider.liquidateClaim(claimId, newPositionId);
+    }
+
+    /// @notice Test 7: Revert when claim status is Slashed
+    function test_RevertWhen_liquidateClaim_invalidClaim_slashed() public {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(1000e18);
+
+        uint256 oldPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+        uint256 newPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+        uint256 claimId = _createAndApproveClaim(oldPositionId, 1000e6, 10e6);
+
+        // Slash (no coordinator = instant slash)
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 500e6);
+        _executeSlash(claimIds, amounts);
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId, CoverageClaimStatus.Slashed)
+        );
+        eigenCoverageProvider.liquidateClaim(claimId, newPositionId);
+    }
+
+    /// @notice Test 8: Revert when claim status is Reserved
+    function test_RevertWhen_liquidateClaim_invalidClaim_reserved() public {
+        uint256 positionId = _setupPositionWithReservation(1000e18, 7 days);
+        uint256 newPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+
+        // Reserve a claim (status = Reserved)
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Reserved));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId, CoverageClaimStatus.Reserved)
+        );
+        eigenCoverageProvider.liquidateClaim(claimId, newPositionId);
+    }
+
+    /// @notice Test 9: Revert when claim status is Repaid
+    function test_RevertWhen_liquidateClaim_invalidClaim_repaid() public {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(1000e18);
+
+        uint256 oldPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+        uint256 newPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+        uint256 claimId = _createAndApproveClaim(oldPositionId, 1000e6, 10e6);
+
+        // Slash then fully repay to reach Repaid status
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 500e6);
+        _executeSlash(claimIds, amounts);
+
+        // Repay the slashed amount (must be called by the coverage agent with funds + approval)
+        address coverageAsset = coverageAgent.asset();
+        deal(coverageAsset, address(coverageAgent), 500e6);
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAsset).approve(address(eigenCoverageDiamond), 500e6);
+        eigenCoverageProvider.repaySlashedClaim(claimId, 500e6);
+        vm.stopPrank();
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Repaid));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId, CoverageClaimStatus.Repaid)
+        );
+        eigenCoverageProvider.liquidateClaim(claimId, newPositionId);
+    }
+
+    /// @notice Test 10: Revert when claim has expired
+    function test_RevertWhen_liquidateClaim_claimExpired() public {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(1000e18);
+
+        uint256 oldPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+        uint256 newPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+        uint256 claimId = _createAndApproveClaim(oldPositionId, 1000e6, 10e6);
+
+        CoverageClaim memory claimData = eigenCoverageProvider.claim(claimId);
+        uint256 expiresAt = claimData.createdAt + claimData.duration;
+
+        // Warp past the claim's duration
+        vm.warp(expiresAt + 1);
+
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.ClaimExpired.selector, claimId, expiresAt));
+        eigenCoverageProvider.liquidateClaim(claimId, newPositionId);
+    }
+
+    /// @notice Test 11: Revert when coverage percentage is below liquidation threshold (position is healthy)
+    function test_RevertWhen_liquidateClaim_meetsLiquidationThreshold() public {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(1000e18);
+
+        uint256 oldPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+        uint256 newPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+
+        // Issue a small claim that keeps utilization well below 90%
+        uint256 maxCoverage = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+        uint256 claimAmount = (maxCoverage * 5000) / 10000; // 50% utilization
+        uint256 reward = (claimAmount * 100 * 30 days) / (10000 * 365 days);
+        if (reward < 1e6) reward = 1e6;
+        deal(coverageAgent.asset(), address(coverageAgent), reward * 2);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), reward);
+        uint256 claimId = eigenCoverageProvider.issueClaim(oldPositionId, claimAmount, 30 days, reward);
+        vm.stopPrank();
+
+        (, uint16 coveragePercentage) = eigenCoverageProvider.claimBacking(claimId);
+        assertTrue(coveragePercentage < 9000, "Coverage should be below liquidation threshold");
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ICoverageProvider.MeetsLiquidationThreshold.selector, uint16(9000), coveragePercentage
+            )
+        );
+        eigenCoverageProvider.liquidateClaim(claimId, newPositionId);
+    }
+
+    /// @notice Test 12: Revert when claim duration exceeds the new position's expiry
+    function test_RevertWhen_liquidateClaim_durationExceedsExpiry() public {
+        (,, uint256 claimId) = _setupLiquidatableScenario(1000e18, 9100, Refundable.None);
+
+        // Create a new position with a short expiry (15 days from now) - claim has 30 days duration
+        uint256 shortExpiryPositionId = _createPositionForOperator(operator, Refundable.None, 15 days);
+
+        CoverageClaim memory claimData = eigenCoverageProvider.claim(claimId);
+        uint256 claimEnd = claimData.createdAt + claimData.duration;
+        CoveragePosition memory shortPos = eigenCoverageProvider.position(shortExpiryPositionId);
+
+        assertTrue(claimEnd > shortPos.expiryTimestamp, "Claim end should exceed short position expiry");
+
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.DurationExceedsExpiry.selector, claimEnd, shortPos.expiryTimestamp)
+        );
+        eigenCoverageProvider.liquidateClaim(claimId, shortExpiryPositionId);
+    }
+
+    /// @notice Test 13: Revert when the new position's operator has insufficient coverage
+    function test_RevertWhen_liquidateClaim_insufficientCoverageOnNewPosition() public {
+        // Set up first operator with high utilization
+        (,, uint256 claimId) = _setupLiquidatableScenario(1000e18, 9100, Refundable.None);
+
+        // Set up a second operator with very small stake (insufficient to absorb the claim)
+        _setupSecondOperatorWithAllocations(1e16); // Tiny stake
+
+        uint256 op2PositionId = _createPositionForOperator(operator2, Refundable.None, 365 days);
+
+        vm.expectRevert(); // InsufficientCoverageAvailable - exact params depend on runtime values
+        eigenCoverageProvider.liquidateClaim(claimId, op2PositionId);
+    }
+
+    // --- Happy Path Cases ---
+
+    /// @notice Test 14: Successful liquidation updates all state correctly
+    function test_liquidateClaim_success() public {
+        (uint256 oldPositionId, uint256 newPositionId, uint256 claimId) =
+            _setupLiquidatableScenario(1000e18, 9100, Refundable.None);
+
+        CoverageClaim memory claimBefore = eigenCoverageProvider.claim(claimId);
+        assertEq(claimBefore.positionId, oldPositionId);
+
+        // Expect the ClaimLiquidated event
+        vm.expectEmit(true, true, true, true);
+        emit ICoverageProvider.ClaimLiquidated(claimId, oldPositionId, newPositionId);
+
+        eigenCoverageProvider.liquidateClaim(claimId, newPositionId);
+
+        // Verify state changes
+        CoverageClaim memory claimAfter = eigenCoverageProvider.claim(claimId);
+        assertEq(claimAfter.positionId, newPositionId, "Claim should point to new position");
+        assertEq(claimAfter.createdAt, block.timestamp, "createdAt should be reset to current timestamp");
+        assertEq(uint8(claimAfter.status), uint8(CoverageClaimStatus.Issued), "Status should remain Issued");
+        assertEq(claimAfter.amount, claimBefore.amount, "Claim amount should not change");
+        assertEq(claimAfter.duration, claimBefore.duration, "Duration should not change");
+    }
+
+    /// @notice Test 15: Rewards are captured for old operator before position swap
+    function test_liquidateClaim_capturesRewardsBeforeSwap() public {
+        (, uint256 newPositionId, uint256 claimId) = _setupLiquidatableScenario(1000e18, 9100, Refundable.None);
+
+        // Warp forward 15 days (half the duration) so there are rewards to capture
+        vm.warp(block.timestamp + 15 days);
+
+        // Check reward distribution before liquidation
+        (uint256 distAmount,) =
+            EigenCoverageProviderFacet(address(eigenCoverageDiamond)).claimRewardDistributions(claimId);
+        assertEq(distAmount, 0, "No rewards should be distributed yet");
+
+        eigenCoverageProvider.liquidateClaim(claimId, newPositionId);
+
+        // After liquidation, rewards should have been captured for the old operator
+        (uint256 distAmountAfter,) =
+            EigenCoverageProviderFacet(address(eigenCoverageDiamond)).claimRewardDistributions(claimId);
+        assertGt(distAmountAfter, 0, "Rewards should have been distributed during liquidation");
+    }
+
+    /// @notice Test 16: TimeWeighted refundable rewards are captured correctly before swap
+    function test_liquidateClaim_refundableTimeWeighted() public {
+        (, uint256 newPositionId, uint256 claimId) = _setupLiquidatableScenario(1000e18, 9100, Refundable.TimeWeighted);
+
+        // Warp forward 15 days (half duration)
+        vm.warp(block.timestamp + 15 days);
+
+        eigenCoverageProvider.liquidateClaim(claimId, newPositionId);
+
+        // Verify time-weighted rewards were captured (should be ~50% of total reward)
+        (uint256 distAmount,) =
+            EigenCoverageProviderFacet(address(eigenCoverageDiamond)).claimRewardDistributions(claimId);
+        // Time-weighted: reward proportional to elapsed time. After 15 of 30 days ≈ 50%
+        assertGt(distAmount, 0, "Time-weighted rewards should be distributed");
+    }
+
+    /// @notice Test 17: Full refundable policy returns 0 rewards during liquidation (claim still Issued)
+    function test_liquidateClaim_refundableFull() public {
+        (, uint256 newPositionId, uint256 claimId) = _setupLiquidatableScenario(1000e18, 9100, Refundable.Full);
+
+        vm.warp(block.timestamp + 15 days);
+
+        // For Full refund, captureRewards returns 0 when claim is Issued (not Completed)
+        eigenCoverageProvider.liquidateClaim(claimId, newPositionId);
+
+        (uint256 distAmount,) =
+            EigenCoverageProviderFacet(address(eigenCoverageDiamond)).claimRewardDistributions(claimId);
+        assertEq(distAmount, 0, "Full refundable should not distribute rewards while claim is Issued");
+    }
+
+    /// @notice Test 18: Multiple sequential liquidations on the same claim
+    function test_liquidateClaim_multipleLiquidations() public {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(1000e18);
+        eigenServiceManager.setCoverageThreshold(address(operator), 9500);
+
+        // Create 3 positions
+        uint256 posA = _createPositionForOperator(operator, Refundable.None, 365 days);
+        uint256 posB = _createPositionForOperator(operator, Refundable.None, 365 days);
+        uint256 posC = _createPositionForOperator(operator, Refundable.None, 365 days);
+
+        // Issue claim at 91% on position A
+        uint256 maxCoverage = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+        uint256 claimAmount = (maxCoverage * 9100) / 10000;
+        uint256 reward = (claimAmount * 100 * 30 days) / (10000 * 365 days);
+        if (reward < 1e6) reward = 1e6;
+        deal(coverageAgent.asset(), address(coverageAgent), reward * 2);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), reward);
+        uint256 claimId = eigenCoverageProvider.issueClaim(posA, claimAmount, 30 days, reward);
+        vm.stopPrank();
+
+        // First liquidation: A -> B
+        eigenCoverageProvider.liquidateClaim(claimId, posB);
+        CoverageClaim memory afterFirst = eigenCoverageProvider.claim(claimId);
+        assertEq(afterFirst.positionId, posB, "Should now point to position B");
+        uint256 firstCreatedAt = afterFirst.createdAt;
+
+        // Warp a bit and liquidate again: B -> C
+        vm.warp(block.timestamp + 1 days);
+        eigenCoverageProvider.liquidateClaim(claimId, posC);
+        CoverageClaim memory afterSecond = eigenCoverageProvider.claim(claimId);
+        assertEq(afterSecond.positionId, posC, "Should now point to position C");
+        assertGt(afterSecond.createdAt, firstCreatedAt, "createdAt should be updated again");
+    }
+
+    /// @notice Test 19: Liquidation succeeds when new position expiry exactly matches claim end
+    function test_liquidateClaim_atExactExpiry() public {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(1000e18);
+        eigenServiceManager.setCoverageThreshold(address(operator), 9500);
+
+        uint256 oldPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+
+        // Issue a claim with 30 days duration
+        uint256 maxCoverage = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+        uint256 claimAmount = (maxCoverage * 9100) / 10000;
+        uint256 reward = (claimAmount * 100 * 30 days) / (10000 * 365 days);
+        if (reward < 1e6) reward = 1e6;
+        deal(coverageAgent.asset(), address(coverageAgent), reward * 2);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), reward);
+        uint256 claimId = eigenCoverageProvider.issueClaim(oldPositionId, claimAmount, 30 days, reward);
+        vm.stopPrank();
+
+        CoverageClaim memory claimData = eigenCoverageProvider.claim(claimId);
+        uint256 claimEnd = claimData.createdAt + claimData.duration;
+
+        // Create new position with expiry EXACTLY at the claim's end time
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: claimEnd,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(uint256(uint160(address(operator))))
+        });
+        uint256 exactExpiryPositionId = eigenCoverageProvider.createPosition(data, "");
+
+        // Should succeed (claim.createdAt + duration <= newPosition.expiryTimestamp, i.e. claimEnd <= claimEnd)
+        eigenCoverageProvider.liquidateClaim(claimId, exactExpiryPositionId);
+
+        CoverageClaim memory claimAfter = eigenCoverageProvider.claim(claimId);
+        assertEq(claimAfter.positionId, exactExpiryPositionId);
+    }
+
+    /// @notice Test 20: Liquidation succeeds at the exact moment the claim ends (boundary: > not >=)
+    function test_liquidateClaim_atExactClaimEnd() public {
+        (, uint256 newPositionId, uint256 claimId) = _setupLiquidatableScenario(1000e18, 9100, Refundable.None);
+
+        CoverageClaim memory claimData = eigenCoverageProvider.claim(claimId);
+        uint256 expiresAt = claimData.createdAt + claimData.duration;
+
+        // Warp to exactly the claim expiry (block.timestamp == createdAt + duration)
+        // The check is: block.timestamp > createdAt + duration, so == should NOT revert
+        vm.warp(expiresAt);
+
+        eigenCoverageProvider.liquidateClaim(claimId, newPositionId);
+
+        CoverageClaim memory claimAfter = eigenCoverageProvider.claim(claimId);
+        assertEq(claimAfter.positionId, newPositionId);
+    }
+
+    // --- Fuzz Tests ---
+
+    /// @notice Test 21: Fuzz varying claim amounts for liquidation
+    function testFuzz_liquidateClaim_varyingClaimAmounts(uint256 claimAmountBps) public {
+        // Bound to 9001-9499 to be above liquidation threshold (9000) but below coverage threshold (9500)
+        claimAmountBps = bound(claimAmountBps, 9001, 9499);
+
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(1000e18);
+        eigenServiceManager.setCoverageThreshold(address(operator), 9500);
+
+        uint256 oldPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+        uint256 newPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+
+        uint256 maxCoverage = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+        uint256 claimAmount = (maxCoverage * claimAmountBps) / 10000;
+        uint256 reward = (claimAmount * 100 * 30 days) / (10000 * 365 days);
+        if (reward < 1e6) reward = 1e6;
+        deal(coverageAgent.asset(), address(coverageAgent), reward * 2);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), reward);
+        uint256 claimId = eigenCoverageProvider.issueClaim(oldPositionId, claimAmount, 30 days, reward);
+        vm.stopPrank();
+
+        eigenCoverageProvider.liquidateClaim(claimId, newPositionId);
+
+        CoverageClaim memory claimAfter = eigenCoverageProvider.claim(claimId);
+        assertEq(claimAfter.positionId, newPositionId, "Claim should point to new position");
+        assertEq(claimAfter.createdAt, block.timestamp, "createdAt should be reset");
+    }
+
+    /// @notice Test 22: Fuzz varying durations for liquidation
+    function testFuzz_liquidateClaim_varyingDurations(uint256 duration) public {
+        // Bound duration to 1 second to 30 days (maxDuration)
+        duration = bound(duration, 1, 30 days);
+
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(1000e18);
+        eigenServiceManager.setCoverageThreshold(address(operator), 9500);
+
+        uint256 oldPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+        uint256 newPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+
+        uint256 maxCoverage = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+        uint256 claimAmount = (maxCoverage * 9100) / 10000;
+        uint256 reward = (claimAmount * 100 * duration) / (10000 * 365 days);
+        if (reward < 1e6) reward = 1e6;
+        deal(coverageAgent.asset(), address(coverageAgent), reward * 2);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), reward);
+        uint256 claimId = eigenCoverageProvider.issueClaim(oldPositionId, claimAmount, duration, reward);
+        vm.stopPrank();
+
+        eigenCoverageProvider.liquidateClaim(claimId, newPositionId);
+
+        CoverageClaim memory claimAfter = eigenCoverageProvider.claim(claimId);
+        assertEq(claimAfter.positionId, newPositionId);
+        assertEq(claimAfter.duration, duration, "Duration should not change");
+    }
+
+    /// @notice Test 23: Fuzz varying timing within claim duration for reward capture
+    function testFuzz_liquidateClaim_varyingTimingWithinDuration(uint256 timeOffset) public {
+        (, uint256 newPositionId, uint256 claimId) = _setupLiquidatableScenario(1000e18, 9100, Refundable.TimeWeighted);
+
+        CoverageClaim memory claimData = eigenCoverageProvider.claim(claimId);
+        // Bound timeOffset to stay within the claim duration
+        timeOffset = bound(timeOffset, 0, claimData.duration - 1);
+
+        if (timeOffset > 0) {
+            vm.warp(block.timestamp + timeOffset);
+        }
+
+        eigenCoverageProvider.liquidateClaim(claimId, newPositionId);
+
+        CoverageClaim memory claimAfter = eigenCoverageProvider.claim(claimId);
+        assertEq(claimAfter.positionId, newPositionId);
+    }
+
+    /// @notice Test 24: Fuzz varying old and new position stake combos
+    function testFuzz_liquidateClaim_varyingOldAndNewPositionCombos(
+        uint256 oldStakeBps,
+        uint256 newStakeBps,
+        uint256 claimAmountBps
+    ) public {
+        // Bound stake amounts (as bps of 1000e18 base)
+        oldStakeBps = bound(oldStakeBps, 100, 10000); // 1%-100% of 1000e18
+        newStakeBps = bound(newStakeBps, 100, 10000);
+        claimAmountBps = bound(claimAmountBps, 9001, 9499);
+
+        uint256 oldStake = (1000e18 * oldStakeBps) / 10000;
+        uint256 newStake = (1000e18 * newStakeBps) / 10000;
+
+        // Set up first operator with old stake
+        _setupwithAllocations();
+        deal(rETH, staker, oldStake);
+        _stakeAndDelegateToOperator(oldStake);
+        eigenServiceManager.setCoverageThreshold(address(operator), 9500);
+
+        uint256 oldPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+
+        uint256 maxCoverage = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+        uint256 claimAmount = (maxCoverage * claimAmountBps) / 10000;
+        uint256 reward = (claimAmount * 100 * 30 days) / (10000 * 365 days);
+        if (reward < 1e6) reward = 1e6;
+        deal(coverageAgent.asset(), address(coverageAgent), reward * 2);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), reward);
+        uint256 claimId = eigenCoverageProvider.issueClaim(oldPositionId, claimAmount, 30 days, reward);
+        vm.stopPrank();
+
+        // Set up second operator with new stake
+        _setupSecondOperatorWithAllocations(newStake);
+        eigenServiceManager.setCoverageThreshold(address(operator2), 9500);
+        uint256 newPositionId = _createPositionForOperator(operator2, Refundable.None, 365 days);
+
+        uint256 newMaxCoverage = eigenServiceManager.coverageAllocated(
+            address(operator2), address(_getTestStrategy()), address(coverageAgent)
+        );
+
+        // The new operator's _checkCoverageForAgent passes only if:
+        //   coveragePercentage <= coverageThreshold (9500) AND backing >= 0
+        // coveragePercentage = (claimAmount * 10000) / newMaxCoverage
+        // So we need: claimAmount * 10000 <= newMaxCoverage * 9500 (and newMaxCoverage > 0)
+        bool hasEnoughCoverage = newMaxCoverage > 0 && claimAmount * 10000 <= newMaxCoverage * 9500;
+
+        if (hasEnoughCoverage) {
+            // New operator has enough coverage — should succeed
+            eigenCoverageProvider.liquidateClaim(claimId, newPositionId);
+            assertEq(eigenCoverageProvider.claim(claimId).positionId, newPositionId);
+        } else {
+            // New operator doesn't have enough coverage — should revert
+            vm.expectRevert();
+            eigenCoverageProvider.liquidateClaim(claimId, newPositionId);
+        }
+    }
+
+    /// @notice Test 25: Fuzz varying new position expiry relative to claim end
+    function testFuzz_liquidateClaim_varyingNewPositionExpiry(uint256 newExpiryOffset) public {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(1000e18);
+        eigenServiceManager.setCoverageThreshold(address(operator), 9500);
+
+        uint256 oldPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
+
+        uint256 maxCoverage = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+        uint256 claimAmount = (maxCoverage * 9100) / 10000;
+        uint256 reward = (claimAmount * 100 * 30 days) / (10000 * 365 days);
+        if (reward < 1e6) reward = 1e6;
+        deal(coverageAgent.asset(), address(coverageAgent), reward * 2);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), reward);
+        uint256 claimId = eigenCoverageProvider.issueClaim(oldPositionId, claimAmount, 30 days, reward);
+        vm.stopPrank();
+
+        CoverageClaim memory claimData = eigenCoverageProvider.claim(claimId);
+        uint256 claimEnd = claimData.createdAt + claimData.duration;
+
+        // Bound expiry offset: 1 second to 365 days from now
+        newExpiryOffset = bound(newExpiryOffset, 1, 365 days);
+        uint256 newExpiry = block.timestamp + newExpiryOffset;
+
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: newExpiry,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(uint256(uint160(address(operator))))
+        });
+        uint256 newPositionId = eigenCoverageProvider.createPosition(data, "");
+
+        if (claimEnd <= newExpiry) {
+            // New position expiry accommodates the claim — should succeed
+            eigenCoverageProvider.liquidateClaim(claimId, newPositionId);
+            assertEq(eigenCoverageProvider.claim(claimId).positionId, newPositionId);
+        } else {
+            // New position expires before the claim ends — should revert
+            vm.expectRevert(
+                abi.encodeWithSelector(ICoverageProvider.DurationExceedsExpiry.selector, claimEnd, newExpiry)
+            );
+            eigenCoverageProvider.liquidateClaim(claimId, newPositionId);
+        }
     }
 
     // ============ captureRewards ============

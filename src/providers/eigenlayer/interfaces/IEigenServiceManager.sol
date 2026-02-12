@@ -100,6 +100,10 @@ interface IEigenServiceManager {
     /// @return coverageThreshold The coverage threshold for the operator
     function getCoverageThreshold(address operator) external view returns (uint16 coverageThreshold);
 
+    /// @notice Sets the liquidation threshold for the coverage provider.
+    /// @param threshold The liquidation threshold to set for the coverage provider.
+    function setLiquidationThreshold(uint16 threshold) external;
+
     /// @notice Returns the strategies allocated to by any operator for a coverage agent
     /// @param operator The operator to get the allocated strategies for
     /// @param coverageAgent The coverage agent to get the allocated strategies for

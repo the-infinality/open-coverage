@@ -314,9 +314,70 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     }
 
     /// @inheritdoc ICoverageProvider
-    function liquidateClaim(uint256) external pure {
-        //TODO: Implement liquidateClaim
-        revert NotImplemented();
+    function liquidateClaim(uint256 claimId, uint256 positionId) external {
+        CoverageClaim storage _claim = claims[claimId];
+        CoveragePosition storage oldPosition = positions[_claim.positionId];
+        CoveragePosition storage newPosition = positions[positionId];
+
+        if (_claim.positionId == positionId) revert SamePosition(positionId);
+        if (oldPosition.coverageAgent != newPosition.coverageAgent) {
+            revert InvalidCoverageAgent(oldPosition.coverageAgent, newPosition.coverageAgent);
+        }
+        if (oldPosition.asset != newPosition.asset) revert InvalidCoverageAsset(oldPosition.asset, newPosition.asset);
+
+        address operator = address(uint160(uint256(newPosition.operatorId)));
+
+        if (!_checkOperatorPermissions(
+                operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector
+            )) revert IEigenServiceManager.NotOperatorAuthorized(operator, msg.sender);
+
+        if (_claim.status != CoverageClaimStatus.Issued) revert InvalidClaim(claimId, _claim.status);
+        if (block.timestamp > _claim.createdAt + _claim.duration) {
+            revert ClaimExpired(claimId, _claim.createdAt + _claim.duration);
+        }
+
+        (, uint16 coveragePercentage) = claimBacking(claimId);
+        if (coveragePercentage < liquidationThreshold) {
+            revert MeetsLiquidationThreshold(liquidationThreshold, coveragePercentage);
+        }
+
+        // Ensure that the claim's remaining duration does not exceed the new position's expiry, the reward check can be ignored since
+        // the operator has designed to take on the new claim via this liquidation process.
+        require(
+            _claim.createdAt + _claim.duration <= newPosition.expiryTimestamp,
+            DurationExceedsExpiry(_claim.createdAt + _claim.duration, newPosition.expiryTimestamp)
+        );
+
+        // Distribute the existing rewards to old operator
+        captureRewards(claimId);
+
+        // Reduce coverage from the previous operator
+        _modifyCoverageForAgent(
+            address(uint160(uint256(oldPosition.operatorId))), // Operator
+            assetToStrategy[oldPosition.asset], // Strategy
+            oldPosition.coverageAgent,
+            -int256(_claim.amount)
+        );
+
+        // Increase coverage for the new operator
+        _modifyCoverageForAgent(
+            operator, // Operator
+            assetToStrategy[newPosition.asset], // Strategy
+            newPosition.coverageAgent,
+            int256(_claim.amount)
+        );
+
+        _checkCoverageForAgent(
+            operator, // Operator
+            assetToStrategy[newPosition.asset], // Strategy
+            newPosition.coverageAgent
+        );
+
+        emit ClaimLiquidated(claimId, _claim.positionId, positionId);
+
+        // Update the claim to the new position and reset the createdAt to the current block timestamp
+        _claim.positionId = positionId;
+        _claim.createdAt = block.timestamp;
     }
 
     /// @inheritdoc ICoverageProvider
@@ -425,7 +486,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
 
     /// @inheritdoc ICoverageProvider
     function captureRewards(uint256 claimId)
-        external
+        public
         returns (uint256 amount, uint32 resolvedDuration, uint32 resolvedDistributionStartTime)
     {
         CoverageClaim memory _claim = claims[claimId];
@@ -511,18 +572,23 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     }
 
     /// @inheritdoc ICoverageProvider
-    function claimBacking(uint256 claimId) external view returns (int256 backing) {
+    function claimBacking(uint256 claimId) public view returns (int256 backing, uint16 coveragePercentage) {
         CoveragePosition memory _position = positions[claims[claimId].positionId];
         address operator = address(uint160(uint256(_position.operatorId)));
         address strategy = assetToStrategy[_position.asset];
-        (backing,) = _coverageBackingAmount(operator, strategy, _position.coverageAgent);
-        return backing;
+        (backing, coveragePercentage) = _coverageBackingAmount(operator, strategy, _position.coverageAgent);
+        return (backing, coveragePercentage);
     }
 
     /// @inheritdoc ICoverageProvider
     function claimTotalSlashAmount(uint256 claimId) external view returns (uint256 slashAmount) {
         return claimSlashAmounts[claimId];
     }
+
+    // /// @inheritdoc ICoverageProvider
+    // function liquidationThreshold() external view returns (uint16 threshold) {
+    //     return liquidationThreshold;
+    // }
 
     /// @inheritdoc ICoverageProvider
     function providerTypeId() external pure returns (uint256) {

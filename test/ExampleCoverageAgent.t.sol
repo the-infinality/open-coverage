@@ -109,8 +109,8 @@ contract MockCoverageProvider is ICoverageProvider {
         emit ClaimClosed(claimId);
     }
 
-    function liquidateClaim(uint256 claimId) external override {
-        emit ClaimLiquidated(claimId);
+    function liquidateClaim(uint256 claimId, uint256 positionId) external override {
+        emit ClaimLiquidated(claimId, _claims[claimId].positionId, positionId);
     }
 
     function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts)
@@ -186,8 +186,8 @@ contract MockCoverageProvider is ICoverageProvider {
         return _claims[claimId];
     }
 
-    function claimBacking(uint256) external pure override returns (int256) {
-        return 0;
+    function claimBacking(uint256) external pure override returns (int256, uint16) {
+        return (0, 0);
     }
 
     function claimTotalSlashAmount(uint256 claimId) external view override returns (uint256) {
