@@ -47,13 +47,6 @@ interface IEigenServiceManager {
         view
         returns (uint256);
 
-    /// @notice Captures rewards for a given claim based on the refund policy
-    /// @dev Can be called by anyone
-    /// @param claimId The id of the claim to capture rewards for
-    function captureRewards(uint256 claimId)
-        external
-        returns (uint256 amount, uint32 duration, uint32 distributionStartTime);
-
     /// @notice Submits an operator-directed reward to the RewardsCoordinator
     /// @dev Can be called by other facets to distribute rewards to operators
     /// @dev If startTimestamp is 0, calculates distributionStartTime automatically using the next interval to avoid retroactive submissions

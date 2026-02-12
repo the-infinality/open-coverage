@@ -421,6 +421,71 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
             );
     }
 
+    /// ============ Rewards ============
+
+    /// @inheritdoc ICoverageProvider
+    function captureRewards(uint256 claimId)
+        external
+        returns (uint256 amount, uint32 resolvedDuration, uint32 resolvedDistributionStartTime)
+    {
+        CoverageClaim memory _claim = claims[claimId];
+        CoveragePosition memory _position = positions[_claim.positionId];
+        ClaimRewardDistribution memory _claimRewardDistribution = claimRewardDistributions[claimId];
+        address operator = address(uint160(uint256(_position.operatorId)));
+        address strategy = assetToStrategy[_position.asset];
+
+        uint32 distributionStartTime = _claimRewardDistribution.lastDistributedTimestamp;
+
+        // Calculate the amount of time that has elapsed since the last distribution for the claim
+        uint32 elapsedDuration = uint32(
+            _min(block.timestamp - distributionStartTime, _claim.duration + _claim.createdAt - distributionStartTime)
+        );
+
+        if (elapsedDuration == 0) {
+            return (0, 0, distributionStartTime);
+        }
+
+        if (_position.refundable == Refundable.None) {
+            // No refund possible — operator earned the full reward on issuance
+            amount = _claim.reward - _claimRewardDistribution.amount;
+            claimRewardDistributions[claimId].amount += amount;
+            claimRewardDistributions[claimId].lastDistributedTimestamp = uint32(block.timestamp);
+        } else if (_position.refundable == Refundable.TimeWeighted) {
+            uint256 claimableReward =
+                _min(block.timestamp - _claim.createdAt, _claim.duration) * _claim.reward / _claim.duration;
+            amount = claimableReward - _claimRewardDistribution.amount;
+            claimRewardDistributions[claimId].amount += amount;
+            claimRewardDistributions[claimId].lastDistributedTimestamp = uint32(block.timestamp);
+        } else if (_position.refundable == Refundable.Full && _claim.status == CoverageClaimStatus.Completed) {
+            amount = _claim.reward;
+        } else {
+            return (0, 0, distributionStartTime);
+        }
+
+        // Guard against submitting a zero-amount reward (e.g. already fully distributed,
+        // or reward was reduced to 0 after refund on early close)
+        if (amount == 0) {
+            return (0, 0, distributionStartTime);
+        }
+
+        IERC20 coverageAsset = IERC20(ICoverageAgent(_position.coverageAgent).asset());
+
+        (resolvedDistributionStartTime, resolvedDuration) = IEigenServiceManager(address(this))
+            .submitOperatorReward(
+                operator,
+                IStrategy(strategy),
+                coverageAsset,
+                amount,
+                distributionStartTime,
+                elapsedDuration,
+                "Coverage reward"
+            );
+
+        return (amount, resolvedDuration, resolvedDistributionStartTime);
+    }
+
+    /// ============ Discovery ============
+
     /// @inheritdoc ICoverageProvider
     function position(uint256 positionId) external view returns (CoveragePosition memory) {
         return positions[positionId];
@@ -450,7 +515,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         CoveragePosition memory _position = positions[claims[claimId].positionId];
         address operator = address(uint160(uint256(_position.operatorId)));
         address strategy = assetToStrategy[_position.asset];
-        (backing, ) = _coverageBackingAmount(operator, strategy, _position.coverageAgent);
+        (backing,) = _coverageBackingAmount(operator, strategy, _position.coverageAgent);
         return backing;
     }
 
@@ -645,5 +710,10 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     function _checkOperatorPermissions(address operator, address target, bytes4 selector) private returns (bool) {
         return
             IPermissionController(_eigenAddresses.permissionController).canCall(operator, msg.sender, target, selector);
+    }
+
+    /// @notice Returns the minimum of two uint256 values
+    function _min(uint256 a, uint256 b) private pure returns (uint256) {
+        return a < b ? a : b;
     }
 }

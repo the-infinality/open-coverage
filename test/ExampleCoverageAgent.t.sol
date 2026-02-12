@@ -170,6 +170,10 @@ contract MockCoverageProvider is ICoverageProvider {
         ICoverageAgent(_position.coverageAgent).onClaimRefunded(claimId, refundAmount);
     }
 
+    function captureRewards(uint256) external pure override returns (uint256, uint32, uint32) {
+        return (0, 0, 0);
+    }
+
     function position(uint256 positionId) external view override returns (CoveragePosition memory) {
         return _positions[positionId];
     }

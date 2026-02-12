@@ -63,7 +63,7 @@ library EigenFacetsDeployer {
     /// @notice Gets function selectors for EigenServiceManagerFacet
     /// @return selectors Array of function selectors
     function getEigenServiceManagerSelectors() internal pure returns (bytes4[] memory selectors) {
-        selectors = new bytes4[](15);
+        selectors = new bytes4[](14);
         selectors[0] = IEigenServiceManager.eigenAddresses.selector;
         selectors[1] = IEigenServiceManager.registerOperator.selector;
         selectors[2] = IEigenServiceManager.setStrategyWhitelist.selector;
@@ -71,20 +71,19 @@ library EigenFacetsDeployer {
         selectors[4] = IEigenServiceManager.whitelistedStrategies.selector;
         selectors[5] = IEigenServiceManager.getOperatorSetId.selector;
         selectors[6] = IEigenServiceManager.coverageAllocated.selector;
-        selectors[7] = IEigenServiceManager.captureRewards.selector;
-        selectors[8] = IEigenServiceManager.submitOperatorReward.selector;
-        selectors[9] = IEigenServiceManager.updateAVSMetadataURI.selector;
-        selectors[10] = IEigenServiceManager.slashOperator.selector;
-        selectors[11] = IEigenServiceManager.ensureAllocations.selector;
-        selectors[12] = IEigenServiceManager.getAllocationedStrategies.selector;
-        selectors[13] = IEigenServiceManager.setCoverageThreshold.selector;
-        selectors[14] = IEigenServiceManager.getCoverageThreshold.selector;
+        selectors[7] = IEigenServiceManager.submitOperatorReward.selector;
+        selectors[8] = IEigenServiceManager.updateAVSMetadataURI.selector;
+        selectors[9] = IEigenServiceManager.slashOperator.selector;
+        selectors[10] = IEigenServiceManager.ensureAllocations.selector;
+        selectors[11] = IEigenServiceManager.getAllocationedStrategies.selector;
+        selectors[12] = IEigenServiceManager.setCoverageThreshold.selector;
+        selectors[13] = IEigenServiceManager.getCoverageThreshold.selector;
     }
 
     /// @notice Gets function selectors for EigenCoverageProviderFacet
     /// @return selectors Array of function selectors
     function getEigenCoverageProviderSelectors() internal pure returns (bytes4[] memory selectors) {
-        selectors = new bytes4[](17);
+        selectors = new bytes4[](18);
         selectors[0] = ICoverageProvider.onIsRegistered.selector;
         selectors[1] = ICoverageProvider.createPosition.selector;
         selectors[2] = ICoverageProvider.closePosition.selector;
@@ -96,12 +95,13 @@ library EigenFacetsDeployer {
         selectors[8] = ICoverageProvider.slashClaims.selector;
         selectors[9] = ICoverageProvider.completeSlash.selector;
         selectors[10] = ICoverageProvider.repaySlashedClaim.selector;
-        selectors[11] = ICoverageProvider.position.selector;
-        selectors[12] = ICoverageProvider.positionMaxAmount.selector;
-        selectors[13] = ICoverageProvider.claim.selector;
-        selectors[14] = ICoverageProvider.claimBacking.selector;
-        selectors[15] = ICoverageProvider.providerTypeId.selector;
-        selectors[16] = ICoverageProvider.claimTotalSlashAmount.selector;
+        selectors[11] = ICoverageProvider.captureRewards.selector;
+        selectors[12] = ICoverageProvider.position.selector;
+        selectors[13] = ICoverageProvider.positionMaxAmount.selector;
+        selectors[14] = ICoverageProvider.claim.selector;
+        selectors[15] = ICoverageProvider.claimBacking.selector;
+        selectors[16] = ICoverageProvider.providerTypeId.selector;
+        selectors[17] = ICoverageProvider.claimTotalSlashAmount.selector;
     }
 }
 

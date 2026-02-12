@@ -11,14 +11,13 @@ import {IStrategyManager} from "eigenlayer-contracts/interfaces/IStrategyManager
 import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
 import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
 import {IRewardsCoordinatorTypes} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
-import {Refundable, CoverageClaimStatus, CoveragePosition} from "src/interfaces/ICoverageProvider.sol";
+import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
 import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
 import {EigenAddresses} from "../Types.sol";
 import {IEigenServiceManager} from "../interfaces/IEigenServiceManager.sol";
-import {CoverageClaim, ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
 import {ICoverageAgent} from "src/interfaces/ICoverageAgent.sol";
 import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
-import {EigenCoverageStorage, ClaimRewardDistribution} from "../EigenCoverageStorage.sol";
+import {EigenCoverageStorage} from "../EigenCoverageStorage.sol";
 import {WAD} from "eigenlayer-contracts/libraries/SlashingLib.sol";
 
 /// @title EigenServiceManagerFacet
@@ -86,66 +85,6 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         returns (uint256)
     {
         return _totalAllocatedValueToCoverageAgent(operator, strategy, coverageAgent);
-    }
-
-    /// @inheritdoc IEigenServiceManager
-    function captureRewards(uint256 claimId)
-        external
-        returns (uint256 amount, uint32 resolvedDuration, uint32 resolvedDistributionStartTime)
-    {
-        CoverageClaim memory _claim = claims[claimId];
-        CoveragePosition memory _position = positions[_claim.positionId];
-        ClaimRewardDistribution memory _claimRewardDistribution = claimRewardDistributions[claimId];
-        address operator = address(uint160(uint256(_position.operatorId)));
-        address strategy = assetToStrategy[_position.asset];
-
-        uint32 distributionStartTime = _claimRewardDistribution.lastDistributedTimestamp;
-
-        // Calculate the amount of time that has elapsed since the last distribution for the claim
-        uint32 elapsedDuration = uint32(
-            _min(block.timestamp - distributionStartTime, _claim.duration + _claim.createdAt - distributionStartTime)
-        );
-
-        if (elapsedDuration == 0) {
-            return (0, 0, distributionStartTime);
-        }
-
-        if (_position.refundable == Refundable.None) {
-            // No refund possible — operator earned the full reward on issuance
-            amount = _claim.reward - _claimRewardDistribution.amount;
-            claimRewardDistributions[claimId].amount += amount;
-            claimRewardDistributions[claimId].lastDistributedTimestamp = uint32(block.timestamp);
-        } else if (_position.refundable == Refundable.TimeWeighted) {
-            uint256 claimableReward =
-                _min(block.timestamp - _claim.createdAt, _claim.duration) * _claim.reward / _claim.duration;
-            amount = claimableReward - _claimRewardDistribution.amount;
-            claimRewardDistributions[claimId].amount += amount;
-            claimRewardDistributions[claimId].lastDistributedTimestamp = uint32(block.timestamp);
-        } else if (_position.refundable == Refundable.Full && _claim.status == CoverageClaimStatus.Completed) {
-            amount = _claim.reward;
-        } else {
-            return (0, 0, distributionStartTime);
-        }
-
-        // Guard against submitting a zero-amount reward (e.g. already fully distributed,
-        // or reward was reduced to 0 after refund on early close)
-        if (amount == 0) {
-            return (0, 0, distributionStartTime);
-        }
-
-        IERC20 coverageAsset = IERC20(ICoverageAgent(_position.coverageAgent).asset());
-
-        (resolvedDistributionStartTime, resolvedDuration) = _submitOperatorReward(
-            operator,
-            IStrategy(strategy),
-            coverageAsset,
-            amount,
-            distributionStartTime,
-            elapsedDuration,
-            "Coverage reward"
-        );
-
-        return (amount, resolvedDuration, resolvedDistributionStartTime);
     }
 
     /// @inheritdoc IEigenServiceManager
@@ -325,11 +264,9 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
 
     /// @inheritdoc IEigenServiceManager
     function setCoverageThreshold(address operator, uint16 coverageThreshold) external {
-        if (
-            !_checkOperatorPermissions(
+        if (!_checkOperatorPermissions(
                 operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector
-            )
-        ) revert IEigenServiceManager.NotOperatorAuthorized(operator, msg.sender);
+            )) revert IEigenServiceManager.NotOperatorAuthorized(operator, msg.sender);
 
         operators[operator].coverageThreshold = coverageThreshold;
     }

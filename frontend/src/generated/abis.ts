@@ -358,6 +358,17 @@ export const iCoverageProviderAbi = [
     {
         type: "function",
         inputs: [{ name: "claimId", internalType: "uint256", type: "uint256" }],
+        name: "captureRewards",
+        outputs: [
+            { name: "amount", internalType: "uint256", type: "uint256" },
+            { name: "duration", internalType: "uint32", type: "uint32" },
+            { name: "distributionStartTime", internalType: "uint32", type: "uint32" },
+        ],
+        stateMutability: "nonpayable",
+    },
+    {
+        type: "function",
+        inputs: [{ name: "claimId", internalType: "uint256", type: "uint256" }],
         name: "claim",
         outputs: [
             {
@@ -832,7 +843,10 @@ export const iCoverageProviderAbi = [
     },
     {
         type: "error",
-        inputs: [{ name: "deficit", internalType: "uint256", type: "uint256" }],
+        inputs: [
+            { name: "deficit", internalType: "uint256", type: "uint256" },
+            { name: "coveragePercentage", internalType: "uint16", type: "uint16" },
+        ],
         name: "InsufficientCoverageAvailable",
     },
     {
@@ -842,6 +856,11 @@ export const iCoverageProviderAbi = [
             { name: "reward", internalType: "uint256", type: "uint256" },
         ],
         name: "InsufficientReward",
+    },
+    {
+        type: "error",
+        inputs: [{ name: "deficit", internalType: "uint256", type: "uint256" }],
+        name: "InsufficientSlashableCoverageAvailable",
     },
     {
         type: "error",
@@ -1051,17 +1070,6 @@ export const iEigenOperatorProxyAbi = [
 export const iEigenServiceManagerAbi = [
     {
         type: "function",
-        inputs: [{ name: "claimId", internalType: "uint256", type: "uint256" }],
-        name: "captureRewards",
-        outputs: [
-            { name: "amount", internalType: "uint256", type: "uint256" },
-            { name: "duration", internalType: "uint32", type: "uint32" },
-            { name: "distributionStartTime", internalType: "uint32", type: "uint32" },
-        ],
-        stateMutability: "nonpayable",
-    },
-    {
-        type: "function",
         inputs: [
             { name: "operator", internalType: "address", type: "address" },
             { name: "strategy", internalType: "address", type: "address" },
@@ -1130,6 +1138,13 @@ export const iEigenServiceManagerAbi = [
     },
     {
         type: "function",
+        inputs: [{ name: "operator", internalType: "address", type: "address" }],
+        name: "getCoverageThreshold",
+        outputs: [{ name: "coverageThreshold", internalType: "uint16", type: "uint16" }],
+        stateMutability: "view",
+    },
+    {
+        type: "function",
         inputs: [{ name: "coverageAgent", internalType: "address", type: "address" }],
         name: "getOperatorSetId",
         outputs: [{ name: "operatorSetId", internalType: "uint32", type: "uint32" }],
@@ -1151,6 +1166,16 @@ export const iEigenServiceManagerAbi = [
             { name: "_data", internalType: "bytes", type: "bytes" },
         ],
         name: "registerOperator",
+        outputs: [],
+        stateMutability: "nonpayable",
+    },
+    {
+        type: "function",
+        inputs: [
+            { name: "operator", internalType: "address", type: "address" },
+            { name: "coverageThreshold", internalType: "uint16", type: "uint16" },
+        ],
+        name: "setCoverageThreshold",
         outputs: [],
         stateMutability: "nonpayable",
     },
