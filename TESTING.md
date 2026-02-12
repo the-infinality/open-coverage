@@ -21,11 +21,6 @@ Create a `.env` file in the project root:
 MAINNET_ARCHIVE_RPC=https://eth-mainnet.g.alchemy.com/v2/YOUR_ALCHEMY_KEY
 ```
 
-You can get a free RPC URL from:
-- [Alchemy](https://www.alchemy.com/)
-- [Infura](https://infura.io/)
-- [QuickNode](https://www.quicknode.com/)
-
 ## Configuration Files
 
 The tests rely on configuration files in the `/config` directory:
