@@ -269,6 +269,19 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         assertEq(typeId, 20);
     }
 
+    function test_liquidationThreshold_returnsDefault() public view {
+        uint16 threshold = eigenCoverageProvider.liquidationThreshold();
+        assertEq(threshold, 9000, "Default liquidation threshold should be 9000 (90%)");
+    }
+
+    function test_liquidationThreshold_afterUpdate() public {
+        uint16 newThreshold = 8500;
+        eigenServiceManager.setLiquidationThreshold(newThreshold);
+
+        uint16 threshold = eigenCoverageProvider.liquidationThreshold();
+        assertEq(threshold, newThreshold, "Liquidation threshold should match updated value");
+    }
+
     function test_RevertWhen_claimPosition_insufficientCoverageOnClaim() public {
         _setupwithAllocations();
 

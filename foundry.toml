@@ -46,4 +46,10 @@ exclude_lints = [
     "mixed-case-variable"
 ]
 
+[doc]
+out = "docs/generated"
+homepage = "docs/HOME.md"
+repository = "https://github.com/the-infinality/open-coverage"
+
+
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

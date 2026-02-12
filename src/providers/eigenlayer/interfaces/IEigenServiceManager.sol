@@ -13,6 +13,9 @@ interface IEigenServiceManager {
     error NotOperatorAuthorized(address operator, address handler);
     error NotAllocated(address operator, address strategy, address coverageAgent);
 
+    /// @notice The threshold exceeds the maximum allowed (10000 = 100%).
+    error ThresholdExceedsMax(uint16 maxThreshold, uint16 threshold);
+
     function eigenAddresses() external view returns (EigenAddresses memory);
 
     /// @notice Registers an operator to the AVS, called by the Allocation Manager contract (access control set for the allocation manager).
@@ -98,7 +101,7 @@ interface IEigenServiceManager {
     /// @notice Returns the coverage threshold for an operator
     /// @param operator The operator to get the coverage threshold for
     /// @return coverageThreshold The coverage threshold for the operator
-    function getCoverageThreshold(address operator) external view returns (uint16 coverageThreshold);
+    function coverageThreshold(address operator) external view returns (uint16 coverageThreshold);
 
     /// @notice Sets the liquidation threshold for the coverage provider.
     /// @param threshold The liquidation threshold to set for the coverage provider.

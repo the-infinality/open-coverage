@@ -248,6 +248,7 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
     /// @inheritdoc IEigenServiceManager
     function setLiquidationThreshold(uint16 threshold) external {
         LibDiamond.enforceIsContractOwner();
+        if (threshold > 10000) revert IEigenServiceManager.ThresholdExceedsMax(10000, threshold);
         _liquidationThreshold = threshold;
     }
 
@@ -269,16 +270,17 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
     }
 
     /// @inheritdoc IEigenServiceManager
-    function setCoverageThreshold(address operator, uint16 coverageThreshold) external {
+    function setCoverageThreshold(address operator, uint16 coverageThreshold_) external {
+        if (coverageThreshold_ > 10000) revert IEigenServiceManager.ThresholdExceedsMax(10000, coverageThreshold_);
         if (!_checkOperatorPermissions(
                 operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector
             )) revert IEigenServiceManager.NotOperatorAuthorized(operator, msg.sender);
 
-        operators[operator].coverageThreshold = coverageThreshold;
+        operators[operator].coverageThreshold = coverageThreshold_;
     }
 
     /// @inheritdoc IEigenServiceManager
-    function getCoverageThreshold(address operator) external view returns (uint16 coverageThreshold) {
+    function coverageThreshold(address operator) external view returns (uint16) {
         return operators[operator].coverageThreshold;
     }
 

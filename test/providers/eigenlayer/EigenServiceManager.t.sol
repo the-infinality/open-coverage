@@ -243,13 +243,13 @@ contract EigenServiceManagerTest is EigenTestDeployer {
         );
     }
 
-    // ============ setCoverageThreshold / getCoverageThreshold ============
+    // ============ setCoverageThreshold / coverageThreshold ============
 
-    function test_getCoverageThreshold_defaultAfterRegistration() public {
+    function test_coverageThreshold_defaultAfterRegistration() public {
         uint32[] memory operatorSetIds = new uint32[](0);
         eigenServiceManager.registerOperator(address(operator), address(eigenCoverageDiamond), operatorSetIds, "");
 
-        uint16 threshold = eigenServiceManager.getCoverageThreshold(address(operator));
+        uint16 threshold = eigenServiceManager.coverageThreshold(address(operator));
         assertEq(threshold, 7000, "Default coverage threshold should be 7000 (70%)");
     }
 
@@ -259,7 +259,7 @@ contract EigenServiceManagerTest is EigenTestDeployer {
         uint16 newThreshold = 8500;
         eigenServiceManager.setCoverageThreshold(address(operator), newThreshold);
 
-        uint16 threshold = eigenServiceManager.getCoverageThreshold(address(operator));
+        uint16 threshold = eigenServiceManager.coverageThreshold(address(operator));
         assertEq(threshold, newThreshold, "Coverage threshold should be updated to 8500");
     }
 
@@ -267,33 +267,102 @@ contract EigenServiceManagerTest is EigenTestDeployer {
         _setupwithAllocations();
 
         eigenServiceManager.setCoverageThreshold(address(operator), 5000);
-        assertEq(eigenServiceManager.getCoverageThreshold(address(operator)), 5000);
+        assertEq(eigenServiceManager.coverageThreshold(address(operator)), 5000);
 
         eigenServiceManager.setCoverageThreshold(address(operator), 9000);
-        assertEq(eigenServiceManager.getCoverageThreshold(address(operator)), 9000);
+        assertEq(eigenServiceManager.coverageThreshold(address(operator)), 9000);
     }
 
     function test_setCoverageThreshold_zeroValue() public {
         _setupwithAllocations();
 
         eigenServiceManager.setCoverageThreshold(address(operator), 0);
-        assertEq(eigenServiceManager.getCoverageThreshold(address(operator)), 0, "Coverage threshold should be 0");
+        assertEq(eigenServiceManager.coverageThreshold(address(operator)), 0, "Coverage threshold should be 0");
     }
 
-    function test_setCoverageThreshold_maxValue() public {
+    function test_setCoverageThreshold_maxAllowed() public {
         _setupwithAllocations();
 
-        eigenServiceManager.setCoverageThreshold(address(operator), type(uint16).max);
+        eigenServiceManager.setCoverageThreshold(address(operator), 10000);
         assertEq(
-            eigenServiceManager.getCoverageThreshold(address(operator)),
-            type(uint16).max,
-            "Coverage threshold should be max uint16"
+            eigenServiceManager.coverageThreshold(address(operator)),
+            10000,
+            "Coverage threshold should be 10000 (100%)"
         );
     }
 
-    function test_getCoverageThreshold_unregisteredOperator() public {
+    function test_RevertWhen_setCoverageThreshold_exceedsMax() public {
+        _setupwithAllocations();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IEigenServiceManager.ThresholdExceedsMax.selector,
+                uint16(10000),
+                uint16(10001)
+            )
+        );
+        eigenServiceManager.setCoverageThreshold(address(operator), 10001);
+    }
+
+    function test_coverageThreshold_unregisteredOperator() public {
         address unregistered = makeAddr("unregistered");
-        uint16 threshold = eigenServiceManager.getCoverageThreshold(unregistered);
+        uint16 threshold = eigenServiceManager.coverageThreshold(unregistered);
         assertEq(threshold, 0, "Unregistered operator should have 0 threshold");
+    }
+
+    // ============ setLiquidationThreshold / liquidationThreshold (ICoverageProvider) ============
+
+    function test_liquidationThreshold_returnsDefault() public view {
+        uint16 threshold = eigenCoverageProvider.liquidationThreshold();
+        assertEq(threshold, 9000, "Default liquidation threshold should be 9000 (90%)");
+    }
+
+    function test_setLiquidationThreshold() public {
+        uint16 newThreshold = 8500;
+        eigenServiceManager.setLiquidationThreshold(newThreshold);
+
+        uint16 threshold = eigenCoverageProvider.liquidationThreshold();
+        assertEq(threshold, newThreshold, "Liquidation threshold should match set value");
+    }
+
+    function test_setLiquidationThreshold_updatesValue() public {
+        eigenServiceManager.setLiquidationThreshold(8000);
+        assertEq(eigenCoverageProvider.liquidationThreshold(), 8000);
+
+        eigenServiceManager.setLiquidationThreshold(9500);
+        assertEq(eigenCoverageProvider.liquidationThreshold(), 9500);
+    }
+
+    function test_setLiquidationThreshold_zeroValue() public {
+        eigenServiceManager.setLiquidationThreshold(0);
+        assertEq(eigenCoverageProvider.liquidationThreshold(), 0, "Liquidation threshold should be 0");
+    }
+
+    function test_setLiquidationThreshold_maxAllowed() public {
+        eigenServiceManager.setLiquidationThreshold(10000);
+        assertEq(
+            eigenCoverageProvider.liquidationThreshold(),
+            10000,
+            "Liquidation threshold should be 10000 (100%)"
+        );
+    }
+
+    function test_RevertWhen_setLiquidationThreshold_exceedsMax() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IEigenServiceManager.ThresholdExceedsMax.selector,
+                uint16(10000),
+                uint16(10001)
+            )
+        );
+        eigenServiceManager.setLiquidationThreshold(10001);
+    }
+
+    function test_RevertWhen_setLiquidationThreshold_notOwner() public {
+        address nonOwner = makeAddr("nonOwner");
+
+        vm.prank(nonOwner);
+        vm.expectRevert("LibDiamond: Must be contract owner");
+        eigenServiceManager.setLiquidationThreshold(8500);
     }
 }
