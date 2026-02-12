@@ -6,6 +6,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {TestDeployer} from "test/utils/TestDeployer.sol";
 import {ExampleCoverageAgent} from "src/ExampleCoverageAgent.sol";
 import {ICoverageAgent, ClaimCoverageRequest, Coverage} from "src/interfaces/ICoverageAgent.sol";
+import {ICoverageLiquidatable} from "src/interfaces/ICoverageLiquidatable.sol";
 import {
     ICoverageProvider,
     CoveragePosition,
@@ -16,7 +17,7 @@ import {
 import {IExampleCoverageAgent} from "src/interfaces/IExampleCoverageAgent.sol";
 
 /// @notice Mock Coverage Provider for testing
-contract MockCoverageProvider is ICoverageProvider {
+contract MockCoverageProvider is ICoverageProvider, ICoverageLiquidatable {
     error RewardTransferFailed();
 
     bool public isRegistered;
@@ -200,6 +201,18 @@ contract MockCoverageProvider is ICoverageProvider {
 
     function providerTypeId() external pure override returns (uint256) {
         return 1;
+    }
+
+    function coverageThreshold(bytes32) external pure override returns (uint16) {
+        return 9000;
+    }
+
+    function setCoverageThreshold(bytes32, uint16 threshold) external override {
+        if (threshold > 10000) revert ThresholdExceedsMax(10000, threshold);
+    }
+
+    function setLiquidationThreshold(uint16 threshold) external override {
+        if (threshold > 10000) revert ThresholdExceedsMax(10000, threshold);
     }
 }
 

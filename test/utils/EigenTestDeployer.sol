@@ -28,6 +28,7 @@ import {IEigenOperatorProxy} from "src/providers/eigenlayer/interfaces/IEigenOpe
 import {EigenOperatorProxy} from "src/providers/eigenlayer/EigenOperatorProxy.sol";
 import {IEigenServiceManager} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
 import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
+import {ICoverageLiquidatable} from "src/interfaces/ICoverageLiquidatable.sol";
 import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {ISwapperEngine} from "src/interfaces/ISwapperEngine.sol";
 import {CoveragePosition, CoverageClaimStatus, Refundable} from "src/interfaces/ICoverageProvider.sol";
@@ -58,6 +59,7 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
     address public staker;
     IEigenServiceManager eigenServiceManager;
     ICoverageProvider eigenCoverageProvider;
+    ICoverageLiquidatable eigenCoverageLiquidatable;
     IAssetPriceOracleAndSwapper eigenPriceOracle;
     ISwapperEngine public uniswapV3SwapperEngine;
 
@@ -123,6 +125,7 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
         // *** Eigen test setup (operator, interfaces, oracle, staker) *** //
         eigenServiceManager = IEigenServiceManager(address(eigenCoverageDiamond));
         eigenCoverageProvider = ICoverageProvider(address(eigenCoverageDiamond));
+        eigenCoverageLiquidatable = ICoverageLiquidatable(address(eigenCoverageDiamond));
         eigenPriceOracle = IAssetPriceOracleAndSwapper(address(eigenCoverageDiamond));
 
         operator = IEigenOperatorProxy(
@@ -364,7 +367,7 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
         _stakeAndDelegateToOperator(stakeAmount);
 
         // Raise coverage threshold to allow high utilization claims
-        eigenServiceManager.setCoverageThreshold(address(operator), 9500);
+        eigenCoverageLiquidatable.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 9500);
 
         oldPositionId = _createPositionForOperator(operator, refundable, 365 days);
         newPositionId = _createPositionForOperator(operator, refundable, 365 days);

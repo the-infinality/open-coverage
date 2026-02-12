@@ -103,7 +103,7 @@ contract EigenPermissionsTest is EigenTestDeployer {
         vm.expectRevert(
             abi.encodeWithSelector(IEigenServiceManager.NotOperatorAuthorized.selector, address(operator), unauthorized)
         );
-        eigenServiceManager.setCoverageThreshold(address(operator), 9000);
+        eigenCoverageLiquidatable.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 9000);
     }
 
     function test_RevertWhen_closePosition_notAuthorized() public {

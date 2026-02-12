@@ -22,12 +22,14 @@ import {EigenCoverageStorage, ClaimRewardDistribution} from "../EigenCoverageSto
 import {NotImplemented} from "../Errors.sol";
 import {ISlashCoordinator, SlashCoordinationStatus} from "src/interfaces/ISlashCoordinator.sol";
 import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
+import {ICoverageLiquidatable} from "src/interfaces/ICoverageLiquidatable.sol";
+import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
 
 /// @title EigenCoverageProviderFacet
 /// @author p-dealwis, Infinality
 /// @notice Facet contract implementing ICoverageProvider interface
 /// @dev This contract is designed to be called via delegatecall from EigenCoverageDiamond
-contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
+contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, ICoverageLiquidatable {
     using EnumerableMap for EnumerableMap.AddressToUintMap;
 
     /// @inheritdoc ICoverageProvider
@@ -313,7 +315,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         emit ClaimClosed(claimId);
     }
 
-    /// @inheritdoc ICoverageProvider
+    /// @inheritdoc ICoverageLiquidatable
     function liquidateClaim(uint256 claimId, uint256 positionId) external {
         CoverageClaim storage _claim = claims[claimId];
         CoveragePosition storage oldPosition = positions[_claim.positionId];
@@ -545,6 +547,24 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         return (amount, resolvedDuration, resolvedDistributionStartTime);
     }
 
+    /// @inheritdoc ICoverageLiquidatable
+    function setLiquidationThreshold(uint16 threshold) external {
+        LibDiamond.enforceIsContractOwner();
+        if (threshold > 10000) revert ThresholdExceedsMax(10000, threshold);
+        _liquidationThreshold = threshold;
+    }
+
+    /// @inheritdoc ICoverageLiquidatable
+    function setCoverageThreshold(bytes32 operatorId, uint16 coverageThreshold_) external {
+        address operator = address(uint160(uint256(operatorId)));
+        if (coverageThreshold_ > 10000) revert ThresholdExceedsMax(10000, coverageThreshold_);
+        if (!_checkOperatorPermissions(
+                operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector
+            )) revert IEigenServiceManager.NotOperatorAuthorized(operator, msg.sender);
+
+        operators[operator].coverageThreshold = coverageThreshold_;
+    }
+
     /// ============ Discovery ============
 
     /// @inheritdoc ICoverageProvider
@@ -585,7 +605,12 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         return claimSlashAmounts[claimId];
     }
 
-    /// @inheritdoc ICoverageProvider
+    /// @inheritdoc ICoverageLiquidatable
+    function coverageThreshold(bytes32 operatorId) external view returns (uint16) {
+        return operators[address(uint160(uint256(operatorId)))].coverageThreshold;
+    }
+
+    /// @inheritdoc ICoverageLiquidatable
     function liquidationThreshold() external view returns (uint16 threshold) {
         return _liquidationThreshold;
     }

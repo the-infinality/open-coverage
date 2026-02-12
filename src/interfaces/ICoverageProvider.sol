@@ -83,8 +83,6 @@ interface ICoverageProvider {
     event ClaimReserved(uint256 indexed positionId, uint256 indexed claimId, uint256 amount, uint256 duration);
     /// @notice Emitted when a claim is closed.
     event ClaimClosed(uint256 indexed claimId);
-    /// @notice Emitted when a claim is liquidated.
-    event ClaimLiquidated(uint256 indexed claimId, uint256 indexed oldPositionId, uint256 indexed newPositionId);
     /// @notice Emitted when a claim is slashed.
     event ClaimSlashed(uint256 indexed claimId, uint256 amount);
     /// @notice Emitted when a slash is initiated and pending coordinator approval.
@@ -140,8 +138,6 @@ interface ICoverageProvider {
     error ClaimNotExpired(uint256 claimId, uint256 expiresAt);
     /// @notice The claim has already expired.
     error ClaimExpired(uint256 claimId, uint256 expiredAt);
-    /// @notice The position's coverage percentage meets or exceeds the liquidation threshold.
-    error MeetsLiquidationThreshold(uint16 liquidationThreshold, uint16 coveragePercentage);
     /// @notice The replacement position is the same as the liquidated claim's position.
     error SamePosition(uint256 positionId);
 
@@ -207,12 +203,6 @@ interface ICoverageProvider {
     /// @param claimId The ID of the claim to close.
     function closeClaim(uint256 claimId) external;
 
-    /// @notice Liquidate a coverage claim if it doesn't meet its obligations.
-    /// @dev This should be called by the coverage agent if the coverage position doesn't meet its obligations.
-    /// @param claimId The id of the coverage position to liquidate.
-    /// @param positionId The id of the coverage position to replace the liquidated claim with.
-    function liquidateClaim(uint256 claimId, uint256 positionId) external;
-
     /// @notice Slash on coverage claims.
     /// @dev Can only be called by a coverage agent. Should take a slash coordinator into account if set.
     /// @param claimIds The ids of the coverage claims to slash.
@@ -269,10 +259,6 @@ interface ICoverageProvider {
     /// @param claimId The claim id to get the total slash amount for.
     /// @return slashAmount The total amount slashed for the claim.
     function claimTotalSlashAmount(uint256 claimId) external view returns (uint256 slashAmount);
-
-    /// @notice Get the liquidation threshold for the coverage provider.
-    /// @return threshold The liquidation threshold for the coverage provider.
-    function liquidationThreshold() external view returns (uint16 threshold);
 
     /// @notice Get the ID representing the type of coverage provider
     /// @dev This is similar to a chain ID in blockchain nomenclature.
