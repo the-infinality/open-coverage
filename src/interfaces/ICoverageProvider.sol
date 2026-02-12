@@ -235,9 +235,9 @@ interface ICoverageProvider {
     /// @return slashAmount The total amount slashed for the claim.
     function claimTotalSlashAmount(uint256 claimId) external view returns (uint256 slashAmount);
 
-    // /// @notice Get the liquidation threshold for the coverage provider.
-    // /// @return threshold The liquidation threshold for the coverage provider.
-    // function liquidationThreshold() external view returns (uint16 threshold);
+    /// @notice Get the liquidation threshold for the coverage provider.
+    /// @return threshold The liquidation threshold for the coverage provider.
+    function liquidationThreshold() external view returns (uint16 threshold);
 
     /// @notice Get the ID representing the type of coverage provider
     /// @dev This is similar to a chain ID in blockchain nomenclature.

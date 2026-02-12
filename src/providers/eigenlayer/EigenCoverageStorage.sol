@@ -61,7 +61,7 @@ abstract contract EigenCoverageStorage {
     mapping(uint256 claimId => uint256 amount) public claimSlashAmounts;
 
     /// @notice The liquidity threshold for an operator before their claims can be liquidated by another operator
-    uint16 public liquidationThreshold = 9000;
+    uint16 internal _liquidationThreshold = 9000;
 
     /// @dev Gap for future storage variables (following OpenZeppelin upgradeable pattern)
     uint256[50] private __gap;

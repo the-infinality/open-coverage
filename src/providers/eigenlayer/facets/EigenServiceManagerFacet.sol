@@ -248,7 +248,7 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
     /// @inheritdoc IEigenServiceManager
     function setLiquidationThreshold(uint16 threshold) external {
         LibDiamond.enforceIsContractOwner();
-        liquidationThreshold = threshold;
+        _liquidationThreshold = threshold;
     }
 
     /// @inheritdoc IEigenServiceManager

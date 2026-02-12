@@ -337,8 +337,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         }
 
         (, uint16 coveragePercentage) = positionBacking(_claim.positionId);
-        if (coveragePercentage < liquidationThreshold) {
-            revert MeetsLiquidationThreshold(liquidationThreshold, coveragePercentage);
+        if (coveragePercentage < _liquidationThreshold) {
+            revert MeetsLiquidationThreshold(_liquidationThreshold, coveragePercentage);
         }
 
         // Ensure that the claim's remaining duration does not exceed the new position's expiry, the reward check can be ignored since
@@ -585,10 +585,10 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         return claimSlashAmounts[claimId];
     }
 
-    // /// @inheritdoc ICoverageProvider
-    // function liquidationThreshold() external view returns (uint16 threshold) {
-    //     return liquidationThreshold;
-    // }
+    /// @inheritdoc ICoverageProvider
+    function liquidationThreshold() external view returns (uint16 threshold) {
+        return _liquidationThreshold;
+    }
 
     /// @inheritdoc ICoverageProvider
     function providerTypeId() external pure returns (uint256) {
