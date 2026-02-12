@@ -223,11 +223,12 @@ interface ICoverageProvider {
     /// @return claim The coverage claim.
     function claim(uint256 claimId) external view returns (CoverageClaim memory claim);
 
-    /// @notice Get the total available backing for a claim.
-    /// @dev A negative value indicates a backing deficit, while a positive value means the claim is fully backed.
-    /// @param claimId The claim id to check backing for.
-    /// @return backing The total available backing for the claim (negative = deficit, positive = fully backed).
-    function claimBacking(uint256 claimId) external view returns (int256 backing, uint16 coveragePercentage);
+    /// @notice Get the total available backing for a position.
+    /// @dev A negative value indicates a backing deficit, while a positive value means the position is fully backed.
+    /// @param positionId The position id to check backing for.
+    /// @return backing The total available backing for the position (negative = deficit, positive = fully backed).
+    /// @return coveragePercentage The coverage utilization percentage in basis points (10000 = 100%).
+    function positionBacking(uint256 positionId) external view returns (int256 backing, uint16 coveragePercentage);
 
     /// @notice Get the total amount slashed for a given claim.
     /// @param claimId The claim id to get the total slash amount for.

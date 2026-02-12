@@ -186,7 +186,7 @@ contract MockCoverageProvider is ICoverageProvider {
         return _claims[claimId];
     }
 
-    function claimBacking(uint256) external pure override returns (int256, uint16) {
+    function positionBacking(uint256) external pure override returns (int256, uint16) {
         return (0, 0);
     }
 

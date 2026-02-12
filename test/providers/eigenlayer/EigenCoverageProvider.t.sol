@@ -175,12 +175,12 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         assertEq(claim.reward, 10e6);
         assertEq(claim.positionId, positionId);
 
-        // Verify claim backing and coverage percentage
+        // Verify position backing and coverage percentage
         uint256 totalAllocated = eigenServiceManager.coverageAllocated(
             address(operator), address(_getTestStrategy()), address(coverageAgent)
         );
-        (int256 backing, uint16 coveragePercentage) = eigenCoverageProvider.claimBacking(claimId);
-        assertGt(backing, 0, "Claim should be fully backed after issuance");
+        (int256 backing, uint16 coveragePercentage) = eigenCoverageProvider.positionBacking(positionId);
+        assertGt(backing, 0, "Position should be fully backed after issuance");
         uint256 expectedCoverageBps = (1000e6 * 10000) / totalAllocated;
         assertApproxEqAbs(coveragePercentage, uint16(expectedCoverageBps), 1, "Coverage utilization should match");
     }
@@ -256,9 +256,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         assertEq(claim.reward, reward);
         assertEq(claim.positionId, positionId);
 
-        // Verify claim backing and coverage percentage (utilization = claimAmount/maxCoverage in bps)
-        (int256 backing, uint16 coveragePercentage) = eigenCoverageProvider.claimBacking(claimId);
-        assertGe(backing, 0, "Claim should be fully backed after issuance");
+        // Verify position backing and coverage percentage (utilization = claimAmount/maxCoverage in bps)
+        (int256 backing, uint16 coveragePercentage) = eigenCoverageProvider.positionBacking(positionId);
+        assertGe(backing, 0, "Position should be fully backed after issuance");
         uint256 expectedCoverageBps = (claimAmount * 10000) / maxCoverage;
         assertApproxEqAbs(coveragePercentage, uint16(expectedCoverageBps), 1, "Coverage utilization should match");
     }
@@ -520,9 +520,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 positionId = _setupSlashingPosition(1000e18);
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
 
-        // Verify claim backing before slashing
-        (int256 backingBeforeSlash,) = eigenCoverageProvider.claimBacking(claimId);
-        assertGt(backingBeforeSlash, 0, "Claim should be fully backed before slashing");
+        // Verify position backing before slashing
+        (int256 backingBeforeSlash,) = eigenCoverageProvider.positionBacking(positionId);
+        assertGt(backingBeforeSlash, 0, "Position should be fully backed before slashing");
 
         // Get asset addresses
         address coverageAsset = coverageAgent.asset();
@@ -584,9 +584,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 positionId = _setupSlashingPosition(1000e18);
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
 
-        // Verify claim backing before slashing
-        (int256 backingBeforeSlash,) = eigenCoverageProvider.claimBacking(claimId);
-        assertGt(backingBeforeSlash, 0, "Claim should be fully backed before slashing");
+        // Verify position backing before slashing
+        (int256 backingBeforeSlash,) = eigenCoverageProvider.positionBacking(positionId);
+        assertGt(backingBeforeSlash, 0, "Position should be fully backed before slashing");
 
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 500e6);
 
@@ -616,10 +616,10 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 totalAllocated = eigenServiceManager.coverageAllocated(
             address(operator), address(_getTestStrategy()), address(coverageAgent)
         );
-        (int256 backing1, uint16 coveragePct1) = eigenCoverageProvider.claimBacking(claimId1);
-        (int256 backing2, uint16 coveragePct2) = eigenCoverageProvider.claimBacking(claimId2);
-        assertGt(backing1, 0, "First claim should be fully backed");
-        assertGt(backing2, 0, "Second claim should be fully backed");
+        (int256 backing1, uint16 coveragePct1) = eigenCoverageProvider.positionBacking(positionId);
+        (int256 backing2, uint16 coveragePct2) = eigenCoverageProvider.positionBacking(positionId);
+        assertGt(backing1, 0, "Position should be fully backed (first check)");
+        assertGt(backing2, 0, "Position should be fully backed (second check)");
         uint256 expectedCoveragePct = (1500e6 * 10000) / totalAllocated;
         assertApproxEqAbs(coveragePct1, uint16(expectedCoveragePct), 1, "Coverage % for claim1");
         assertApproxEqAbs(coveragePct2, uint16(expectedCoveragePct), 1, "Coverage % for claim2");
@@ -708,9 +708,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
         uint256 claimId = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
 
-        // Verify claim backing immediately after creation
-        (int256 backingBeforeSlash,) = eigenCoverageProvider.claimBacking(claimId);
-        assertGt(backingBeforeSlash, 0, "Claim should be fully backed immediately after creation");
+        // Verify position backing immediately after creation
+        (int256 backingBeforeSlash,) = eigenCoverageProvider.positionBacking(positionId);
+        assertGt(backingBeforeSlash, 0, "Position should be fully backed immediately after creation");
 
         // Slash immediately after creation (should succeed)
         uint256[] memory claimIds = new uint256[](1);
@@ -915,9 +915,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 positionId = _setupSlashingPosition(1000e18, address(coordinator), Refundable.None);
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
 
-        // Verify claim backing before slashing
-        (int256 backingBeforeSlash,) = eigenCoverageProvider.claimBacking(claimId);
-        assertGt(backingBeforeSlash, 0, "Claim should be fully backed before slashing");
+        // Verify position backing before slashing
+        (int256 backingBeforeSlash,) = eigenCoverageProvider.positionBacking(positionId);
+        assertGt(backingBeforeSlash, 0, "Position should be fully backed before slashing");
 
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1000e6);
 
@@ -1088,9 +1088,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Reserved));
         assertEq(claim.reward, 10e6);
 
-        // Verify claim backing is positive (fully backed even for reservation)
-        (int256 backing,) = eigenCoverageProvider.claimBacking(claimId);
-        assertGt(backing, 0, "Reserved claim should be fully backed");
+        // Verify position backing is positive (fully backed even for reservation)
+        (int256 backing,) = eigenCoverageProvider.positionBacking(positionId);
+        assertGt(backing, 0, "Position should be fully backed");
     }
 
     /// @notice Test that reservations are not allowed when maxReservationTime is 0
@@ -1147,7 +1147,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
 
         // Verify backing after reservation
-        (int256 backingAfterReservation,) = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingAfterReservation,) = eigenCoverageProvider.positionBacking(positionId);
         assertGt(backingAfterReservation, 0, "Reserved claim should be fully backed");
 
         // Approve tokens for the reward
@@ -1166,7 +1166,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         assertEq(claim.duration, 30 days);
 
         // Verify backing after conversion (should remain the same since amount didn't change)
-        (int256 backingAfterConversion,) = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingAfterConversion,) = eigenCoverageProvider.positionBacking(positionId);
         assertEq(
             backingAfterConversion,
             backingAfterReservation,
@@ -1182,7 +1182,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
 
         // Verify backing after reservation
-        (int256 backingAfterReservation,) = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingAfterReservation,) = eigenCoverageProvider.positionBacking(positionId);
         assertGt(backingAfterReservation, 0, "Reserved claim should be fully backed");
 
         // Approve tokens for a smaller reward (pro-rata)
@@ -1198,7 +1198,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         assertEq(claim.duration, 15 days);
 
         // Verify backing increased after partial conversion (released 500e6 of coverage)
-        (int256 backingAfterConversion,) = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingAfterConversion,) = eigenCoverageProvider.positionBacking(positionId);
         assertGt(backingAfterConversion, backingAfterReservation, "Backing should increase after partial conversion");
     }
 
@@ -1262,7 +1262,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.stopPrank();
 
         // Verify backing after reservation
-        (int256 backingBeforeClose,) = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingBeforeClose,) = eigenCoverageProvider.positionBacking(positionId);
         assertGt(backingBeforeClose, 0, "Reserved claim should be fully backed");
 
         // Warp past reservation time
@@ -1305,7 +1305,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
 
         // Verify backing after reservation
-        (int256 backingBeforeClose,) = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingBeforeClose,) = eigenCoverageProvider.positionBacking(positionId);
         assertGt(backingBeforeClose, 0, "Reserved claim should be fully backed");
 
         // Coverage agent can close their own claim even before expiration
@@ -1328,14 +1328,14 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
 
         // Verify backing after reservation
-        (int256 backingAfterReservation,) = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingAfterReservation,) = eigenCoverageProvider.positionBacking(positionId);
         assertGt(backingAfterReservation, 0, "Reserved claim should be fully backed");
 
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
         eigenCoverageProvider.convertReservedClaim(claimId, 1000e6, 30 days, 10e6);
 
         // Verify backing after conversion
-        (int256 backingAfterConversion,) = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingAfterConversion,) = eigenCoverageProvider.positionBacking(positionId);
         assertEq(
             backingAfterConversion,
             backingAfterReservation,
@@ -1359,7 +1359,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 30 days, 10e6, 0);
 
         // Verify backing after issuance
-        (int256 backingBeforeClose,) = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingBeforeClose,) = eigenCoverageProvider.positionBacking(positionId);
         assertGt(backingBeforeClose, 0, "Claim should be fully backed");
 
         // Warp past duration
@@ -1491,10 +1491,10 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         assertEq(claim.duration, 15 days, "Duration should reflect actual coverage time");
     }
 
-    // ============ Claim Backing Tests ============
+    // ============ Position Backing Tests ============
 
     /// @notice Test that backing decreases as multiple claims consume coverage
-    function test_claimBacking_decreasesWithMultipleClaims() public {
+    function test_positionBacking_decreasesWithMultipleClaims() public {
         deal(rETH, staker, 2000e18);
         uint256 positionId = _setupSlashingPosition(2000e18);
 
@@ -1508,14 +1508,14 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         // Issue first claim
         uint256 claimId1 = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
-        (int256 backing1, uint16 coveragePct1) = eigenCoverageProvider.claimBacking(claimId1);
+        (int256 backing1, uint16 coveragePct1) = eigenCoverageProvider.positionBacking(positionId);
         assertGt(backing1, 0, "First claim should be fully backed");
         uint256 expectedPct1 = (1000e6 * 10000) / totalAllocated;
         assertApproxEqAbs(coveragePct1, uint16(expectedPct1), 1, "Coverage % after first claim");
 
         // Issue second claim - backing should decrease
         uint256 claimId2 = eigenCoverageProvider.issueClaim(positionId, 500e6, 30 days, 5e6);
-        (int256 backing2, uint16 coveragePct2) = eigenCoverageProvider.claimBacking(claimId2);
+        (int256 backing2, uint16 coveragePct2) = eigenCoverageProvider.positionBacking(positionId);
         assertGt(backing2, 0, "Second claim should still be backed");
         assertLt(backing2, backing1, "Backing should decrease with more claims");
         uint256 expectedPct2 = (1500e6 * 10000) / totalAllocated;
@@ -1523,7 +1523,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         // Issue third claim - further decrease
         uint256 claimId3 = eigenCoverageProvider.issueClaim(positionId, 500e6, 30 days, 5e6);
-        (int256 backing3, uint16 coveragePct3) = eigenCoverageProvider.claimBacking(claimId3);
+        (int256 backing3, uint16 coveragePct3) = eigenCoverageProvider.positionBacking(positionId);
         assertGt(backing3, 0, "Third claim should still be backed");
         assertLt(backing3, backing2, "Backing should continue decreasing");
         uint256 expectedPct3 = (2000e6 * 10000) / totalAllocated;
@@ -1540,7 +1540,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
     }
 
     /// @notice Test that claiming at exactly the coverage threshold succeeds and has positive backing
-    function test_claimBacking_atCoverageThreshold() public {
+    function test_positionBacking_atCoverageThreshold() public {
         _setupwithAllocations();
 
         // Get allocated coverage amount
@@ -1583,7 +1583,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.stopPrank();
 
         // Backing should be positive (30% buffer remaining)
-        (int256 backing, uint16 coveragePercentage) = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backing, uint16 coveragePercentage) = eigenCoverageProvider.positionBacking(positionId);
         assertGt(backing, 0, "Backing should be positive at the coverage threshold");
         assertApproxEqAbs(coveragePercentage, 7000, 1, "Coverage utilization should be ~70% (7000 bps)");
         // forge-lint: disable-next-line(unsafe-typecast)
@@ -1616,7 +1616,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
     }
 
     /// @notice Test backing increases when claims are closed
-    function test_claimBacking_increasesWhenClaimsClosed() public {
+    function test_positionBacking_increasesWhenClaimsClosed() public {
         deal(rETH, staker, 2000e18);
         uint256 positionId = _setupSlashingPosition(2000e18);
 
@@ -1631,7 +1631,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId1 = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
         uint256 claimId2 = eigenCoverageProvider.issueClaim(positionId, 500e6, 30 days, 5e6);
 
-        (int256 backingWithBothClaims, uint16 coveragePctWithBoth) = eigenCoverageProvider.claimBacking(claimId1);
+        (int256 backingWithBothClaims, uint16 coveragePctWithBoth) = eigenCoverageProvider.positionBacking(positionId);
         uint256 expectedPctBoth = (1500e6 * 10000) / totalAllocated;
         assertApproxEqAbs(coveragePctWithBoth, uint16(expectedPctBoth), 1, "Coverage % with both claims");
 
@@ -1639,7 +1639,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         eigenCoverageProvider.closeClaim(claimId2);
 
         // Backing should increase for remaining claims
-        (int256 backingAfterClose, uint16 coveragePctAfterClose) = eigenCoverageProvider.claimBacking(claimId1);
+        (int256 backingAfterClose, uint16 coveragePctAfterClose) = eigenCoverageProvider.positionBacking(positionId);
         assertGt(backingAfterClose, backingWithBothClaims, "Backing should increase when claims are closed");
         assertEq(backingAfterClose, backingWithBothClaims + 500e6, "Backing should increase by closed claim amount");
         uint256 expectedPctAfterClose = (1000e6 * 10000) / totalAllocated;
@@ -1648,7 +1648,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
     }
 
     /// @notice Test that InsufficientCoverageAvailable error includes correct deficit amount and coverage percentage
-    function test_RevertWhen_claimBacking_insufficientCoverage_correctDeficit() public {
+    function test_RevertWhen_positionBacking_insufficientCoverage_correctDeficit() public {
         _setupwithAllocations();
 
         // Stake a small amount to get limited coverage
@@ -1690,7 +1690,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
     }
 
     /// @notice Test that backing becomes deficient (negative) when operator deallocates after claim is issued
-    function test_claimBacking_deficientAfterDeallocation() public {
+    function test_positionBacking_deficientAfterDeallocation() public {
         deal(rETH, staker, 2000e18);
         uint256 positionId = _setupSlashingPosition(2000e18);
 
@@ -1708,11 +1708,13 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId = eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, 10e6);
         vm.stopPrank();
 
-        // Verify claim is initially backed and coverage % matches
-        (int256 backingBefore, uint16 coveragePctBefore) = eigenCoverageProvider.claimBacking(claimId);
-        assertGt(backingBefore, 0, "Claim should be backed initially");
-        uint256 expectedPctBefore = (claimAmount * 10000) / initialAllocated;
-        assertApproxEqAbs(coveragePctBefore, uint16(expectedPctBefore), 1, "Initial coverage %");
+        // Verify position is initially backed and coverage % matches
+        {
+            (int256 backingBefore, uint16 coveragePctBefore) = eigenCoverageProvider.positionBacking(positionId);
+            assertGt(backingBefore, 0, "Position should be backed initially");
+            uint256 expectedPctBefore = (claimAmount * 10000) / initialAllocated;
+            assertApproxEqAbs(coveragePctBefore, uint16(expectedPctBefore), 1, "Initial coverage %");
+        }
 
         // Operator deallocates all coverage (sets magnitude to 0)
         address[] memory strategyAddresses = new address[](1);
@@ -1740,7 +1742,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         assertEq(allocatedAfterDeallocation, 0, "Allocation should be zero after deallocation");
 
         // Now backing should be negative (deficient); allocation is 0 so coverage % is type(uint16).max
-        (int256 backingAfter, uint16 coveragePctAfter) = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingAfter, uint16 coveragePctAfter) = eigenCoverageProvider.positionBacking(positionId);
         assertLt(backingAfter, 0, "Backing should be negative (deficient) after deallocation");
         assertEq(coveragePctAfter, type(uint16).max, "Coverage % should be max when allocation is zero");
         // forge-lint: disable-next-line(unsafe-typecast)
@@ -1748,7 +1750,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
     }
 
     /// @notice Test that backing becomes partially deficient after partial deallocation
-    function test_claimBacking_partialDeficitAfterPartialDeallocation() public {
+    function test_positionBacking_partialDeficitAfterPartialDeallocation() public {
         deal(rETH, staker, 2000e18);
         uint256 positionId = _setupSlashingPosition(2000e18);
 
@@ -1771,10 +1773,12 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId = eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, minReward);
         vm.stopPrank();
 
-        // Verify claim is initially backed (60% utilization = 6000 bps)
-        (int256 backingBefore, uint16 coveragePctBefore) = eigenCoverageProvider.claimBacking(claimId);
-        assertGt(backingBefore, 0, "Claim should be backed initially");
-        assertApproxEqAbs(coveragePctBefore, 6000, 1, "Initial coverage % should be 60%");
+        // Verify position is initially backed (60% utilization = 6000 bps)
+        {
+            (int256 backingBefore, uint16 coveragePctBefore) = eigenCoverageProvider.positionBacking(positionId);
+            assertGt(backingBefore, 0, "Position should be backed initially");
+            assertApproxEqAbs(coveragePctBefore, 6000, 1, "Initial coverage % should be 60%");
+        }
 
         // Operator partially deallocates (reduces magnitude to 50%)
         address[] memory strategyAddresses = new address[](1);
@@ -1805,7 +1809,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         // After 50% deallocation: allocation is ~50% of initial, claim is 60% of initial
         // So claim (60%) > allocation (50%), resulting in a deficit; utilization > 100% (> 10000 bps)
-        (int256 backingAfter, uint16 coveragePctAfter) = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingAfter, uint16 coveragePctAfter) = eigenCoverageProvider.positionBacking(positionId);
         assertGt(coveragePctAfter, 10000, "Coverage % should exceed 100% when deficient");
 
         // Backing should be negative (deficient)
@@ -1817,7 +1821,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
     }
 
     /// @notice Test that backing remains positive after partial deallocation when claim is small
-    function test_claimBacking_remainsPositiveAfterPartialDeallocation() public {
+    function test_positionBacking_remainsPositiveAfterPartialDeallocation() public {
         deal(rETH, staker, 2000e18);
         uint256 positionId = _setupSlashingPosition(2000e18);
 
@@ -1839,10 +1843,12 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId = eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, minReward);
         vm.stopPrank();
 
-        // Verify claim is initially backed (25% utilization = 2500 bps)
-        (int256 backingBefore, uint16 coveragePctBefore) = eigenCoverageProvider.claimBacking(claimId);
-        assertGt(backingBefore, 0, "Claim should be backed initially");
-        assertApproxEqAbs(coveragePctBefore, 2500, 1, "Initial coverage % should be 25%");
+        // Verify position is initially backed (25% utilization = 2500 bps)
+        {
+            (int256 backingBefore, uint16 coveragePctBefore) = eigenCoverageProvider.positionBacking(positionId);
+            assertGt(backingBefore, 0, "Position should be backed initially");
+            assertApproxEqAbs(coveragePctBefore, 2500, 1, "Initial coverage % should be 25%");
+        }
 
         // Operator partially deallocates (reduces magnitude to 50%)
         address[] memory strategyAddresses = new address[](1);
@@ -1870,7 +1876,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         // After 50% deallocation: allocation is ~50% of initial, claim is 25% of initial
         // So allocation (50%) > claim (25%), backing remains positive; utilization ~50% (5000 bps)
-        (int256 backingAfter, uint16 coveragePctAfter) = eigenCoverageProvider.claimBacking(claimId);
+        (int256 backingAfter, uint16 coveragePctAfter) = eigenCoverageProvider.positionBacking(positionId);
         uint256 expectedPctAfter = (claimAmount * 10000) / allocatedAfterDeallocation;
         assertApproxEqAbs(coveragePctAfter, uint16(expectedPctAfter), 1, "Coverage % after partial deallocation");
 
@@ -2748,7 +2754,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId = eigenCoverageProvider.issueClaim(oldPositionId, claimAmount, 30 days, reward);
         vm.stopPrank();
 
-        (, uint16 coveragePercentage) = eigenCoverageProvider.claimBacking(claimId);
+        (, uint16 coveragePercentage) = eigenCoverageProvider.positionBacking(oldPositionId);
         assertTrue(coveragePercentage < 9000, "Coverage should be below liquidation threshold");
 
         vm.expectRevert(

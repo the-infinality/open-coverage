@@ -99,7 +99,7 @@ library EigenFacetsDeployer {
         selectors[12] = ICoverageProvider.position.selector;
         selectors[13] = ICoverageProvider.positionMaxAmount.selector;
         selectors[14] = ICoverageProvider.claim.selector;
-        selectors[15] = ICoverageProvider.claimBacking.selector;
+        selectors[15] = ICoverageProvider.positionBacking.selector;
         selectors[16] = ICoverageProvider.providerTypeId.selector;
         selectors[17] = ICoverageProvider.claimTotalSlashAmount.selector;
     }

@@ -336,7 +336,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
             revert ClaimExpired(claimId, _claim.createdAt + _claim.duration);
         }
 
-        (, uint16 coveragePercentage) = claimBacking(claimId);
+        (, uint16 coveragePercentage) = positionBacking(_claim.positionId);
         if (coveragePercentage < liquidationThreshold) {
             revert MeetsLiquidationThreshold(liquidationThreshold, coveragePercentage);
         }
@@ -572,8 +572,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     }
 
     /// @inheritdoc ICoverageProvider
-    function claimBacking(uint256 claimId) public view returns (int256 backing, uint16 coveragePercentage) {
-        CoveragePosition memory _position = positions[claims[claimId].positionId];
+    function positionBacking(uint256 positionId) public view returns (int256 backing, uint16 coveragePercentage) {
+        CoveragePosition memory _position = positions[positionId];
         address operator = address(uint160(uint256(_position.operatorId)));
         address strategy = assetToStrategy[_position.asset];
         (backing, coveragePercentage) = _coverageBackingAmount(operator, strategy, _position.coverageAgent);

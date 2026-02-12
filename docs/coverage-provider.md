@@ -234,12 +234,12 @@ Returns the coverage claim for a given claim id.
 function claim(uint256 claimId) external view returns (CoverageClaim memory claim);
 ```
 
-#### claimBacking
+#### positionBacking
 
-Returns the total available backing for a claim. A negative value indicates a backing deficit, while a positive value means the claim is fully backed.
+Returns the total available backing for a position. A negative value indicates a backing deficit, while a positive value means the position is fully backed.
 
 ```solidity
-function claimBacking(uint256 claimId) external view returns (int256 backing);
+function positionBacking(uint256 positionId) external view returns (int256 backing, uint16 coveragePercentage);
 ```
 
 #### claimTotalSlashAmount
