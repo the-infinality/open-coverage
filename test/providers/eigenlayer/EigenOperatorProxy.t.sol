@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {EigenTestDeployer} from "../utils/EigenTestDeployer.sol";
+import {EigenTestDeployer} from "../../utils/EigenTestDeployer.sol";
 import {EigenOperatorProxy} from "src/providers/eigenlayer/EigenOperatorProxy.sol";
 import {IEigenOperatorProxy} from "src/providers/eigenlayer/interfaces/IEigenOperatorProxy.sol";
 import {IEigenServiceManager} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
@@ -18,7 +18,6 @@ import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
 /// @dev Tests constructor, access control, registration, allocation, and metadata functionality
 contract EigenOperatorProxyTest is EigenTestDeployer {
     IEigenOperatorProxy public operatorProxy;
-    IEigenServiceManager public eigenServiceManager;
     address public handler;
     address public nonHandler;
 
@@ -28,9 +27,7 @@ contract EigenOperatorProxyTest is EigenTestDeployer {
         handler = address(this);
         nonHandler = makeAddr("nonHandler");
 
-        eigenServiceManager = IEigenServiceManager(address(eigenCoverageDiamond));
-
-        // Deploy the operator proxy
+        // Deploy the operator proxy (base deployer already set eigenServiceManager)
         operatorProxy = IEigenOperatorProxy(
             address(new EigenOperatorProxy(eigenServiceManager.eigenAddresses(), handler, "https://operator.meta/uri"))
         );
@@ -39,11 +36,7 @@ contract EigenOperatorProxyTest is EigenTestDeployer {
         IPermissionController(eigenServiceManager.eigenAddresses().permissionController)
             .acceptAdmin(address(operatorProxy));
 
-        // Whitelist the test strategy for allocations
-        eigenServiceManager.setStrategyWhitelist(address(_getTestStrategy()), true);
-
-        // Register coverage agent with the service manager
-        coverageAgent.registerCoverageProvider(address(eigenCoverageDiamond));
+        // Test strategy and coverage provider are already set up by EigenTestDeployer.setUp()
     }
 
     // ============ Constructor Tests ============
