@@ -30,16 +30,26 @@ struct Coverage {
 /// @author p-dealwis, Infinality
 /// @notice An interface for a coverage agent.
 interface ICoverageAgent {
+    /// @notice Emitted when a coverage provider is registered.
     event CoverageProviderRegistered(address indexed coverageProvider);
+    /// @notice Emitted when coverage is purchased or a reservation is converted.
     event CoverageClaimed(uint256 indexed coverageId);
+    /// @notice Emitted when coverage is reserved.
     event CoverageReserved(uint256 indexed coverageId);
+    /// @notice Emitted when coverage is slashed.
     event CoverageSlashed(uint256 indexed coverageId);
+    /// @notice Emitted when slashed coverage is fully repaid.
     event CoverageRepaid(uint256 indexed coverageId);
+    /// @notice Emitted when the agent's metadata URI is updated.
     event MetadataUpdated(string metadataUri);
 
+    /// @notice The given coverage id does not exist.
     error InvalidCoverage(uint256 coverageId);
+    /// @notice The caller or specified address is not a registered coverage provider.
     error CoverageProviderNotRegistered();
+    /// @notice The coverage id does not correspond to a reservation.
     error CoverageNotReservation(uint256 coverageId);
+    /// @notice The reservation has already been converted to issued coverage.
     error CoverageAlreadyConverted(uint256 coverageId);
 
     /// ============ Coverage Providers ============
