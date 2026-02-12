@@ -6,7 +6,7 @@ import {
     iEigenServiceManagerAbi,
     iAssetPriceOracleAndSwapperAbi,
     iEigenOperatorProxyAbi,
-    iDiamondOwnerAbi,
+    ierc173Abi,
     iExampleCoverageAgentAbi,
 } from "@/generated/abis"
 import type { InterfaceName } from "@/lib/interface-ids"
@@ -21,7 +21,7 @@ const INTERFACE_ABIS: Record<InterfaceName, Abi> = {
     IEigenServiceManager: iEigenServiceManagerAbi as Abi,
     IAssetPriceOracleAndSwapper: iAssetPriceOracleAndSwapperAbi as Abi,
     ICoverageProvider: iCoverageProviderAbi as Abi,
-    IDiamondOwner: iDiamondOwnerAbi as Abi,
+    IERC173: ierc173Abi as Abi,
     IExampleCoverageAgent: iExampleCoverageAgentAbi as Abi,
     ICoverageAgent: iCoverageAgentAbi as Abi,
     IEigenOperatorProxy: iEigenOperatorProxyAbi as Abi,

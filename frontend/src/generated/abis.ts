@@ -493,6 +493,13 @@ export const iCoverageProviderAbi = [
     {
         type: "function",
         inputs: [],
+        name: "liquidationThreshold",
+        outputs: [{ name: "threshold", internalType: "uint16", type: "uint16" }],
+        stateMutability: "view",
+    },
+    {
+        type: "function",
+        inputs: [],
         name: "onIsRegistered",
         outputs: [],
         stateMutability: "nonpayable",
@@ -983,6 +990,46 @@ export const iCoverageProviderAbi = [
         name: "TimestampInvalid",
     },
     { type: "error", inputs: [], name: "ZeroAmount" },
+] as const
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// IERC173
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+export const ierc173Abi = [
+    {
+        type: "function",
+        inputs: [],
+        name: "owner",
+        outputs: [{ name: "owner_", internalType: "address", type: "address" }],
+        stateMutability: "view",
+    },
+    {
+        type: "function",
+        inputs: [{ name: "_newOwner", internalType: "address", type: "address" }],
+        name: "transferOwnership",
+        outputs: [],
+        stateMutability: "nonpayable",
+    },
+    {
+        type: "event",
+        anonymous: false,
+        inputs: [
+            {
+                name: "previousOwner",
+                internalType: "address",
+                type: "address",
+                indexed: true,
+            },
+            {
+                name: "newOwner",
+                internalType: "address",
+                type: "address",
+                indexed: true,
+            },
+        ],
+        name: "OwnershipTransferred",
+    },
 ] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
