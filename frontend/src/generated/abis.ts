@@ -482,23 +482,6 @@ export const iCoverageProviderAbi = [
     },
     {
         type: "function",
-        inputs: [
-            { name: "claimId", internalType: "uint256", type: "uint256" },
-            { name: "positionId", internalType: "uint256", type: "uint256" },
-        ],
-        name: "liquidateClaim",
-        outputs: [],
-        stateMutability: "nonpayable",
-    },
-    {
-        type: "function",
-        inputs: [],
-        name: "liquidationThreshold",
-        outputs: [{ name: "threshold", internalType: "uint16", type: "uint16" }],
-        stateMutability: "view",
-    },
-    {
-        type: "function",
         inputs: [],
         name: "onIsRegistered",
         outputs: [],
@@ -645,31 +628,6 @@ export const iCoverageProviderAbi = [
             },
         ],
         name: "ClaimIssued",
-    },
-    {
-        type: "event",
-        anonymous: false,
-        inputs: [
-            {
-                name: "claimId",
-                internalType: "uint256",
-                type: "uint256",
-                indexed: true,
-            },
-            {
-                name: "oldPositionId",
-                internalType: "uint256",
-                type: "uint256",
-                indexed: true,
-            },
-            {
-                name: "newPositionId",
-                internalType: "uint256",
-                type: "uint256",
-                indexed: true,
-            },
-        ],
-        name: "ClaimLiquidated",
     },
     {
         type: "event",
@@ -922,14 +880,6 @@ export const iCoverageProviderAbi = [
             { name: "providedAsset", internalType: "address", type: "address" },
         ],
         name: "InvalidCoverageAsset",
-    },
-    {
-        type: "error",
-        inputs: [
-            { name: "liquidationThreshold", internalType: "uint16", type: "uint16" },
-            { name: "coveragePercentage", internalType: "uint16", type: "uint16" },
-        ],
-        name: "MeetsLiquidationThreshold",
     },
     {
         type: "error",
@@ -1219,13 +1169,6 @@ export const iEigenServiceManagerAbi = [
     },
     {
         type: "function",
-        inputs: [{ name: "operator", internalType: "address", type: "address" }],
-        name: "getCoverageThreshold",
-        outputs: [{ name: "coverageThreshold", internalType: "uint16", type: "uint16" }],
-        stateMutability: "view",
-    },
-    {
-        type: "function",
         inputs: [{ name: "coverageAgent", internalType: "address", type: "address" }],
         name: "getOperatorSetId",
         outputs: [{ name: "operatorSetId", internalType: "uint32", type: "uint32" }],
@@ -1247,23 +1190,6 @@ export const iEigenServiceManagerAbi = [
             { name: "_data", internalType: "bytes", type: "bytes" },
         ],
         name: "registerOperator",
-        outputs: [],
-        stateMutability: "nonpayable",
-    },
-    {
-        type: "function",
-        inputs: [
-            { name: "operator", internalType: "address", type: "address" },
-            { name: "coverageThreshold", internalType: "uint16", type: "uint16" },
-        ],
-        name: "setCoverageThreshold",
-        outputs: [],
-        stateMutability: "nonpayable",
-    },
-    {
-        type: "function",
-        inputs: [{ name: "threshold", internalType: "uint16", type: "uint16" }],
-        name: "setLiquidationThreshold",
         outputs: [],
         stateMutability: "nonpayable",
     },
@@ -1352,6 +1278,14 @@ export const iEigenServiceManagerAbi = [
         type: "error",
         inputs: [{ name: "asset", internalType: "address", type: "address" }],
         name: "StrategyAssetAlreadyRegistered",
+    },
+    {
+        type: "error",
+        inputs: [
+            { name: "maxThreshold", internalType: "uint16", type: "uint16" },
+            { name: "threshold", internalType: "uint16", type: "uint16" },
+        ],
+        name: "ThresholdExceedsMax",
     },
 ] as const
 
