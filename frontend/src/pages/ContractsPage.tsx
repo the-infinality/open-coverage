@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, useMemo } from "react"
 import { Link } from "react-router-dom"
-import { FileCode, Download, Upload } from "lucide-react"
+import { FileCode, Download, Upload, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -27,7 +27,7 @@ import { ContractTypeFilter } from "@/components/ContractTypeFilter"
 import type { ContractType } from "@/types/contracts"
 
 export function ContractsPage() {
-    const { contracts, exportContracts, importContracts } = useContracts()
+    const { contracts, exportContracts, importContracts, removeContract } = useContracts()
     const fileInputRef = useRef<HTMLInputElement>(null)
     const [isImporting, setIsImporting] = useState(false)
     const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
@@ -37,6 +37,7 @@ export function ContractsPage() {
     const [selectedContractIds, setSelectedContractIds] = useState<Set<string>>(new Set())
     const [selectedChainIds, setSelectedChainIds] = useState<Set<number>>(new Set())
     const [selectedContractTypes, setSelectedContractTypes] = useState<Set<ContractType>>(new Set())
+    const [isRemoveAllDialogOpen, setIsRemoveAllDialogOpen] = useState(false)
 
     // Get unique chain IDs from contracts
     const availableChainIds = useMemo(() => {
@@ -214,6 +215,18 @@ export function ContractsPage() {
         }
     }
 
+    const handleRemoveAllClick = () => {
+        if (filteredContracts.length === 0) return
+        setIsRemoveAllDialogOpen(true)
+    }
+
+    const handleRemoveAllConfirm = () => {
+        const ids = filteredContracts.map((c) => c.id)
+        ids.forEach((id) => removeContract(id))
+        setIsRemoveAllDialogOpen(false)
+        toast.success(`Removed ${ids.length} contract${ids.length > 1 ? "s" : ""}`)
+    }
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between gap-2.5 flex-wrap">
@@ -306,7 +319,7 @@ export function ContractsPage() {
             </Dialog>
 
             {contracts.length > 0 && (
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap justify-start gap-3 items-start">
                     <ChainFilter
                         selectedChainIds={selectedChainIds}
                         onSelectionChange={setSelectedChainIds}
@@ -317,8 +330,40 @@ export function ContractsPage() {
                         onSelectionChange={setSelectedContractTypes}
                         availableTypes={availableContractTypes}
                     />
+                    {filteredContracts.length > 0 && (
+                        <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={handleRemoveAllClick}
+                            className="ml-auto"
+                        >
+                            <Trash2 className="mr-2 size-4" />
+                            Remove All ({filteredContracts.length})
+                        </Button>
+                    )}
                 </div>
             )}
+
+            <Dialog open={isRemoveAllDialogOpen} onOpenChange={setIsRemoveAllDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Remove all visible contracts?</DialogTitle>
+                        <DialogDescription>
+                            This will permanently remove the {filteredContracts.length} contract
+                            {filteredContracts.length > 1 ? "s" : ""} currently shown (after your
+                            filters). This cannot be undone.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsRemoveAllDialogOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button variant="destructive" onClick={handleRemoveAllConfirm}>
+                            Remove All
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
                 <DialogContent className="max-w-2xl">
