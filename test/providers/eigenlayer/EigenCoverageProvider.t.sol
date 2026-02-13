@@ -183,6 +183,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         (int256 backing, uint16 coveragePercentage) = eigenCoverageProvider.positionBacking(positionId);
         assertGt(backing, 0, "Position should be fully backed after issuance");
         uint256 expectedCoverageBps = (1000e6 * 10000) / totalAllocated;
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertApproxEqAbs(coveragePercentage, uint16(expectedCoverageBps), 1, "Coverage utilization should match");
     }
 
@@ -261,6 +262,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         (int256 backing, uint16 coveragePercentage) = eigenCoverageProvider.positionBacking(positionId);
         assertGe(backing, 0, "Position should be fully backed after issuance");
         uint256 expectedCoverageBps = (claimAmount * 10000) / maxCoverage;
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertApproxEqAbs(coveragePercentage, uint16(expectedCoverageBps), 1, "Coverage utilization should match");
     }
 
@@ -438,6 +440,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
 
+        // forge-lint: disable-next-line(unsafe-typecast)
         uint16 coveragePercentage = uint16((claimAmount * 10000) / coverageAllocated);
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -498,7 +501,8 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
 
         uint16 coveragePercentage =
-            coverageAllocated == 0 ? type(uint16).max : uint16((claimAmount * 10000) / coverageAllocated);
+        // forge-lint: disable-next-line(unsafe-typecast)
+        coverageAllocated == 0 ? type(uint16).max : uint16((claimAmount * 10000) / coverageAllocated);
         vm.expectRevert(
             abi.encodeWithSelector(
                 ICoverageProvider.InsufficientCoverageAvailable.selector,
@@ -747,7 +751,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         assertGt(backing1, 0, "Position should be fully backed (first check)");
         assertGt(backing2, 0, "Position should be fully backed (second check)");
         uint256 expectedCoveragePct = (1500e6 * 10000) / totalAllocated;
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertApproxEqAbs(coveragePct1, uint16(expectedCoveragePct), 1, "Coverage % for claim1");
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertApproxEqAbs(coveragePct2, uint16(expectedCoveragePct), 1, "Coverage % for claim2");
 
         uint256[] memory claimIds = new uint256[](2);
@@ -1633,26 +1639,29 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 30e6);
 
         // Issue first claim
-        uint256 claimId1 = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
+        eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
         (int256 backing1, uint16 coveragePct1) = eigenCoverageProvider.positionBacking(positionId);
         assertGt(backing1, 0, "First claim should be fully backed");
         uint256 expectedPct1 = (1000e6 * 10000) / totalAllocated;
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertApproxEqAbs(coveragePct1, uint16(expectedPct1), 1, "Coverage % after first claim");
 
         // Issue second claim - backing should decrease
-        uint256 claimId2 = eigenCoverageProvider.issueClaim(positionId, 500e6, 30 days, 5e6);
+        eigenCoverageProvider.issueClaim(positionId, 500e6, 30 days, 5e6);
         (int256 backing2, uint16 coveragePct2) = eigenCoverageProvider.positionBacking(positionId);
         assertGt(backing2, 0, "Second claim should still be backed");
         assertLt(backing2, backing1, "Backing should decrease with more claims");
         uint256 expectedPct2 = (1500e6 * 10000) / totalAllocated;
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertApproxEqAbs(coveragePct2, uint16(expectedPct2), 1, "Coverage % after second claim");
 
         // Issue third claim - further decrease
-        uint256 claimId3 = eigenCoverageProvider.issueClaim(positionId, 500e6, 30 days, 5e6);
+        eigenCoverageProvider.issueClaim(positionId, 500e6, 30 days, 5e6);
         (int256 backing3, uint16 coveragePct3) = eigenCoverageProvider.positionBacking(positionId);
         assertGt(backing3, 0, "Third claim should still be backed");
         assertLt(backing3, backing2, "Backing should continue decreasing");
         uint256 expectedPct3 = (2000e6 * 10000) / totalAllocated;
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertApproxEqAbs(coveragePct3, uint16(expectedPct3), 1, "Coverage % after third claim");
 
         vm.stopPrank();
@@ -1705,7 +1714,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         // Issue claim for 70% of the allocated amount (at the coverage threshold)
         uint256 claimAmount = (totalAllocated * 70) / 100;
-        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, 10e6);
+        eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, 10e6);
         vm.stopPrank();
 
         // Backing should be positive (30% buffer remaining)
@@ -1754,11 +1763,12 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 20e6);
 
         // Issue two claims
-        uint256 claimId1 = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
+        eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
         uint256 claimId2 = eigenCoverageProvider.issueClaim(positionId, 500e6, 30 days, 5e6);
 
         (int256 backingWithBothClaims, uint16 coveragePctWithBoth) = eigenCoverageProvider.positionBacking(positionId);
         uint256 expectedPctBoth = (1500e6 * 10000) / totalAllocated;
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertApproxEqAbs(coveragePctWithBoth, uint16(expectedPctBoth), 1, "Coverage % with both claims");
 
         // Close the second claim
@@ -1769,6 +1779,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         assertGt(backingAfterClose, backingWithBothClaims, "Backing should increase when claims are closed");
         assertEq(backingAfterClose, backingWithBothClaims + 500e6, "Backing should increase by closed claim amount");
         uint256 expectedPctAfterClose = (1000e6 * 10000) / totalAllocated;
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertApproxEqAbs(coveragePctAfterClose, uint16(expectedPctAfterClose), 1, "Coverage % after closing one");
         vm.stopPrank();
     }
@@ -1805,6 +1816,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         // The deficit should be exactly the amount over the allocation
         uint256 expectedDeficit = excessiveClaimAmount - allocatedCoverage;
+        // forge-lint: disable-next-line(unsafe-typecast)
         uint16 coveragePercentage = uint16((excessiveClaimAmount * 10000) / allocatedCoverage);
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -1831,7 +1843,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         // Issue a claim while fully backed
         uint256 claimAmount = 1000e6;
-        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, 10e6);
+        eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, 10e6);
         vm.stopPrank();
 
         // Verify position is initially backed and coverage % matches
@@ -1839,6 +1851,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
             (int256 backingBefore, uint16 coveragePctBefore) = eigenCoverageProvider.positionBacking(positionId);
             assertGt(backingBefore, 0, "Position should be backed initially");
             uint256 expectedPctBefore = (claimAmount * 10000) / initialAllocated;
+            // forge-lint: disable-next-line(unsafe-typecast)
             assertApproxEqAbs(coveragePctBefore, uint16(expectedPctBefore), 1, "Initial coverage %");
         }
 
@@ -1896,7 +1909,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         deal(coverageAgent.asset(), address(coverageAgent), minReward);
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), minReward);
 
-        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, minReward);
+        eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, minReward);
         vm.stopPrank();
 
         // Verify position is initially backed (60% utilization = 6000 bps)
@@ -1966,7 +1979,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         deal(coverageAgent.asset(), address(coverageAgent), minReward);
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), minReward);
 
-        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, minReward);
+        eigenCoverageProvider.issueClaim(positionId, claimAmount, 30 days, minReward);
         vm.stopPrank();
 
         // Verify position is initially backed (25% utilization = 2500 bps)
@@ -2004,6 +2017,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         // So allocation (50%) > claim (25%), backing remains positive; utilization ~50% (5000 bps)
         (int256 backingAfter, uint16 coveragePctAfter) = eigenCoverageProvider.positionBacking(positionId);
         uint256 expectedPctAfter = (claimAmount * 10000) / allocatedAfterDeallocation;
+        // forge-lint: disable-next-line(unsafe-typecast)
         assertApproxEqAbs(coveragePctAfter, uint16(expectedPctAfter), 1, "Coverage % after partial deallocation");
 
         // Backing should still be positive

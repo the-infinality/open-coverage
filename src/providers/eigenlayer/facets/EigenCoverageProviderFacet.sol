@@ -19,7 +19,6 @@ import {
 import {ICoverageAgent} from "src/interfaces/ICoverageAgent.sol";
 import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {EigenCoverageStorage, ClaimRewardDistribution} from "../EigenCoverageStorage.sol";
-import {NotImplemented} from "../Errors.sol";
 import {ISlashCoordinator, SlashCoordinationStatus} from "src/interfaces/ISlashCoordinator.sol";
 import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
 import {ICoverageLiquidatable} from "src/interfaces/ICoverageLiquidatable.sol";
@@ -673,6 +672,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         (int256 backing, uint16 coveragePercentage) = _coverageBackingAmount(operator, strategy, coverageAgent);
 
         if (coveragePercentage > operators[operator].coverageThreshold || backing < 0) {
+            // forge-lint: disable-next-line(unsafe-typecast)
             revert InsufficientCoverageAvailable(uint256(-backing), coveragePercentage);
         }
     }

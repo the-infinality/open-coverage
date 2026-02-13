@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EigenTestDeployer} from "../../utils/EigenTestDeployer.sol";
 import {EigenAddresses} from "src/providers/eigenlayer/Types.sol";
-import {CoveragePosition, CoverageClaim, CoverageClaimStatus, Refundable} from "src/interfaces/ICoverageProvider.sol";
 import {IEigenServiceManager} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
 import {
     IAllocationManager,

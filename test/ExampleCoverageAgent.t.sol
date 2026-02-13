@@ -207,11 +207,11 @@ contract MockCoverageProvider is ICoverageProvider, ICoverageLiquidatable {
         return 9000;
     }
 
-    function setCoverageThreshold(bytes32, uint16 threshold) external override {
+    function setCoverageThreshold(bytes32, uint16 threshold) external pure override {
         if (threshold > 10000) revert ThresholdExceedsMax(10000, threshold);
     }
 
-    function setLiquidationThreshold(uint16 threshold) external override {
+    function setLiquidationThreshold(uint16 threshold) external pure override {
         if (threshold > 10000) revert ThresholdExceedsMax(10000, threshold);
     }
 }
