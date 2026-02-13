@@ -2,8 +2,8 @@
 
 ## Links
 
-- [Interface](src/interfaces/ICoverageAgent.sol)
-- [Example Implementation](src/ExampleCoverageAgent.sol)
+- [Interface](../src/interfaces/ICoverageAgent.sol)
+- [Example Implementation](../src/ExampleCoverageAgent.sol)
 
 ## Overview
 
