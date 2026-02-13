@@ -1,9 +1,5 @@
 {
   "1": {},
-  "11155111": {
-    "AssetPriceOracleAndSwapperFacet": "0x890Bb28E43EFdB043C0E86a41e9E0c069A85C1ef",
-    "UniswapV3SwapperEngine": "0x37b8f1d33f63242f365dafa353473bdffa85c31b"
-  },
   "31337": {
     "DiamondCutFacet": "0xeC7F4E17BdaEdB6DB576740fB60B925ea0AD5Bbf",
     "DiamondLoupeFacet": "0x4da5667C312C567fE50c8e03f73CD53E59947639",
@@ -11,5 +7,14 @@
     "AssetPriceOracleAndSwapperFacet": "0x1A626B1e8320391956Fd81EdDa5B2a7b4683AA9F",
     "EigenServiceManagerFacet": "0x350273823f14F533dC8F2fCBd8a230dEDCeCF2fd",
     "EigenCoverageProviderFacet": "0x510038dB0f8f4751bff02C51D15e9A080838914B"
+  },
+  "11155111": {
+    "EigenServiceManagerFacet": "0x444fB483d81C3Ddd9603181068f321438b49fD77",
+    "EigenCoverageProviderFacet": "0x0e883B2F4292bF8aF4a04df9Cc9be2f9Ac38658e",
+    "DiamondCutFacet": "0x1B06246d3171E83F1038c0EDb4eA7273F92DD672",
+    "DiamondLoupeFacet": "0x67143d08753a4BecEB218db6035f993CdCD30e0B",
+    "OwnershipFacet": "0x85ABCaCA65c1596e838c54C4a19d6d75AFe01B34",
+    "AssetPriceOracleAndSwapperFacet": "0x2252d7CeC824006ca99fe468d133e106289D3d47",
+    "UniswapV3SwapperEngine": "0x37b8f1d33f63242f365dafa353473bdffa85c31b"
   }
 }
