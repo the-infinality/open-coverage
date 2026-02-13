@@ -22,12 +22,14 @@ import {EigenCoverageStorage, ClaimRewardDistribution} from "../EigenCoverageSto
 import {NotImplemented} from "../Errors.sol";
 import {ISlashCoordinator, SlashCoordinationStatus} from "src/interfaces/ISlashCoordinator.sol";
 import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
+import {ICoverageLiquidatable} from "src/interfaces/ICoverageLiquidatable.sol";
+import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
 
 /// @title EigenCoverageProviderFacet
 /// @author p-dealwis, Infinality
 /// @notice Facet contract implementing ICoverageProvider interface
 /// @dev This contract is designed to be called via delegatecall from EigenCoverageDiamond
-contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
+contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, ICoverageLiquidatable {
     using EnumerableMap for EnumerableMap.AddressToUintMap;
 
     /// @inheritdoc ICoverageProvider
@@ -313,10 +315,71 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         emit ClaimClosed(claimId);
     }
 
-    /// @inheritdoc ICoverageProvider
-    function liquidateClaim(uint256) external pure {
-        //TODO: Implement liquidateClaim
-        revert NotImplemented();
+    /// @inheritdoc ICoverageLiquidatable
+    function liquidateClaim(uint256 claimId, uint256 positionId) external {
+        CoverageClaim storage _claim = claims[claimId];
+        CoveragePosition storage oldPosition = positions[_claim.positionId];
+        CoveragePosition storage newPosition = positions[positionId];
+
+        if (_claim.positionId == positionId) revert SamePosition(positionId);
+        if (oldPosition.coverageAgent != newPosition.coverageAgent) {
+            revert InvalidCoverageAgent(oldPosition.coverageAgent, newPosition.coverageAgent);
+        }
+        if (oldPosition.asset != newPosition.asset) revert InvalidCoverageAsset(oldPosition.asset, newPosition.asset);
+
+        address operator = address(uint160(uint256(newPosition.operatorId)));
+
+        if (!_checkOperatorPermissions(
+                operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector
+            )) revert IEigenServiceManager.NotOperatorAuthorized(operator, msg.sender);
+
+        if (_claim.status != CoverageClaimStatus.Issued) revert InvalidClaim(claimId, _claim.status);
+        if (block.timestamp > _claim.createdAt + _claim.duration) {
+            revert ClaimExpired(claimId, _claim.createdAt + _claim.duration);
+        }
+
+        (, uint16 coveragePercentage) = positionBacking(_claim.positionId);
+        if (coveragePercentage < _liquidationThreshold) {
+            revert MeetsLiquidationThreshold(_liquidationThreshold, coveragePercentage);
+        }
+
+        // Ensure that the claim's remaining duration does not exceed the new position's expiry, the reward check can be ignored since
+        // the operator has designed to take on the new claim via this liquidation process.
+        require(
+            _claim.createdAt + _claim.duration <= newPosition.expiryTimestamp,
+            DurationExceedsExpiry(_claim.createdAt + _claim.duration, newPosition.expiryTimestamp)
+        );
+
+        // Distribute the existing rewards to old operator
+        captureRewards(claimId);
+
+        // Reduce coverage from the previous operator
+        _modifyCoverageForAgent(
+            address(uint160(uint256(oldPosition.operatorId))), // Operator
+            assetToStrategy[oldPosition.asset], // Strategy
+            oldPosition.coverageAgent,
+            -int256(_claim.amount)
+        );
+
+        // Increase coverage for the new operator
+        _modifyCoverageForAgent(
+            operator, // Operator
+            assetToStrategy[newPosition.asset], // Strategy
+            newPosition.coverageAgent,
+            int256(_claim.amount)
+        );
+
+        _checkCoverageForAgent(
+            operator, // Operator
+            assetToStrategy[newPosition.asset], // Strategy
+            newPosition.coverageAgent
+        );
+
+        emit ClaimLiquidated(claimId, _claim.positionId, positionId);
+
+        // Update the claim to the new position and reset the createdAt to the current block timestamp
+        _claim.positionId = positionId;
+        _claim.createdAt = block.timestamp;
     }
 
     /// @inheritdoc ICoverageProvider
@@ -421,6 +484,89 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
             );
     }
 
+    /// ============ Rewards ============
+
+    /// @inheritdoc ICoverageProvider
+    function captureRewards(uint256 claimId)
+        public
+        returns (uint256 amount, uint32 resolvedDuration, uint32 resolvedDistributionStartTime)
+    {
+        CoverageClaim memory _claim = claims[claimId];
+        CoveragePosition memory _position = positions[_claim.positionId];
+        ClaimRewardDistribution memory _claimRewardDistribution = claimRewardDistributions[claimId];
+        address operator = address(uint160(uint256(_position.operatorId)));
+        address strategy = assetToStrategy[_position.asset];
+
+        uint32 distributionStartTime = _claimRewardDistribution.lastDistributedTimestamp;
+
+        // Calculate the amount of time that has elapsed since the last distribution for the claim
+        uint32 elapsedDuration = uint32(
+            _min(block.timestamp - distributionStartTime, _claim.duration + _claim.createdAt - distributionStartTime)
+        );
+
+        if (elapsedDuration == 0) {
+            return (0, 0, distributionStartTime);
+        }
+
+        if (_position.refundable == Refundable.None) {
+            // No refund possible — operator earned the full reward on issuance
+            amount = _claim.reward - _claimRewardDistribution.amount;
+            claimRewardDistributions[claimId].amount += amount;
+            claimRewardDistributions[claimId].lastDistributedTimestamp = uint32(block.timestamp);
+        } else if (_position.refundable == Refundable.TimeWeighted) {
+            uint256 claimableReward =
+                _min(block.timestamp - _claim.createdAt, _claim.duration) * _claim.reward / _claim.duration;
+            amount = claimableReward - _claimRewardDistribution.amount;
+            claimRewardDistributions[claimId].amount += amount;
+            claimRewardDistributions[claimId].lastDistributedTimestamp = uint32(block.timestamp);
+        } else if (_position.refundable == Refundable.Full && _claim.status == CoverageClaimStatus.Completed) {
+            amount = _claim.reward;
+        } else {
+            return (0, 0, distributionStartTime);
+        }
+
+        // Guard against submitting a zero-amount reward (e.g. already fully distributed,
+        // or reward was reduced to 0 after refund on early close)
+        if (amount == 0) {
+            return (0, 0, distributionStartTime);
+        }
+
+        IERC20 coverageAsset = IERC20(ICoverageAgent(_position.coverageAgent).asset());
+
+        (resolvedDistributionStartTime, resolvedDuration) = IEigenServiceManager(address(this))
+            .submitOperatorReward(
+                operator,
+                IStrategy(strategy),
+                coverageAsset,
+                amount,
+                distributionStartTime,
+                elapsedDuration,
+                "Coverage reward"
+            );
+
+        return (amount, resolvedDuration, resolvedDistributionStartTime);
+    }
+
+    /// @inheritdoc ICoverageLiquidatable
+    function setLiquidationThreshold(uint16 threshold) external {
+        LibDiamond.enforceIsContractOwner();
+        if (threshold > 10000) revert ThresholdExceedsMax(10000, threshold);
+        _liquidationThreshold = threshold;
+    }
+
+    /// @inheritdoc ICoverageLiquidatable
+    function setCoverageThreshold(bytes32 operatorId, uint16 coverageThreshold_) external {
+        address operator = address(uint160(uint256(operatorId)));
+        if (coverageThreshold_ > 10000) revert ThresholdExceedsMax(10000, coverageThreshold_);
+        if (!_checkOperatorPermissions(
+                operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector
+            )) revert IEigenServiceManager.NotOperatorAuthorized(operator, msg.sender);
+
+        operators[operator].coverageThreshold = coverageThreshold_;
+    }
+
+    /// ============ Discovery ============
+
     /// @inheritdoc ICoverageProvider
     function position(uint256 positionId) external view returns (CoveragePosition memory) {
         return positions[positionId];
@@ -446,16 +592,27 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     }
 
     /// @inheritdoc ICoverageProvider
-    function claimBacking(uint256 claimId) external view returns (int256 backing) {
-        CoveragePosition memory _position = positions[claims[claimId].positionId];
+    function positionBacking(uint256 positionId) public view returns (int256 backing, uint16 coveragePercentage) {
+        CoveragePosition memory _position = positions[positionId];
         address operator = address(uint160(uint256(_position.operatorId)));
         address strategy = assetToStrategy[_position.asset];
-        return _coverageBackingAmount(operator, strategy, _position.coverageAgent);
+        (backing, coveragePercentage) = _coverageBackingAmount(operator, strategy, _position.coverageAgent);
+        return (backing, coveragePercentage);
     }
 
     /// @inheritdoc ICoverageProvider
     function claimTotalSlashAmount(uint256 claimId) external view returns (uint256 slashAmount) {
         return claimSlashAmounts[claimId];
+    }
+
+    /// @inheritdoc ICoverageLiquidatable
+    function coverageThreshold(bytes32 operatorId) external view returns (uint16) {
+        return operators[address(uint160(uint256(operatorId)))].coverageThreshold;
+    }
+
+    /// @inheritdoc ICoverageLiquidatable
+    function liquidationThreshold() external view returns (uint16 threshold) {
+        return _liquidationThreshold;
     }
 
     /// @inheritdoc ICoverageProvider
@@ -513,12 +670,10 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     /// @notice Checks if the operator has sufficient coverage available for the coverage agent
     /// @dev Reverts only if the operator does not have enough allocated to safely cover the agent.
     function _checkCoverageForAgent(address operator, address strategy, address coverageAgent) private view {
-        int256 backing = _coverageBackingAmount(operator, strategy, coverageAgent);
-        // Check to see if agent has a deficit of coverage (negative backing)
-        if (backing < 0) {
-            // casting to 'uint256' is safe because backing is negative and we are converting it to a positive value
-            // forge-lint: disable-next-line(unsafe-typecast)
-            revert InsufficientCoverageAvailable(uint256(-backing));
+        (int256 backing, uint16 coveragePercentage) = _coverageBackingAmount(operator, strategy, coverageAgent);
+
+        if (coveragePercentage > operators[operator].coverageThreshold || backing < 0) {
+            revert InsufficientCoverageAvailable(uint256(-backing), coveragePercentage);
         }
     }
 
@@ -528,10 +683,11 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     /// @param strategy The strategy address.
     /// @param coverageAgent The coverage agent address.
     /// @return backing The coverage backing (positive = fully backed, negative = deficit).
+    /// @return coveragePercentage The utilization percentage of the operator's allocated coverage where 10000 = 100%.
     function _coverageBackingAmount(address operator, address strategy, address coverageAgent)
         private
         view
-        returns (int256 backing)
+        returns (int256 backing, uint16 coveragePercentage)
     {
         uint256 totalAllocatedCoverage =
             IEigenServiceManager(address(this)).coverageAllocated(operator, strategy, coverageAgent);
@@ -541,6 +697,14 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
         // casting to 'int256' is safe because both won't possibly hold more than 2^256 - 1
         // forge-lint: disable-next-line(unsafe-typecast)
         backing = int256(totalAllocatedCoverage) - int256(totalCoverageByOperator);
+        // Calculate coverage utilization: percentage of allocated coverage being used by claims
+        if (totalAllocatedCoverage == 0) {
+            coveragePercentage = type(uint16).max;
+        } else {
+            // casting to 'uint16' is safe because utilization percentage won't realistically exceed type(uint16).max
+            // forge-lint: disable-next-line(unsafe-typecast)
+            coveragePercentage = uint16((totalCoverageByOperator * 10000) / totalAllocatedCoverage);
+        }
     }
 
     /// @notice Returns the total coverage by an operator for a strategy in the operators asset
@@ -637,5 +801,10 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider {
     function _checkOperatorPermissions(address operator, address target, bytes4 selector) private returns (bool) {
         return
             IPermissionController(_eigenAddresses.permissionController).canCall(operator, msg.sender, target, selector);
+    }
+
+    /// @notice Returns the minimum of two uint256 values
+    function _min(uint256 a, uint256 b) private pure returns (uint256) {
+        return a < b ? a : b;
     }
 }

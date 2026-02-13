@@ -3,7 +3,7 @@ import {
     iEigenServiceManagerAbi,
     iAssetPriceOracleAndSwapperAbi,
     iCoverageProviderAbi,
-    iDiamondOwnerAbi,
+    ierc173Abi,
     iExampleCoverageAgentAbi,
     iCoverageAgentAbi,
     iEigenOperatorProxyAbi,
@@ -34,10 +34,10 @@ export const INTERFACE_IDS = {
     IEigenServiceManager: computeInterfaceId(iEigenServiceManagerAbi),
     IAssetPriceOracleAndSwapper: computeInterfaceId(iAssetPriceOracleAndSwapperAbi),
     ICoverageProvider: computeInterfaceId(iCoverageProviderAbi),
-    IDiamondOwner: computeInterfaceId(iDiamondOwnerAbi),
     IExampleCoverageAgent: computeInterfaceId(iExampleCoverageAgentAbi),
     ICoverageAgent: computeInterfaceId(iCoverageAgentAbi),
     IEigenOperatorProxy: computeInterfaceId(iEigenOperatorProxyAbi),
+    IERC173: computeInterfaceId(ierc173Abi),
 } as const
 
 console.log(INTERFACE_IDS)

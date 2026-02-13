@@ -11,7 +11,9 @@ struct OperatorData {
     /// @dev The key is the strategy providing coverage
     /// @dev The keys of the EnumerableMap is the coverage agent being covered.
     mapping(address => EnumerableMap.AddressToUintMap) coverageStrategies;
-    bool active;
+
+    /// @notice The coverage liquidty threshold for an operator before claims stop being issued
+    uint16 coverageThreshold;
 }
 
 /// @notice Data structure for tracking reward distribution per claim
@@ -57,6 +59,9 @@ abstract contract EigenCoverageStorage {
 
     /// @notice The amount of coverage agent assets to slash for a given claim
     mapping(uint256 claimId => uint256 amount) public claimSlashAmounts;
+
+    /// @notice The liquidity threshold for an operator before their claims can be liquidated by another operator
+    uint16 internal _liquidationThreshold = 9000;
 
     /// @dev Gap for future storage variables (following OpenZeppelin upgradeable pattern)
     uint256[50] private __gap;

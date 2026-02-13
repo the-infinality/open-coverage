@@ -73,37 +73,73 @@ struct CoverageClaim {
 /// @author p-dealwis, Infinality
 /// @notice An interface for a coverage provider that can slash a delegator and distribute rewards.
 interface ICoverageProvider {
+    /// @notice Emitted when a new coverage position is created.
     event PositionCreated(uint256 indexed positionId);
+    /// @notice Emitted when a coverage position is closed.
     event PositionClosed(uint256 indexed positionId);
+    /// @notice Emitted when a coverage claim is issued against a position.
     event ClaimIssued(uint256 indexed positionId, uint256 indexed claimId, uint256 amount, uint256 duration);
+    /// @notice Emitted when coverage is reserved against a position.
     event ClaimReserved(uint256 indexed positionId, uint256 indexed claimId, uint256 amount, uint256 duration);
+    /// @notice Emitted when a claim is closed.
     event ClaimClosed(uint256 indexed claimId);
-    event ClaimLiquidated(uint256 indexed claimId);
+    /// @notice Emitted when a claim is slashed.
     event ClaimSlashed(uint256 indexed claimId, uint256 amount);
+    /// @notice Emitted when a slash is initiated and pending coordinator approval.
     event ClaimSlashPending(uint256 indexed claimId, address slashCoordinator);
+    /// @notice Emitted when a partial repayment is made on a slashed claim.
     event ClaimRepayment(uint256 indexed claimId, uint256 amount);
+    /// @notice Emitted when a slashed claim is fully repaid.
     event ClaimRepaid(uint256 indexed claimId);
+    /// @notice Emitted when the provider's metadata URI is updated.
     event MetadataUpdated(string metadataUri);
 
+    /// @notice The provided amount is zero.
     error ZeroAmount();
+    /// @notice The coverage position has expired.
     error PositionExpired(uint256 positionId, uint256 expiredAt);
+    /// @notice The provided timestamp is invalid.
     error TimestampInvalid(uint256 timestamp);
+    /// @notice The provided minimum rate is invalid.
     error MinRateInvalid(uint16 minRate);
+    /// @notice The caller is not the expected coverage agent.
     error NotCoverageAgent(address caller, address required);
+    /// @notice The provided reward is below the minimum required.
     error InsufficientReward(uint256 minimumReward, uint256 reward);
-    error InsufficientCoverageAvailable(uint256 deficit);
+    /// @notice There is not enough coverage available to fulfil the request.
+    error InsufficientCoverageAvailable(uint256 deficit, uint16 coveragePercentage);
+    /// @notice There is not enough slashable coverage available to fulfil the request.
+    error InsufficientSlashableCoverageAvailable(uint256 deficit);
+    /// @notice The provided coverage agent does not match the required coverage agent for the position.
+    error InvalidCoverageAgent(address requiredCoverageAgent, address providedCoverageAgent);
+    /// @notice The provided coverage asset does not match the required asset for the position.
+    error InvalidCoverageAsset(address requiredAsset, address providedAsset);
+    /// @notice The requested duration exceeds the position's maximum.
     error DurationExceedsMax(uint256 maxDuration, uint256 duration);
+    /// @notice The claim would complete after the position expires.
     error DurationExceedsExpiry(uint256 expiryTimestamp, uint256 completionTimestamp);
+    /// @notice The claim is in an invalid state for the requested operation.
     error InvalidClaim(uint256 claimId, CoverageClaimStatus currentStatus);
+    /// @notice The slash operation failed.
     error SlashFailed(uint256 claimId);
+    /// @notice The slash amount exceeds the claim amount.
     error SlashAmountExceedsClaim(uint256 claimId, uint256 slash, uint256 claim);
+    /// @notice Reservations are not allowed on this position.
     error ReservationNotAllowed(uint256 positionId);
+    /// @notice The reservation has expired.
     error ReservationExpired(uint256 claimId, uint256 expiredAt);
+    /// @notice The requested amount exceeds the reserved amount.
     error AmountExceedsReserved(uint256 claimId, uint256 amount, uint256 reserved);
+    /// @notice The requested duration exceeds the reserved duration.
     error DurationExceedsReserved(uint256 claimId, uint256 duration, uint256 reserved);
+    /// @notice The claim is not in a reserved state.
     error ClaimNotReserved(uint256 claimId);
+    /// @notice The claim has not yet expired.
     error ClaimNotExpired(uint256 claimId, uint256 expiresAt);
+    /// @notice The claim has already expired.
     error ClaimExpired(uint256 claimId, uint256 expiredAt);
+    /// @notice The replacement position is the same as the liquidated claim's position.
+    error SamePosition(uint256 positionId);
 
     /// ============ Hooks ============
 
@@ -167,11 +203,6 @@ interface ICoverageProvider {
     /// @param claimId The ID of the claim to close.
     function closeClaim(uint256 claimId) external;
 
-    /// @notice Liquidate a coverage claim if it doesn't meet its obligations.
-    /// @dev This should be called by the coverage agent if the coverage position doesn't meet its obligations.
-    /// @param claimId The id of the coverage position to liquidate.
-    function liquidateClaim(uint256 claimId) external;
-
     /// @notice Slash on coverage claims.
     /// @dev Can only be called by a coverage agent. Should take a slash coordinator into account if set.
     /// @param claimIds The ids of the coverage claims to slash.
@@ -191,6 +222,15 @@ interface ICoverageProvider {
     /// @param amount The amount of the coverage claim to repay.
     function repaySlashedClaim(uint256 claimId, uint256 amount) external;
 
+    /// ============ Rewards ============
+
+    /// @notice Captures rewards for a given claim based on the refund policy
+    /// @dev Can be called by anyone
+    /// @param claimId The id of the claim to capture rewards for
+    function captureRewards(uint256 claimId)
+        external
+        returns (uint256 amount, uint32 duration, uint32 distributionStartTime);
+
     /// ============ Discovery ============
 
     /// @notice Get the coverage position for a given coverage id.
@@ -208,11 +248,12 @@ interface ICoverageProvider {
     /// @return claim The coverage claim.
     function claim(uint256 claimId) external view returns (CoverageClaim memory claim);
 
-    /// @notice Get the total available backing for a claim.
-    /// @dev A negative value indicates a backing deficit, while a positive value means the claim is fully backed.
-    /// @param claimId The claim id to check backing for.
-    /// @return backing The total available backing for the claim (negative = deficit, positive = fully backed).
-    function claimBacking(uint256 claimId) external view returns (int256 backing);
+    /// @notice Get the total available backing for a position.
+    /// @dev A negative value indicates a backing deficit, while a positive value means the position is fully backed.
+    /// @param positionId The position id to check backing for.
+    /// @return backing The total available backing for the position (negative = deficit, positive = fully backed).
+    /// @return coveragePercentage The coverage utilization percentage in basis points (10000 = 100%).
+    function positionBacking(uint256 positionId) external view returns (int256 backing, uint16 coveragePercentage);
 
     /// @notice Get the total amount slashed for a given claim.
     /// @param claimId The claim id to get the total slash amount for.

@@ -1,3 +1,5 @@
+import { useMemo } from "react"
+import { useAccount } from "wagmi"
 import {
     Select,
     SelectContent,
@@ -6,6 +8,9 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import type { CoverageContract } from "@/types/contracts"
+
+/** Special ID for the "Connected Wallet" option in operator select */
+export const CONNECTED_WALLET_OPERATOR_ID = "connected-wallet"
 
 /**
  * Props for the base ContractSelect component
@@ -77,11 +82,11 @@ type SpecializedSelectProps = Omit<ContractSelectProps, "placeholder" | "emptyMe
 }
 
 /**
- * Dropdown select for choosing an EigenOperatorProxy from a list of contracts
- * Provides sensible defaults for placeholder and empty message
+ * Dropdown select for choosing an EigenOperatorProxy from a list of contracts.
+ * When the wallet is connected, prepends a "Connected Wallet" option with the truncated address.
  */
 export function OperatorProxySelect({
-    placeholder = "Select operator agent...",
+    placeholder = "Select operator",
     emptyMessage = (
         <>
             No operator agents saved on this chain.
@@ -89,9 +94,32 @@ export function OperatorProxySelect({
             Add an EigenOperatorProxy contract first.
         </>
     ),
+    contracts,
     ...props
 }: SpecializedSelectProps) {
-    return <ContractSelect placeholder={placeholder} emptyMessage={emptyMessage} {...props} />
+    const { address: connectedAddress } = useAccount()
+
+    const contractsWithConnectedWallet = useMemo(() => {
+        if (!connectedAddress) return contracts
+        const youContract: CoverageContract = {
+            id: CONNECTED_WALLET_OPERATOR_ID,
+            name: "Connected Wallet",
+            address: connectedAddress,
+            type: "EigenOperatorProxy",
+            chainId: 0,
+            createdAt: 0,
+        }
+        return [youContract, ...contracts]
+    }, [connectedAddress, contracts])
+
+    return (
+        <ContractSelect
+            placeholder={placeholder}
+            emptyMessage={emptyMessage}
+            contracts={contractsWithConnectedWallet}
+            {...props}
+        />
+    )
 }
 
 /**

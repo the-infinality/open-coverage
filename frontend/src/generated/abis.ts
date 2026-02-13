@@ -358,6 +358,17 @@ export const iCoverageProviderAbi = [
     {
         type: "function",
         inputs: [{ name: "claimId", internalType: "uint256", type: "uint256" }],
+        name: "captureRewards",
+        outputs: [
+            { name: "amount", internalType: "uint256", type: "uint256" },
+            { name: "duration", internalType: "uint32", type: "uint32" },
+            { name: "distributionStartTime", internalType: "uint32", type: "uint32" },
+        ],
+        stateMutability: "nonpayable",
+    },
+    {
+        type: "function",
+        inputs: [{ name: "claimId", internalType: "uint256", type: "uint256" }],
         name: "claim",
         outputs: [
             {
@@ -378,13 +389,6 @@ export const iCoverageProviderAbi = [
                 ],
             },
         ],
-        stateMutability: "view",
-    },
-    {
-        type: "function",
-        inputs: [{ name: "claimId", internalType: "uint256", type: "uint256" }],
-        name: "claimBacking",
-        outputs: [{ name: "backing", internalType: "int256", type: "int256" }],
         stateMutability: "view",
     },
     {
@@ -478,13 +482,6 @@ export const iCoverageProviderAbi = [
     },
     {
         type: "function",
-        inputs: [{ name: "claimId", internalType: "uint256", type: "uint256" }],
-        name: "liquidateClaim",
-        outputs: [],
-        stateMutability: "nonpayable",
-    },
-    {
-        type: "function",
         inputs: [],
         name: "onIsRegistered",
         outputs: [],
@@ -523,6 +520,16 @@ export const iCoverageProviderAbi = [
                     { name: "operatorId", internalType: "bytes32", type: "bytes32" },
                 ],
             },
+        ],
+        stateMutability: "view",
+    },
+    {
+        type: "function",
+        inputs: [{ name: "positionId", internalType: "uint256", type: "uint256" }],
+        name: "positionBacking",
+        outputs: [
+            { name: "backing", internalType: "int256", type: "int256" },
+            { name: "coveragePercentage", internalType: "uint16", type: "uint16" },
         ],
         stateMutability: "view",
     },
@@ -621,19 +628,6 @@ export const iCoverageProviderAbi = [
             },
         ],
         name: "ClaimIssued",
-    },
-    {
-        type: "event",
-        anonymous: false,
-        inputs: [
-            {
-                name: "claimId",
-                internalType: "uint256",
-                type: "uint256",
-                indexed: true,
-            },
-        ],
-        name: "ClaimLiquidated",
     },
     {
         type: "event",
@@ -832,7 +826,10 @@ export const iCoverageProviderAbi = [
     },
     {
         type: "error",
-        inputs: [{ name: "deficit", internalType: "uint256", type: "uint256" }],
+        inputs: [
+            { name: "deficit", internalType: "uint256", type: "uint256" },
+            { name: "coveragePercentage", internalType: "uint16", type: "uint16" },
+        ],
         name: "InsufficientCoverageAvailable",
     },
     {
@@ -845,6 +842,11 @@ export const iCoverageProviderAbi = [
     },
     {
         type: "error",
+        inputs: [{ name: "deficit", internalType: "uint256", type: "uint256" }],
+        name: "InsufficientSlashableCoverageAvailable",
+    },
+    {
+        type: "error",
         inputs: [
             { name: "claimId", internalType: "uint256", type: "uint256" },
             {
@@ -854,6 +856,30 @@ export const iCoverageProviderAbi = [
             },
         ],
         name: "InvalidClaim",
+    },
+    {
+        type: "error",
+        inputs: [
+            {
+                name: "requiredCoverageAgent",
+                internalType: "address",
+                type: "address",
+            },
+            {
+                name: "providedCoverageAgent",
+                internalType: "address",
+                type: "address",
+            },
+        ],
+        name: "InvalidCoverageAgent",
+    },
+    {
+        type: "error",
+        inputs: [
+            { name: "requiredAsset", internalType: "address", type: "address" },
+            { name: "providedAsset", internalType: "address", type: "address" },
+        ],
+        name: "InvalidCoverageAsset",
     },
     {
         type: "error",
@@ -891,6 +917,11 @@ export const iCoverageProviderAbi = [
     },
     {
         type: "error",
+        inputs: [{ name: "positionId", internalType: "uint256", type: "uint256" }],
+        name: "SamePosition",
+    },
+    {
+        type: "error",
         inputs: [
             { name: "claimId", internalType: "uint256", type: "uint256" },
             { name: "slash", internalType: "uint256", type: "uint256" },
@@ -912,10 +943,10 @@ export const iCoverageProviderAbi = [
 ] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// IDiamondOwner
+// IERC173
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-export const iDiamondOwnerAbi = [
+export const ierc173Abi = [
     {
         type: "function",
         inputs: [],
@@ -925,10 +956,29 @@ export const iDiamondOwnerAbi = [
     },
     {
         type: "function",
-        inputs: [{ name: "newOwner", internalType: "address", type: "address" }],
-        name: "setOwner",
+        inputs: [{ name: "_newOwner", internalType: "address", type: "address" }],
+        name: "transferOwnership",
         outputs: [],
         stateMutability: "nonpayable",
+    },
+    {
+        type: "event",
+        anonymous: false,
+        inputs: [
+            {
+                name: "previousOwner",
+                internalType: "address",
+                type: "address",
+                indexed: true,
+            },
+            {
+                name: "newOwner",
+                internalType: "address",
+                type: "address",
+                indexed: true,
+            },
+        ],
+        name: "OwnershipTransferred",
     },
 ] as const
 
@@ -1049,17 +1099,6 @@ export const iEigenOperatorProxyAbi = [
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 export const iEigenServiceManagerAbi = [
-    {
-        type: "function",
-        inputs: [{ name: "claimId", internalType: "uint256", type: "uint256" }],
-        name: "captureRewards",
-        outputs: [
-            { name: "amount", internalType: "uint256", type: "uint256" },
-            { name: "duration", internalType: "uint32", type: "uint32" },
-            { name: "distributionStartTime", internalType: "uint32", type: "uint32" },
-        ],
-        stateMutability: "nonpayable",
-    },
     {
         type: "function",
         inputs: [
@@ -1239,6 +1278,14 @@ export const iEigenServiceManagerAbi = [
         type: "error",
         inputs: [{ name: "asset", internalType: "address", type: "address" }],
         name: "StrategyAssetAlreadyRegistered",
+    },
+    {
+        type: "error",
+        inputs: [
+            { name: "maxThreshold", internalType: "uint16", type: "uint16" },
+            { name: "threshold", internalType: "uint16", type: "uint16" },
+        ],
+        name: "ThresholdExceedsMax",
     },
 ] as const
 

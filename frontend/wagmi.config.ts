@@ -16,6 +16,7 @@ export default defineConfig({
                 "IDiamondOwner.sol/IDiamondOwner.json",
                 "IExampleCoverageAgent.sol/IExampleCoverageAgent.json",
                 "IERC165.sol/IERC165.json",
+                "IERC173.sol/IERC173.json",
             ],
         }),
     ],

@@ -1280,18 +1280,11 @@ function CoverageClaimsManagement({
             if (!chainId) return false
 
             try {
-                const [claim, backing, totalSlashAmount] = await Promise.all([
+                const [claim, totalSlashAmount] = await Promise.all([
                     readContract(config, {
                         address: providerAddress as Address,
                         abi: iCoverageProviderAbi,
                         functionName: "claim",
-                        args: [BigInt(claimId)],
-                        chainId,
-                    }),
-                    readContract(config, {
-                        address: providerAddress as Address,
-                        abi: iCoverageProviderAbi,
-                        functionName: "claimBacking",
                         args: [BigInt(claimId)],
                         chainId,
                     }),
@@ -1303,7 +1296,6 @@ function CoverageClaimsManagement({
                         chainId,
                     }),
                 ])
-                console.log(claim, backing)
 
                 const claimData = claim as CoverageClaimData
 
@@ -1311,6 +1303,15 @@ function CoverageClaimsManagement({
                 if (claimData.createdAt === 0n) {
                     return false
                 }
+
+                const [backing] = await readContract(config, {
+                    address: providerAddress as Address,
+                    abi: iCoverageProviderAbi,
+                    functionName: "positionBacking",
+                    args: [claimData.positionId],
+                    chainId,
+                })
+                console.log(claim, backing)
 
                 setLoadedClaims((prev) => {
                     // Check if claim already loaded

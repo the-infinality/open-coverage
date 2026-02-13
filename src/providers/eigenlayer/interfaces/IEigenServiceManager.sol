@@ -13,6 +13,9 @@ interface IEigenServiceManager {
     error NotOperatorAuthorized(address operator, address handler);
     error NotAllocated(address operator, address strategy, address coverageAgent);
 
+    /// @notice The threshold exceeds the maximum allowed (10000 = 100%).
+    error ThresholdExceedsMax(uint16 maxThreshold, uint16 threshold);
+
     function eigenAddresses() external view returns (EigenAddresses memory);
 
     /// @notice Registers an operator to the AVS, called by the Allocation Manager contract (access control set for the allocation manager).
@@ -46,13 +49,6 @@ interface IEigenServiceManager {
         external
         view
         returns (uint256);
-
-    /// @notice Captures rewards for a given claim based on the refund policy
-    /// @dev Can be called by anyone
-    /// @param claimId The id of the claim to capture rewards for
-    function captureRewards(uint256 claimId)
-        external
-        returns (uint256 amount, uint32 duration, uint32 distributionStartTime);
 
     /// @notice Submits an operator-directed reward to the RewardsCoordinator
     /// @dev Can be called by other facets to distribute rewards to operators

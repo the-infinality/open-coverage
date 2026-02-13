@@ -5,19 +5,19 @@ import {IERC20 as EigenIERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.
 import {IERC20} from "@openzeppelin-v5/contracts/token/ERC20/IERC20.sol";
 import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/EnumerableMap.sol";
 import {IAllocationManager, IAllocationManagerTypes} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
+import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermissionController.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
 import {IStrategyManager} from "eigenlayer-contracts/interfaces/IStrategyManager.sol";
 import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
 import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
 import {IRewardsCoordinatorTypes} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
-import {Refundable, CoverageClaimStatus, CoveragePosition} from "src/interfaces/ICoverageProvider.sol";
+import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
 import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
 import {EigenAddresses} from "../Types.sol";
 import {IEigenServiceManager} from "../interfaces/IEigenServiceManager.sol";
-import {CoverageClaim, ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
 import {ICoverageAgent} from "src/interfaces/ICoverageAgent.sol";
 import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
-import {EigenCoverageStorage, ClaimRewardDistribution} from "../EigenCoverageStorage.sol";
+import {EigenCoverageStorage} from "../EigenCoverageStorage.sol";
 import {WAD} from "eigenlayer-contracts/libraries/SlashingLib.sol";
 
 /// @title EigenServiceManagerFacet
@@ -33,9 +33,11 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
     }
 
     /// @inheritdoc IEigenServiceManager
-    function registerOperator(address, address _avs, uint32[] calldata, bytes calldata) external view {
+    function registerOperator(address operator, address _avs, uint32[] calldata, bytes calldata) external {
         require(msg.sender != _eigenAddresses.delegationManager, "Not delegation manager");
         if (_avs != address(this)) revert IEigenServiceManager.InvalidAVS(_avs);
+
+        operators[operator].coverageThreshold = 7000; // Default coverage threshold to 70%
     }
 
     /// @inheritdoc IEigenServiceManager
@@ -83,66 +85,6 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         returns (uint256)
     {
         return _totalAllocatedValueToCoverageAgent(operator, strategy, coverageAgent);
-    }
-
-    /// @inheritdoc IEigenServiceManager
-    function captureRewards(uint256 claimId)
-        external
-        returns (uint256 amount, uint32 resolvedDuration, uint32 resolvedDistributionStartTime)
-    {
-        CoverageClaim memory _claim = claims[claimId];
-        CoveragePosition memory _position = positions[_claim.positionId];
-        ClaimRewardDistribution memory _claimRewardDistribution = claimRewardDistributions[claimId];
-        address operator = address(uint160(uint256(_position.operatorId)));
-        address strategy = assetToStrategy[_position.asset];
-
-        uint32 distributionStartTime = _claimRewardDistribution.lastDistributedTimestamp;
-
-        // Calculate the amount of time that has elapsed since the last distribution for the claim
-        uint32 elapsedDuration = uint32(
-            _min(block.timestamp - distributionStartTime, _claim.duration + _claim.createdAt - distributionStartTime)
-        );
-
-        if (elapsedDuration == 0) {
-            return (0, 0, distributionStartTime);
-        }
-
-        if (_position.refundable == Refundable.None) {
-            // No refund possible — operator earned the full reward on issuance
-            amount = _claim.reward - _claimRewardDistribution.amount;
-            claimRewardDistributions[claimId].amount += amount;
-            claimRewardDistributions[claimId].lastDistributedTimestamp = uint32(block.timestamp);
-        } else if (_position.refundable == Refundable.TimeWeighted) {
-            uint256 claimableReward =
-                _min(block.timestamp - _claim.createdAt, _claim.duration) * _claim.reward / _claim.duration;
-            amount = claimableReward - _claimRewardDistribution.amount;
-            claimRewardDistributions[claimId].amount += amount;
-            claimRewardDistributions[claimId].lastDistributedTimestamp = uint32(block.timestamp);
-        } else if (_position.refundable == Refundable.Full && _claim.status == CoverageClaimStatus.Completed) {
-            amount = _claim.reward;
-        } else {
-            return (0, 0, distributionStartTime);
-        }
-
-        // Guard against submitting a zero-amount reward (e.g. already fully distributed,
-        // or reward was reduced to 0 after refund on early close)
-        if (amount == 0) {
-            return (0, 0, distributionStartTime);
-        }
-
-        IERC20 coverageAsset = IERC20(ICoverageAgent(_position.coverageAgent).asset());
-
-        (resolvedDistributionStartTime, resolvedDuration) = _submitOperatorReward(
-            operator,
-            IStrategy(strategy),
-            coverageAsset,
-            amount,
-            distributionStartTime,
-            elapsedDuration,
-            "Coverage reward"
-        );
-
-        return (amount, resolvedDuration, resolvedDistributionStartTime);
     }
 
     /// @inheritdoc IEigenServiceManager
@@ -349,6 +291,11 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
             IAssetPriceOracleAndSwapper(address(this)).getQuote(allocatedStake[0][0], coverageAsset, strategyAsset);
     }
 
+    function _checkOperatorPermissions(address operator, address target, bytes4 selector) private returns (bool) {
+        return
+            IPermissionController(_eigenAddresses.permissionController).canCall(operator, msg.sender, target, selector);
+    }
+
     /// @notice Calculates the WAD proportion to slash based on the amount
     function _calculateWadToSlash(address operator, address strategy, address coverageAgent, uint256 amount)
         private
@@ -383,9 +330,9 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
 
             // Capture edge case rounding issues
             if (totalAllocatedStakeValue > amount) {
-                revert ICoverageProvider.InsufficientCoverageAvailable(0);
+                revert ICoverageProvider.InsufficientSlashableCoverageAvailable(0);
             }
-            revert ICoverageProvider.InsufficientCoverageAvailable(amount - totalAllocatedStakeValue);
+            revert ICoverageProvider.InsufficientSlashableCoverageAvailable(amount - totalAllocatedStakeValue);
         }
     }
 }

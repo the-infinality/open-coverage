@@ -325,6 +325,115 @@ export const iAllocationManagerAbi = [
         ],
         stateMutability: "view",
     },
+    {
+        type: "function",
+        inputs: [
+            { name: "operator", internalType: "address", type: "address" },
+            {
+                name: "params",
+                internalType: "struct IAllocationManager.RegisterParams",
+                type: "tuple",
+                components: [
+                    { name: "avs", internalType: "address", type: "address" },
+                    { name: "operatorSetIds", internalType: "uint32[]", type: "uint32[]" },
+                    { name: "data", internalType: "bytes", type: "bytes" },
+                ],
+            },
+        ],
+        name: "registerForOperatorSets",
+        outputs: [],
+        stateMutability: "nonpayable",
+    },
+    {
+        type: "function",
+        inputs: [
+            { name: "operator", internalType: "address", type: "address" },
+            {
+                name: "params",
+                internalType: "struct IAllocationManager.AllocateParams[]",
+                type: "tuple[]",
+                components: [
+                    {
+                        name: "operatorSet",
+                        internalType: "struct OperatorSet",
+                        type: "tuple",
+                        components: [
+                            { name: "avs", internalType: "address", type: "address" },
+                            { name: "id", internalType: "uint32", type: "uint32" },
+                        ],
+                    },
+                    { name: "strategies", internalType: "address[]", type: "address[]" },
+                    { name: "newMagnitudes", internalType: "uint64[]", type: "uint64[]" },
+                ],
+            },
+        ],
+        name: "modifyAllocations",
+        outputs: [],
+        stateMutability: "nonpayable",
+    },
+] as const
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// IRewardsCoordinator
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+export const iRewardsCoordinatorAbi = [
+    {
+        type: "function",
+        inputs: [
+            { name: "operator", internalType: "address", type: "address" },
+            {
+                name: "operatorSet",
+                internalType: "struct OperatorSet",
+                type: "tuple",
+                components: [
+                    { name: "avs", internalType: "address", type: "address" },
+                    { name: "id", internalType: "uint32", type: "uint32" },
+                ],
+            },
+            { name: "split", internalType: "uint16", type: "uint16" },
+        ],
+        name: "setOperatorSetSplit",
+        outputs: [],
+        stateMutability: "nonpayable",
+    },
+    {
+        type: "function",
+        inputs: [
+            { name: "operator", internalType: "address", type: "address" },
+            {
+                name: "operatorSet",
+                internalType: "struct OperatorSet",
+                type: "tuple",
+                components: [
+                    { name: "avs", internalType: "address", type: "address" },
+                    { name: "id", internalType: "uint32", type: "uint32" },
+                ],
+            },
+        ],
+        name: "getOperatorSetSplit",
+        outputs: [{ name: "", internalType: "uint16", type: "uint16" }],
+        stateMutability: "view",
+    },
+    {
+        type: "event",
+        anonymous: false,
+        inputs: [
+            { name: "operator", internalType: "address", type: "address", indexed: true },
+            {
+                name: "operatorSet",
+                internalType: "struct OperatorSet",
+                type: "tuple",
+                indexed: false,
+                components: [
+                    { name: "avs", internalType: "address", type: "address" },
+                    { name: "id", internalType: "uint32", type: "uint32" },
+                ],
+            },
+            { name: "split", internalType: "uint16", type: "uint16", indexed: false },
+        ],
+        name: "OperatorSetSplitSet",
+    },
 ] as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -351,6 +460,51 @@ export const iDelegationManagerAbi = [
         inputs: [{ name: "staker", internalType: "address", type: "address" }],
         name: "delegatedTo",
         outputs: [{ name: "", internalType: "address", type: "address" }],
+        stateMutability: "view",
+    },
+    {
+        type: "function",
+        inputs: [
+            { name: "delegationApprover", internalType: "address", type: "address" },
+            { name: "stakerOptOutWindowBlocks", internalType: "uint32", type: "uint32" },
+            { name: "metadataURI", internalType: "string", type: "string" },
+        ],
+        name: "registerAsOperator",
+        outputs: [],
+        stateMutability: "nonpayable",
+    },
+    {
+        type: "function",
+        inputs: [
+            { name: "operator", internalType: "address", type: "address" },
+            { name: "metadataURI", internalType: "string", type: "string" },
+        ],
+        name: "updateOperatorMetadataURI",
+        outputs: [],
+        stateMutability: "nonpayable",
+    },
+    {
+        type: "function",
+        inputs: [{ name: "operator", internalType: "address", type: "address" }],
+        name: "operatorDetails",
+        outputs: [
+            {
+                name: "",
+                internalType: "struct IDelegationManager.OperatorDetails",
+                type: "tuple",
+                components: [
+                    { name: "delegationApprover", internalType: "address", type: "address" },
+                    { name: "stakerOptOutWindowBlocks", internalType: "uint32", type: "uint32" },
+                ],
+            },
+        ],
+        stateMutability: "view",
+    },
+    {
+        type: "function",
+        inputs: [{ name: "operator", internalType: "address", type: "address" }],
+        name: "operatorMetadataURI",
+        outputs: [{ name: "", internalType: "string", type: "string" }],
         stateMutability: "view",
     },
     {
@@ -398,6 +552,33 @@ export const iDelegationManagerAbi = [
             { name: "", internalType: "uint256[]", type: "uint256[]" },
         ],
         stateMutability: "view",
+    },
+    {
+        type: "event",
+        anonymous: false,
+        inputs: [
+            { name: "operator", internalType: "address", type: "address", indexed: true },
+            {
+                name: "operatorDetails",
+                internalType: "struct IDelegationManager.OperatorDetails",
+                type: "tuple",
+                indexed: false,
+                components: [
+                    { name: "delegationApprover", internalType: "address", type: "address" },
+                    { name: "stakerOptOutWindowBlocks", internalType: "uint32", type: "uint32" },
+                ],
+            },
+        ],
+        name: "OperatorRegistered",
+    },
+    {
+        type: "event",
+        anonymous: false,
+        inputs: [
+            { name: "operator", internalType: "address", type: "address", indexed: true },
+            { name: "metadataURI", internalType: "string", type: "string", indexed: false },
+        ],
+        name: "OperatorMetadataURIUpdated",
     },
     {
         type: "event",

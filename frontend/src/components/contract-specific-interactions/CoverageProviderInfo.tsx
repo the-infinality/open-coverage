@@ -9,7 +9,7 @@ import {
     BaseError,
 } from "viem"
 import { RefreshCw, Loader2, Plus, CheckCircle2, Trash2, X, Layers } from "lucide-react"
-import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useConfig } from "wagmi"
+import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useConfig, useAccount } from "wagmi"
 import { readContract } from "wagmi/actions"
 import { toast } from "sonner"
 import type { CoverageContract } from "@/types/contracts"
@@ -22,10 +22,11 @@ import {
     getSelectedOperatorProxy,
     getSelectedCoverageAgent,
 } from "@/hooks/use-chain-filtered-contracts"
-import { OperatorProxySelect, CoverageAgentSelect } from "@/components/ContractSelects"
+import { OperatorProxySelect, CoverageAgentSelect, CONNECTED_WALLET_OPERATOR_ID } from "@/components/ContractSelects"
 import { CopyableAddress } from "@/components/ui/copyable-address"
 import { OperatorProxiesManagement } from "@/components/contract-specific-interactions/OperatorProxiesManagement"
 import { AssetPriceOracleAndSwapperInteraction } from "@/components/contract-specific-interactions/AssetPriceOracleAndSwapperInteraction"
+import { OperatorManagement } from "@/components/contract-specific-interactions/OperatorManagement"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -811,9 +812,23 @@ function OperatorPositionManagement({
     const config = useConfig()
 
     // Get operator proxies and coverage agents from saved contracts
+    const { address: connectedAddress } = useAccount()
     const { operatorProxies, coverageAgents } = useChainFilteredContracts(contract.chainId)
-    const selectedOperator = getSelectedOperatorProxy(selectedOperatorId, operatorProxies)
+    const selectedOperatorFromList = getSelectedOperatorProxy(selectedOperatorId, operatorProxies)
     const selectedCoverageAgent = getSelectedCoverageAgent(selectedCoverageAgentId, coverageAgents)
+
+    // When "Connected Wallet" is selected, use connected address as the operator
+    const selectedOperator =
+        selectedOperatorId === CONNECTED_WALLET_OPERATOR_ID && connectedAddress
+            ? ({
+                  id: CONNECTED_WALLET_OPERATOR_ID,
+                  name: "Connected Wallet",
+                  address: connectedAddress,
+                  type: "EigenOperatorProxy" as const,
+                  chainId: contract.chainId,
+                  createdAt: 0,
+              } satisfies CoverageContract)
+            : selectedOperatorFromList
 
     // Fetch whitelisted strategies from the provider
     const { data: whitelistedStrategies, isLoading: isLoadingStrategies } = useReadContract({
@@ -1068,9 +1083,9 @@ function OperatorPositionManagement({
                     </div>
 
                     <div className="grid gap-4 md:grid-cols-2">
-                        {/* Operator Agent Selection */}
+                        {/* Operator Selection */}
                         <div className="space-y-2">
-                            <Label>Operator Agent</Label>
+                            <Label>Operator</Label>
                             <OperatorProxySelect
                                 selectedContractId={selectedOperatorId}
                                 onSelectedContractIdChange={setSelectedOperatorId}
@@ -1492,6 +1507,12 @@ export function CoverageProviderInfo({ contract }: CoverageProviderInfoProps) {
 
                 {/* Operator Proxies Management - Deploy and manage EigenOperatorProxy contracts */}
                 <OperatorProxiesManagement contract={contract} />
+
+                {/* Operator Management - Direct wallet-based operator management */}
+                <OperatorManagement
+                    serviceManagerAddress={contract.address}
+                    chainId={supportedChainId}
+                />
 
                 {/* Strategy Whitelist Management Card - EigenLayer specific */}
                 <Card>

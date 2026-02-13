@@ -6,6 +6,7 @@ import {EigenCoverageProviderFacet} from "src/providers/eigenlayer/facets/EigenC
 import {IDiamondCut} from "src/diamond/interfaces/IDiamondCut.sol";
 import {IEigenServiceManager} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
 import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
+import {ICoverageLiquidatable} from "src/interfaces/ICoverageLiquidatable.sol";
 
 /// @title EigenFacetsDeployer
 /// @notice Helper contract for deploying Eigen-specific facets
@@ -63,7 +64,7 @@ library EigenFacetsDeployer {
     /// @notice Gets function selectors for EigenServiceManagerFacet
     /// @return selectors Array of function selectors
     function getEigenServiceManagerSelectors() internal pure returns (bytes4[] memory selectors) {
-        selectors = new bytes4[](13);
+        selectors = new bytes4[](12);
         selectors[0] = IEigenServiceManager.eigenAddresses.selector;
         selectors[1] = IEigenServiceManager.registerOperator.selector;
         selectors[2] = IEigenServiceManager.setStrategyWhitelist.selector;
@@ -71,35 +72,39 @@ library EigenFacetsDeployer {
         selectors[4] = IEigenServiceManager.whitelistedStrategies.selector;
         selectors[5] = IEigenServiceManager.getOperatorSetId.selector;
         selectors[6] = IEigenServiceManager.coverageAllocated.selector;
-        selectors[7] = IEigenServiceManager.captureRewards.selector;
-        selectors[8] = IEigenServiceManager.submitOperatorReward.selector;
-        selectors[9] = IEigenServiceManager.updateAVSMetadataURI.selector;
-        selectors[10] = IEigenServiceManager.slashOperator.selector;
-        selectors[11] = IEigenServiceManager.ensureAllocations.selector;
-        selectors[12] = IEigenServiceManager.getAllocationedStrategies.selector;
+        selectors[7] = IEigenServiceManager.submitOperatorReward.selector;
+        selectors[8] = IEigenServiceManager.updateAVSMetadataURI.selector;
+        selectors[9] = IEigenServiceManager.slashOperator.selector;
+        selectors[10] = IEigenServiceManager.ensureAllocations.selector;
+        selectors[11] = IEigenServiceManager.getAllocationedStrategies.selector;
     }
 
     /// @notice Gets function selectors for EigenCoverageProviderFacet
     /// @return selectors Array of function selectors
     function getEigenCoverageProviderSelectors() internal pure returns (bytes4[] memory selectors) {
-        selectors = new bytes4[](17);
+        selectors = new bytes4[](22);
         selectors[0] = ICoverageProvider.onIsRegistered.selector;
         selectors[1] = ICoverageProvider.createPosition.selector;
         selectors[2] = ICoverageProvider.closePosition.selector;
         selectors[3] = ICoverageProvider.issueClaim.selector;
-        selectors[4] = ICoverageProvider.liquidateClaim.selector;
+        selectors[4] = ICoverageLiquidatable.liquidateClaim.selector;
         selectors[5] = ICoverageProvider.closeClaim.selector;
         selectors[6] = ICoverageProvider.reserveClaim.selector;
         selectors[7] = ICoverageProvider.convertReservedClaim.selector;
         selectors[8] = ICoverageProvider.slashClaims.selector;
         selectors[9] = ICoverageProvider.completeSlash.selector;
         selectors[10] = ICoverageProvider.repaySlashedClaim.selector;
-        selectors[11] = ICoverageProvider.position.selector;
-        selectors[12] = ICoverageProvider.positionMaxAmount.selector;
-        selectors[13] = ICoverageProvider.claim.selector;
-        selectors[14] = ICoverageProvider.claimBacking.selector;
-        selectors[15] = ICoverageProvider.providerTypeId.selector;
-        selectors[16] = ICoverageProvider.claimTotalSlashAmount.selector;
+        selectors[11] = ICoverageProvider.captureRewards.selector;
+        selectors[12] = ICoverageProvider.position.selector;
+        selectors[13] = ICoverageProvider.positionMaxAmount.selector;
+        selectors[14] = ICoverageProvider.claim.selector;
+        selectors[15] = ICoverageProvider.positionBacking.selector;
+        selectors[16] = ICoverageProvider.providerTypeId.selector;
+        selectors[17] = ICoverageProvider.claimTotalSlashAmount.selector;
+        selectors[18] = ICoverageLiquidatable.liquidationThreshold.selector;
+        selectors[19] = ICoverageLiquidatable.setLiquidationThreshold.selector;
+        selectors[20] = ICoverageLiquidatable.setCoverageThreshold.selector;
+        selectors[21] = ICoverageLiquidatable.coverageThreshold.selector;
     }
 }
 

@@ -6,6 +6,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {TestDeployer} from "test/utils/TestDeployer.sol";
 import {ExampleCoverageAgent} from "src/ExampleCoverageAgent.sol";
 import {ICoverageAgent, ClaimCoverageRequest, Coverage} from "src/interfaces/ICoverageAgent.sol";
+import {ICoverageLiquidatable} from "src/interfaces/ICoverageLiquidatable.sol";
 import {
     ICoverageProvider,
     CoveragePosition,
@@ -16,7 +17,7 @@ import {
 import {IExampleCoverageAgent} from "src/interfaces/IExampleCoverageAgent.sol";
 
 /// @notice Mock Coverage Provider for testing
-contract MockCoverageProvider is ICoverageProvider {
+contract MockCoverageProvider is ICoverageProvider, ICoverageLiquidatable {
     error RewardTransferFailed();
 
     bool public isRegistered;
@@ -109,8 +110,8 @@ contract MockCoverageProvider is ICoverageProvider {
         emit ClaimClosed(claimId);
     }
 
-    function liquidateClaim(uint256 claimId) external override {
-        emit ClaimLiquidated(claimId);
+    function liquidateClaim(uint256 claimId, uint256 positionId) external override {
+        emit ClaimLiquidated(claimId, _claims[claimId].positionId, positionId);
     }
 
     function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts)
@@ -170,6 +171,10 @@ contract MockCoverageProvider is ICoverageProvider {
         ICoverageAgent(_position.coverageAgent).onClaimRefunded(claimId, refundAmount);
     }
 
+    function captureRewards(uint256) external pure override returns (uint256, uint32, uint32) {
+        return (0, 0, 0);
+    }
+
     function position(uint256 positionId) external view override returns (CoveragePosition memory) {
         return _positions[positionId];
     }
@@ -182,8 +187,12 @@ contract MockCoverageProvider is ICoverageProvider {
         return _claims[claimId];
     }
 
-    function claimBacking(uint256) external pure override returns (int256) {
-        return 0;
+    function liquidationThreshold() external pure override returns (uint16) {
+        return 9000;
+    }
+
+    function positionBacking(uint256) external pure override returns (int256, uint16) {
+        return (0, 0);
     }
 
     function claimTotalSlashAmount(uint256 claimId) external view override returns (uint256) {
@@ -192,6 +201,18 @@ contract MockCoverageProvider is ICoverageProvider {
 
     function providerTypeId() external pure override returns (uint256) {
         return 1;
+    }
+
+    function coverageThreshold(bytes32) external pure override returns (uint16) {
+        return 9000;
+    }
+
+    function setCoverageThreshold(bytes32, uint16 threshold) external override {
+        if (threshold > 10000) revert ThresholdExceedsMax(10000, threshold);
+    }
+
+    function setLiquidationThreshold(uint16 threshold) external override {
+        if (threshold > 10000) revert ThresholdExceedsMax(10000, threshold);
     }
 }
 

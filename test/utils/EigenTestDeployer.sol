@@ -28,9 +28,10 @@ import {IEigenOperatorProxy} from "src/providers/eigenlayer/interfaces/IEigenOpe
 import {EigenOperatorProxy} from "src/providers/eigenlayer/EigenOperatorProxy.sol";
 import {IEigenServiceManager} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
 import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
+import {ICoverageLiquidatable} from "src/interfaces/ICoverageLiquidatable.sol";
 import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {ISwapperEngine} from "src/interfaces/ISwapperEngine.sol";
-import {CoveragePosition, CoverageClaim, CoverageClaimStatus, Refundable} from "src/interfaces/ICoverageProvider.sol";
+import {CoveragePosition, CoverageClaimStatus, Refundable} from "src/interfaces/ICoverageProvider.sol";
 import {PriceStrategy, AssetPair} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {MockPriceOracle} from "./MockPriceOracle.sol";
 import {UniswapV3SwapperEngine} from "src/swapper-engines/UniswapV3SwapperEngine.sol";
@@ -58,6 +59,7 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
     address public staker;
     IEigenServiceManager eigenServiceManager;
     ICoverageProvider eigenCoverageProvider;
+    ICoverageLiquidatable eigenCoverageLiquidatable;
     IAssetPriceOracleAndSwapper eigenPriceOracle;
     ISwapperEngine public uniswapV3SwapperEngine;
 
@@ -123,6 +125,7 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
         // *** Eigen test setup (operator, interfaces, oracle, staker) *** //
         eigenServiceManager = IEigenServiceManager(address(eigenCoverageDiamond));
         eigenCoverageProvider = ICoverageProvider(address(eigenCoverageDiamond));
+        eigenCoverageLiquidatable = ICoverageLiquidatable(address(eigenCoverageDiamond));
         eigenPriceOracle = IAssetPriceOracleAndSwapper(address(eigenCoverageDiamond));
 
         operator = IEigenOperatorProxy(
@@ -294,5 +297,105 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, slashAmount);
         _executeSlash(claimIds, amounts, 15 days);
         assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
+    }
+
+    // ============ Liquidation test helpers ============
+
+    IEigenOperatorProxy public operator2;
+    address public staker2;
+
+    /// @dev Creates a second operator with allocations and staked delegation for cross-operator liquidation tests
+    function _setupSecondOperatorWithAllocations(uint256 stakeAmount) internal {
+        operator2 = IEigenOperatorProxy(
+            address(new EigenOperatorProxy(eigenServiceManager.eigenAddresses(), address(this), ""))
+        );
+        IPermissionController(eigenServiceManager.eigenAddresses().permissionController).acceptAdmin(address(operator2));
+
+        // Wait for the allocation delay to become effective for the new operator
+        vm.roll(block.number + 126001);
+
+        operator2.registerCoverageAgent(address(eigenCoverageDiamond), address(coverageAgent), 0);
+        address[] memory strategyAddresses = new address[](1);
+        strategyAddresses[0] = address(_getTestStrategy());
+        uint64[] memory magnitudes = new uint64[](1);
+        magnitudes[0] = 1e18;
+        operator2.allocate(address(eigenCoverageDiamond), address(coverageAgent), strategyAddresses, magnitudes);
+
+        staker2 = makeAddr("staker2");
+        deal(rETH, staker2, stakeAmount);
+        vm.startPrank(staker2);
+        IStrategyManager strategyManager = _getStrategyManager();
+        _getTestStrategy().underlyingToken().approve(address(strategyManager), stakeAmount);
+        strategyManager.depositIntoStrategy(_getTestStrategy(), _getTestStrategy().underlyingToken(), stakeAmount);
+        ISignatureUtilsMixinTypes.SignatureWithExpiry memory emptySignature =
+            ISignatureUtilsMixinTypes.SignatureWithExpiry({signature: "", expiry: 0});
+        _getDelegationManager().delegateTo(address(operator2), emptySignature, bytes32(0));
+        vm.stopPrank();
+    }
+
+    /// @dev Creates a position for a given operator with the default coverage agent and test strategy
+    function _createPositionForOperator(IEigenOperatorProxy op, Refundable refundable, uint256 expiryOffset)
+        internal
+        returns (uint256 positionId)
+    {
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + expiryOffset,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: refundable,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(uint256(uint160(address(op))))
+        });
+        positionId = eigenCoverageProvider.createPosition(data, "");
+    }
+
+    /// @dev Sets up a liquidation scenario with two positions and a claim at the specified utilization percentage
+    /// @param stakeAmount The amount of rETH to stake for the operator
+    /// @param claimBps The claim amount as basis points of max coverage (e.g. 9100 = 91%)
+    /// @param refundable The refund policy for the positions
+    /// @return oldPositionId The position ID that the claim is issued against
+    /// @return newPositionId The position ID to liquidate to
+    /// @return claimId The ID of the issued claim
+    function _setupLiquidatableScenario(uint256 stakeAmount, uint256 claimBps, Refundable refundable)
+        internal
+        returns (uint256 oldPositionId, uint256 newPositionId, uint256 claimId)
+    {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(stakeAmount);
+
+        // Raise coverage threshold to allow high utilization claims
+        eigenCoverageLiquidatable.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 9500);
+
+        oldPositionId = _createPositionForOperator(operator, refundable, 365 days);
+        newPositionId = _createPositionForOperator(operator, refundable, 365 days);
+
+        uint256 maxCoverage = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+        uint256 claimAmount = (maxCoverage * claimBps) / 10000;
+        uint256 reward = (claimAmount * 100 * 30 days) / (10000 * 365 days);
+        if (reward < 1e6) reward = 1e6;
+
+        deal(coverageAgent.asset(), address(coverageAgent), reward * 2);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), reward);
+        claimId = eigenCoverageProvider.issueClaim(oldPositionId, claimAmount, 30 days, reward);
+        vm.stopPrank();
+    }
+
+    /// @dev Computes the storage slot for a field within a CoveragePosition in the positions array.
+    /// @param positionIndex The index in the positions array
+    /// @param fieldOffset The slot offset of the field within the CoveragePosition struct
+    ///   0 = coverageAgent+minRate, 1 = maxDuration, 2 = expiryTimestamp, 3 = asset+refundable,
+    ///   4 = slashCoordinator, 5 = maxReservationTime, 6 = operatorId
+    function _positionStorageSlot(uint256 positionIndex, uint256 fieldOffset) internal pure returns (bytes32) {
+        // positions is at storage slot 6 in EigenCoverageStorage
+        // Each CoveragePosition struct occupies 7 storage slots
+        uint256 arrayBase = uint256(keccak256(abi.encode(uint256(6))));
+        return bytes32(arrayBase + positionIndex * 7 + fieldOffset);
     }
 }
