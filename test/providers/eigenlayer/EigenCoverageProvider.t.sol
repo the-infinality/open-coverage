@@ -12,6 +12,10 @@ import {IExampleCoverageAgent} from "src/interfaces/IExampleCoverageAgent.sol";
 import {ExampleCoverageAgent} from "src/ExampleCoverageAgent.sol";
 import {SlashCoordinationStatus} from "src/interfaces/ISlashCoordinator.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
+import {IAllocationManager} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
+import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
+import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {ISwapperEngine} from "src/interfaces/ISwapperEngine.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {MockSlashCoordinator, MockSlashCoordinatorImmediate} from "../../utils/mocks/MockSlashCoordinator.sol";
 import {EigenCoverageProviderFacet} from "src/providers/eigenlayer/facets/EigenCoverageProviderFacet.sol";
@@ -815,6 +819,121 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         // Account for potential swap slippage - allow 1% tolerance
         uint256 expectedMinBalance = initialBalance + (1000e6 * 99) / 100;
         assertGe(finalBalance, expectedMinBalance);
+    }
+
+    /// @notice Test that slash reverts with InsufficientSlashableCoverageAvailable(0) when wadToSlash > WAD and totalAllocatedStakeValue > amount (rounding edge case)
+    /// @dev Mocks the swapper engine so swapForOutputQuote returns more than totalAllocatedStake (wadToSlash > WAD) and getQuote returns > amount (rounding branch).
+    function test_RevertWhen_slash_InsufficientSlashableCoverageAvailable_rounding() public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        uint256 slashAmount = 1000e6;
+        address strategy = address(_getTestStrategy());
+        address strategyAsset = address(IStrategy(strategy).underlyingToken());
+        address coverageAsset = coverageAgent.asset();
+        bytes memory poolInfo = abi.encodePacked(rETH, uint24(100), WETH, uint24(500), USDC);
+
+        OperatorSet memory operatorSet = OperatorSet({
+            avs: address(eigenCoverageDiamond),
+            id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
+        });
+        address[] memory operators = new address[](1);
+        operators[0] = address(operator);
+        IStrategy[] memory strategies = new IStrategy[](1);
+        strategies[0] = IStrategy(strategy);
+        uint256 totalAllocatedStake = IAllocationManager(eigenServiceManager.eigenAddresses().allocationManager)
+            .getAllocatedStake(operatorSet, operators, strategies)[0][0];
+
+        // Mock swapper.getQuote(poolInfo, slashAmount, strategyAsset, coverageAsset) so swapForOutputQuote returns > totalAllocatedStake → wadToSlash > WAD
+        vm.mockCall(
+            address(uniswapV3SwapperEngine),
+            abi.encodeWithSelector(
+                ISwapperEngine.getQuote.selector,
+                poolInfo,
+                slashAmount,
+                strategyAsset,
+                coverageAsset
+            ),
+            abi.encode(totalAllocatedStake + 1)
+        );
+        // Mock swapper.getQuote(poolInfo, totalAllocatedStake, coverageAsset, strategyAsset) so getQuote returns > amount → rounding branch
+        vm.mockCall(
+            address(uniswapV3SwapperEngine),
+            abi.encodeWithSelector(
+                ISwapperEngine.getQuote.selector,
+                poolInfo,
+                totalAllocatedStake,
+                coverageAsset,
+                strategyAsset
+            ),
+            abi.encode(slashAmount + 1)
+        );
+
+        vm.prank(address(eigenCoverageDiamond));
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.InsufficientSlashableCoverageAvailable.selector, 0)
+        );
+        eigenServiceManager.slashOperator(address(operator), strategy, address(coverageAgent), slashAmount);
+    }
+
+    /// @notice Test that slash reverts with InsufficientSlashableCoverageAvailable(deficit) when wadToSlash > WAD and totalAllocatedStakeValue <= amount
+    /// @dev Mocks the swapper engine so swapForOutputQuote returns > totalAllocatedStake and getQuote returns < amount (deficit branch).
+    function test_RevertWhen_slash_InsufficientSlashableCoverageAvailable_deficit() public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        uint256 slashAmount = 1000e6;
+        address strategy = address(_getTestStrategy());
+        address strategyAsset = address(IStrategy(strategy).underlyingToken());
+        address coverageAsset = coverageAgent.asset();
+        bytes memory poolInfo = abi.encodePacked(rETH, uint24(100), WETH, uint24(500), USDC);
+
+        OperatorSet memory operatorSet = OperatorSet({
+            avs: address(eigenCoverageDiamond),
+            id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
+        });
+        address[] memory operators = new address[](1);
+        operators[0] = address(operator);
+        IStrategy[] memory strategies = new IStrategy[](1);
+        strategies[0] = IStrategy(strategy);
+        uint256 totalAllocatedStake = IAllocationManager(eigenServiceManager.eigenAddresses().allocationManager)
+            .getAllocatedStake(operatorSet, operators, strategies)[0][0];
+
+        // Mock swapper.getQuote so swapForOutputQuote returns > totalAllocatedStake → wadToSlash > WAD
+        vm.mockCall(
+            address(uniswapV3SwapperEngine),
+            abi.encodeWithSelector(
+                ISwapperEngine.getQuote.selector,
+                poolInfo,
+                slashAmount,
+                strategyAsset,
+                coverageAsset
+            ),
+            abi.encode(totalAllocatedStake + 1)
+        );
+        // Mock swapper.getQuote so getQuote returns totalAllocatedStakeValue < amount → deficit branch
+        uint256 totalAllocatedStakeValue = slashAmount - 1e6;
+        vm.mockCall(
+            address(uniswapV3SwapperEngine),
+            abi.encodeWithSelector(
+                ISwapperEngine.getQuote.selector,
+                poolInfo,
+                totalAllocatedStake,
+                coverageAsset,
+                strategyAsset
+            ),
+            abi.encode(totalAllocatedStakeValue)
+        );
+
+        vm.prank(address(eigenCoverageDiamond));
+        uint256 expectedDeficit = slashAmount - totalAllocatedStakeValue;
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ICoverageProvider.InsufficientSlashableCoverageAvailable.selector,
+                expectedDeficit
+            )
+        );
+        eigenServiceManager.slashOperator(address(operator), strategy, address(coverageAgent), slashAmount);
     }
 
     /// @notice Test slashing immediately after claim creation should succeed

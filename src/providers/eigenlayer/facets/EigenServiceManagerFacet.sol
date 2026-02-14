@@ -5,7 +5,6 @@ import {IERC20 as EigenIERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.
 import {IERC20} from "@openzeppelin-v5/contracts/token/ERC20/IERC20.sol";
 import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/EnumerableMap.sol";
 import {IAllocationManager, IAllocationManagerTypes} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
-import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermissionController.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
 import {IStrategyManager} from "eigenlayer-contracts/interfaces/IStrategyManager.sol";
 import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
@@ -290,12 +289,7 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         (total,) =
             IAssetPriceOracleAndSwapper(address(this)).getQuote(allocatedStake[0][0], coverageAsset, strategyAsset);
     }
-
-    function _checkOperatorPermissions(address operator, address target, bytes4 selector) private returns (bool) {
-        return
-            IPermissionController(_eigenAddresses.permissionController).canCall(operator, msg.sender, target, selector);
-    }
-
+    
     /// @notice Calculates the WAD proportion to slash based on the amount
     function _calculateWadToSlash(address operator, address strategy, address coverageAgent, uint256 amount)
         private
