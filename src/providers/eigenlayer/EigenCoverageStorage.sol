@@ -28,8 +28,14 @@ struct ClaimRewardDistribution {
 /// @dev This contract should be inherited by EigenCoverageDiamond and all facets to maintain storage layout.
 ///      Note: Diamond-specific storage (facets, selectors, owner) is managed separately via LibDiamond
 ///      at a fixed storage slot, so it won't collide with this app-specific storage.
+///
+///      Initialization (Slither reports the following as uninitialized because it does not model diamond delegatecall storage):
+///      - _eigenAddresses: set in EigenCoverageDiamond constructor (DiamondArgs.eigenAddresses)
+///      - assetToStrategy: set per-asset in EigenServiceManagerFacet.setStrategyWhitelist (owner-only)
+///      - coverageAgentToOperatorSetId: set per-agent in EigenCoverageProviderFacet.onIsRegistered when agent registers
 abstract contract EigenCoverageStorage {
-    /// @notice Eigen protocol contract addresses
+    /// @notice Eigen protocol contract addresses (initialized in EigenCoverageDiamond constructor)
+    // slither-disable-next-line uninitialized-state-variables
     EigenAddresses internal _eigenAddresses;
 
     /// @notice Counter for operator set IDs, incremented when new coverage agents register
@@ -41,14 +47,16 @@ abstract contract EigenCoverageStorage {
     /// @notice Array of all coverage claims
     CoverageClaim[] public claims;
 
-    /// @notice Mapping from coverage agent address to their operator set ID
+    /// @notice Mapping from coverage agent address to their operator set ID (written in EigenCoverageProviderFacet.onIsRegistered)
+    // slither-disable-next-line uninitialized-state-variables
     mapping(address => uint32) public coverageAgentToOperatorSetId;
 
     /// @notice Mapping of whitelisted strategies (address => 1 if whitelisted)
     /// @dev Use EnumerableMap to allow enumeration of all whitelisted strategies
     EnumerableMap.AddressToUintMap internal _strategyWhitelist;
 
-    /// @notice Mapping from asset address to strategy address
+    /// @notice Mapping from asset address to strategy address (written in EigenServiceManagerFacet.setStrategyWhitelist)
+    // slither-disable-next-line uninitialized-state-variables
     mapping(address => address) public assetToStrategy;
 
     /// @notice Mapping from operator address to their data

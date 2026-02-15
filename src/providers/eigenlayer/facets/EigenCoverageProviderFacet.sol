@@ -452,6 +452,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         IERC20 coverageAgentAsset = IERC20(ICoverageAgent(_coverageAgent).asset());
 
         // Claim the funds to this contract first
+        // slither-disable-next-line arbitrary-from-in-transferfrom -- _coverageAgent == msg.sender enforced above
         SafeERC20.safeTransferFrom(coverageAgentAsset, _coverageAgent, address(this), amount);
 
         if (_claim.status != CoverageClaimStatus.Repaid) {
