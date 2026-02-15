@@ -26,6 +26,12 @@ contract MockAssetPriceOracleAndSwapper is AssetPriceOracleAndSwapper {
     /// @notice Override register to add owner check
     /// @param _assetPair The asset pair configuration
     function register(AssetPair calldata _assetPair) public override onlyOwner {
-        super.register(_assetPair);
+        _register(_assetPair);
+    }
+
+    /// @notice Override setSwapSlippage to add owner check
+    /// @param swapSlippage_ The swap slippage in basis points (0-10000)
+    function setSwapSlippage(uint16 swapSlippage_) public override onlyOwner {
+        _setSwapSlippageChecked(swapSlippage_);
     }
 }

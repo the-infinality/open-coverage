@@ -13,13 +13,17 @@ contract AssetPriceOracleAndSwapperFacet is AssetPriceOracleAndSwapper {
     // All functionality is inherited from AssetPriceOracleAndSwapper
     // This facet exposes the abstract contract's functions through the diamond pattern
 
-    function register(AssetPair calldata _assetPair) public override {
+    /// @notice Registers a price adaptor for an asset pair (owner only).
+    /// @param _assetPair The asset pair configuration
+    function register(AssetPair calldata _assetPair) external {
         LibDiamond.enforceIsContractOwner();
-        super.register(_assetPair);
+        _register(_assetPair);
     }
 
-    function setSwapSlippage(uint16 swapSlippage_) public override {
+    /// @notice Sets the swap slippage (owner only).
+    /// @param swapSlippage_ The swap slippage in basis points (0-10000)
+    function setSwapSlippage(uint16 swapSlippage_) external {
         LibDiamond.enforceIsContractOwner();
-        super.setSwapSlippage(swapSlippage_);
+        _setSwapSlippageChecked(swapSlippage_);
     }
 }

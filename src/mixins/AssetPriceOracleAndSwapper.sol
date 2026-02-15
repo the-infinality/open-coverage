@@ -11,8 +11,10 @@ import {IPriceOracle} from "../interfaces/IPriceOracle.sol";
 /// @notice Mixin contract for quoting and swapping assets
 /// @dev This contract utlised Swapper Engines with optional price oracles
 abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorage, IAssetPriceOracleAndSwapper {
-    /// @inheritdoc IAssetPriceOracleAndSwapper
-    function register(AssetPair calldata _assetPair) public virtual {
+    /// @notice Internal registration of an asset pair (delegatecall to swap engine onInit).
+    /// @dev Made internal to avoid controlled-delegatecall from untrusted callers; only facet/exposed entrypoints should call this after access control.
+    /// @param _assetPair The asset pair configuration
+    function _register(AssetPair calldata _assetPair) internal {
         bool priceOracleRequired = _assetPair.priceStrategy != PriceStrategy.SwapperOnly;
         if (_assetPair.priceOracle == address(0) && priceOracleRequired) revert PriceOracleRequired();
         if (priceOracleRequired && _assetPair.swapperAccuracy == 0) revert InvalidSwapperAccuracy();
@@ -29,6 +31,7 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
         storedPair.priceOracle = _assetPair.priceOracle;
 
         // delegatecall to onInit instead of direct call
+        // slither-disable-next-line controlled-delegatecall -- only callable via an external function which should enforce contract ownership
         (bool success,) = _assetPair.swapEngine
             .delegatecall(abi.encodeWithSelector(ISwapperEngine.onInit.selector, _assetPair.poolInfo));
 
@@ -79,8 +82,9 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
         if (!success) revert SwapFailed();
     }
 
-    /// @inheritdoc IAssetPriceOracleAndSwapper
-    function setSwapSlippage(uint16 swapSlippage_) public virtual {
+    /// @notice Sets the swap slippage in basis points (0-10000). Internal; expose via facet with access control.
+    /// @param swapSlippage_ The swap slippage in basis points
+    function _setSwapSlippageChecked(uint16 swapSlippage_) internal {
         if (swapSlippage_ > 10000) revert InvalidSwapSlippage();
         _setSwapSlippage(swapSlippage_);
     }

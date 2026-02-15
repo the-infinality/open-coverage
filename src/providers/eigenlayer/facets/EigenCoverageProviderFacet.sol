@@ -447,7 +447,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         if (_claim.status != CoverageClaimStatus.Slashed && _claim.status != CoverageClaimStatus.Repaid) {
             revert InvalidClaim(claimId, _claim.status);
         }
-        if (msg.sender != _coverageAgent) revert NotCoverageAgent(msg.sender, _coverageAgent);
+        require(msg.sender == _coverageAgent, NotCoverageAgent(msg.sender, _coverageAgent));
 
         IERC20 coverageAgentAsset = IERC20(ICoverageAgent(_coverageAgent).asset());
 
