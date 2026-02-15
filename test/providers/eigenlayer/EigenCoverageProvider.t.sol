@@ -3057,6 +3057,16 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         assertEq(uint8(claimAfter.status), uint8(CoverageClaimStatus.Issued), "Status should remain Issued");
         assertEq(claimAfter.amount, claimBefore.amount, "Claim amount should not change");
         assertEq(claimAfter.duration, claimBefore.duration, "Duration should not change");
+
+        // Refundable.None: old operator must not be overpaid (at most full reward)
+        (uint256 distAmount,) =
+            EigenCoverageProviderFacet(address(eigenCoverageDiamond)).claimRewardDistributions(claimId);
+        assertLe(distAmount, claimAfter.reward, "Distributed reward must not exceed claim reward");
+
+        // New operator gets 0 (full reward already paid to old operator at liquidation)
+        vm.warp(claimAfter.createdAt + claimAfter.duration);
+        (uint256 newOperatorAmount,,) = eigenCoverageProvider.captureRewards(claimId);
+        assertEq(newOperatorAmount, 0, "New operator must not receive reward (full reward already paid to old operator)");
     }
 
     /// @notice Test 15: Rewards are captured for old operator before position swap
@@ -3074,9 +3084,16 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         eigenCoverageLiquidatable.liquidateClaim(claimId, newPositionId);
 
         // After liquidation, rewards should have been captured for the old operator
+        CoverageClaim memory claimAfter = eigenCoverageProvider.claim(claimId);
         (uint256 distAmountAfter,) =
             EigenCoverageProviderFacet(address(eigenCoverageDiamond)).claimRewardDistributions(claimId);
         assertGt(distAmountAfter, 0, "Rewards should have been distributed during liquidation");
+        assertLe(distAmountAfter, claimAfter.reward, "Distributed reward must not exceed claim reward");
+
+        // New operator (Refundable.None): full reward was paid to old operator at liquidation, so new operator gets 0
+        vm.warp(claimAfter.createdAt + claimAfter.duration);
+        (uint256 newOperatorAmount,,) = eigenCoverageProvider.captureRewards(claimId);
+        assertEq(newOperatorAmount, 0, "New operator must not receive reward (None: full reward already paid to old operator)");
     }
 
     /// @notice Test 16: TimeWeighted refundable rewards are captured correctly before swap
@@ -3089,10 +3106,21 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         eigenCoverageLiquidatable.liquidateClaim(claimId, newPositionId);
 
         // Verify time-weighted rewards were captured (should be ~50% of total reward)
+        CoverageClaim memory claimAfter = eigenCoverageProvider.claim(claimId);
         (uint256 distAmount,) =
             EigenCoverageProviderFacet(address(eigenCoverageDiamond)).claimRewardDistributions(claimId);
         // Time-weighted: reward proportional to elapsed time. After 15 of 30 days ≈ 50%
         assertGt(distAmount, 0, "Time-weighted rewards should be distributed");
+        uint256 maxAllowed = (claimAfter.reward * 15 days) / claimAfter.duration;
+        assertLe(distAmount, maxAllowed, "Distributed reward must not exceed time-proportional share");
+
+        // New operator: capture remaining reward at claim end; total distributed must equal claim.reward
+        vm.warp(claimAfter.createdAt + claimAfter.duration);
+        (uint256 newOperatorAmount,,) = eigenCoverageProvider.captureRewards(claimId);
+        assertGt(newOperatorAmount, 0, "New operator should receive remaining time-proportional reward");
+        (uint256 totalDistributed,) =
+            EigenCoverageProviderFacet(address(eigenCoverageDiamond)).claimRewardDistributions(claimId);
+        assertEq(totalDistributed, claimAfter.reward, "Total distributed (old + new operator) must equal claim reward");
     }
 
     /// @notice Test 17: Full refundable policy returns 0 rewards during liquidation (claim still Issued)
@@ -3107,6 +3135,17 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         (uint256 distAmount,) =
             EigenCoverageProviderFacet(address(eigenCoverageDiamond)).claimRewardDistributions(claimId);
         assertEq(distAmount, 0, "Full refundable should not distribute rewards while claim is Issued");
+
+        // New operator: gets full reward when claim completes; total distributed must equal claim.reward
+        CoverageClaim memory claimAfter = eigenCoverageProvider.claim(claimId);
+        vm.warp(claimAfter.createdAt + claimAfter.duration);
+        vm.prank(address(coverageAgent));
+        eigenCoverageProvider.closeClaim(claimId);
+        (uint256 newOperatorAmount,,) = eigenCoverageProvider.captureRewards(claimId);
+        assertEq(newOperatorAmount, claimAfter.reward, "New operator must receive full reward on completion (Full policy)");
+        (uint256 totalDistributed,) =
+            EigenCoverageProviderFacet(address(eigenCoverageDiamond)).claimRewardDistributions(claimId);
+        assertEq(totalDistributed, claimAfter.reward, "Total distributed must equal claim reward");
     }
 
     /// @notice Test 18: Multiple sequential liquidations on the same claim
@@ -3138,14 +3177,18 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         eigenCoverageLiquidatable.liquidateClaim(claimId, posB);
         CoverageClaim memory afterFirst = eigenCoverageProvider.claim(claimId);
         assertEq(afterFirst.positionId, posB, "Should now point to position B");
-        uint256 firstCreatedAt = afterFirst.createdAt;
+        (uint256 distAfterFirst,) =
+            EigenCoverageProviderFacet(address(eigenCoverageDiamond)).claimRewardDistributions(claimId);
+        assertLe(distAfterFirst, reward, "First liquidation must not overpay old operator");
 
         // Warp a bit and liquidate again: B -> C
         vm.warp(block.timestamp + 1 days);
         eigenCoverageLiquidatable.liquidateClaim(claimId, posC);
         CoverageClaim memory afterSecond = eigenCoverageProvider.claim(claimId);
         assertEq(afterSecond.positionId, posC, "Should now point to position C");
-        assertGt(afterSecond.createdAt, firstCreatedAt, "createdAt should be updated again");
+        (uint256 distAfterSecond,) =
+            EigenCoverageProviderFacet(address(eigenCoverageDiamond)).claimRewardDistributions(claimId);
+        assertLe(distAfterSecond, reward, "Second liquidation must not overpay (total distributed <= reward)");
     }
 
     /// @notice Test 19: Liquidation succeeds when new position expiry exactly matches claim end
@@ -3192,6 +3235,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         CoverageClaim memory claimAfter = eigenCoverageProvider.claim(claimId);
         assertEq(claimAfter.positionId, exactExpiryPositionId);
+        (uint256 distAmount,) =
+            EigenCoverageProviderFacet(address(eigenCoverageDiamond)).claimRewardDistributions(claimId);
+        assertLe(distAmount, reward, "Distributed reward must not exceed claim reward");
     }
 
     /// @notice Test 20: Liquidation succeeds at the exact moment the claim ends (boundary: > not >=)
@@ -3209,6 +3255,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         CoverageClaim memory claimAfter = eigenCoverageProvider.claim(claimId);
         assertEq(claimAfter.positionId, newPositionId);
+        (uint256 distAmount,) =
+            EigenCoverageProviderFacet(address(eigenCoverageDiamond)).claimRewardDistributions(claimId);
+        assertLe(distAmount, claimAfter.reward, "Distributed reward must not exceed claim reward");
     }
 
     // --- Fuzz Tests ---
@@ -3243,6 +3292,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         CoverageClaim memory claimAfter = eigenCoverageProvider.claim(claimId);
         assertEq(claimAfter.positionId, newPositionId, "Claim should point to new position");
         assertEq(claimAfter.createdAt, block.timestamp, "createdAt should be reset");
+        (uint256 distAmount,) =
+            EigenCoverageProviderFacet(address(eigenCoverageDiamond)).claimRewardDistributions(claimId);
+        assertLe(distAmount, reward, "Distributed reward must not exceed claim reward");
     }
 
     /// @notice Test 22: Fuzz varying durations for liquidation
@@ -3275,6 +3327,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         CoverageClaim memory claimAfter = eigenCoverageProvider.claim(claimId);
         assertEq(claimAfter.positionId, newPositionId);
         assertEq(claimAfter.duration, duration, "Duration should not change");
+        (uint256 distAmount,) =
+            EigenCoverageProviderFacet(address(eigenCoverageDiamond)).claimRewardDistributions(claimId);
+        assertLe(distAmount, reward, "Distributed reward must not exceed claim reward");
     }
 
     /// @notice Test 23: Fuzz varying timing within claim duration for reward capture
@@ -3293,6 +3348,10 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         CoverageClaim memory claimAfter = eigenCoverageProvider.claim(claimId);
         assertEq(claimAfter.positionId, newPositionId);
+        (uint256 distAmount,) =
+            EigenCoverageProviderFacet(address(eigenCoverageDiamond)).claimRewardDistributions(claimId);
+        uint256 maxAllowed = (claimAfter.reward * timeOffset) / claimAfter.duration;
+        assertLe(distAmount, maxAllowed, "Distributed reward must not exceed time-proportional share");
     }
 
     /// @notice Test 24: Fuzz varying old and new position stake combos
@@ -3349,6 +3408,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
             // New operator has enough coverage — should succeed
             eigenCoverageLiquidatable.liquidateClaim(claimId, newPositionId);
             assertEq(eigenCoverageProvider.claim(claimId).positionId, newPositionId);
+            (uint256 distAmount,) =
+                EigenCoverageProviderFacet(address(eigenCoverageDiamond)).claimRewardDistributions(claimId);
+            assertLe(distAmount, reward, "Distributed reward must not exceed claim reward");
         } else {
             // New operator doesn't have enough coverage — should revert
             vm.expectRevert();
@@ -3401,6 +3463,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
             // New position expiry accommodates the claim — should succeed
             eigenCoverageLiquidatable.liquidateClaim(claimId, newPositionId);
             assertEq(eigenCoverageProvider.claim(claimId).positionId, newPositionId);
+            (uint256 distAmount,) =
+                EigenCoverageProviderFacet(address(eigenCoverageDiamond)).claimRewardDistributions(claimId);
+            assertLe(distAmount, reward, "Distributed reward must not exceed claim reward");
         } else {
             // New position expires before the claim ends — should revert
             vm.expectRevert(
@@ -3438,11 +3503,6 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint32 duration;
         uint32 distributionStartTime;
 
-        (amount, duration,) = eigenCoverageProvider.captureRewards(claimId);
-        assertEq(amount, 0);
-        assertEq(duration, 0);
-
-        vm.warp(block.timestamp + 1);
         (amount, duration, distributionStartTime) = eigenCoverageProvider.captureRewards(claimId);
         assertEq(amount, 10e6, "Full reward should be capturable immediately for None policy");
 
@@ -3590,6 +3650,39 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         (uint256 amount,,) = eigenCoverageProvider.captureRewards(claimId);
         assertEq(amount, reward / 2, "captureRewards should distribute remaining reward after early close");
+    }
+
+    function test_captureRewards_refundableFull_secondCallReturnsZero() public {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(1000e18);
+
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.Full,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(uint256(uint160(address(operator))))
+        });
+        uint256 positionId = eigenCoverageProvider.createPosition(data, "");
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 31 days);
+        eigenCoverageProvider.closeClaim(claimId);
+
+        (uint256 amount,,) = eigenCoverageProvider.captureRewards(claimId);
+        assertEq(amount, 10e6, "First captureRewards should return full reward for Full refundable when Completed");
+
+        (uint256 amountAgain, uint32 durationAgain,) = eigenCoverageProvider.captureRewards(claimId);
+        assertEq(amountAgain, 0, "Second captureRewards should return 0 (no double payout)");
+        assertEq(durationAgain, 0, "Duration should be 0 when no reward to distribute");
     }
 
     function test_captureRewards_zeroElapsedDuration() public {

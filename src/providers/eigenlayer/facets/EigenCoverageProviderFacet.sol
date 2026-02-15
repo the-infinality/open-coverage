@@ -378,7 +378,6 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
 
         // Update the claim to the new position and reset the createdAt to the current block timestamp
         _claim.positionId = positionId;
-        _claim.createdAt = block.timestamp;
     }
 
     /// @inheritdoc ICoverageProvider
@@ -499,17 +498,19 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
 
         uint32 distributionStartTime = _claimRewardDistribution.lastDistributedTimestamp;
 
-        // Calculate the amount of time that has elapsed since the last distribution for the claim
-        uint32 elapsedDuration = uint32(
-            _min(block.timestamp - distributionStartTime, _claim.duration + _claim.createdAt - distributionStartTime)
-        );
-
-        if (elapsedDuration == 0) {
-            return (0, 0, distributionStartTime);
+        uint32 elapsedDuration = uint32(block.timestamp - distributionStartTime);
+        if (_claim.duration + _claim.createdAt < distributionStartTime) {
+            elapsedDuration = 0;
+        } else if (elapsedDuration > _claim.duration + _claim.createdAt - distributionStartTime) {
+            elapsedDuration = uint32(_claim.duration + _claim.createdAt - distributionStartTime);
         }
 
-        if (_position.refundable == Refundable.None) {
+        if (
             // No refund possible — operator earned the full reward on issuance
+            _position.refundable == Refundable.None || 
+                // Full rewards are distributed only after the claim is completed
+                (_position.refundable == Refundable.Full && _claim.status == CoverageClaimStatus.Completed)
+        ) {
             amount = _claim.reward - _claimRewardDistribution.amount;
             claimRewardDistributions[claimId].amount += amount;
             claimRewardDistributions[claimId].lastDistributedTimestamp = uint32(block.timestamp);
@@ -519,8 +520,6 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             amount = claimableReward - _claimRewardDistribution.amount;
             claimRewardDistributions[claimId].amount += amount;
             claimRewardDistributions[claimId].lastDistributedTimestamp = uint32(block.timestamp);
-        } else if (_position.refundable == Refundable.Full && _claim.status == CoverageClaimStatus.Completed) {
-            amount = _claim.reward;
         } else {
             return (0, 0, distributionStartTime);
         }
