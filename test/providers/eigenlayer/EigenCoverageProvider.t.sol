@@ -834,8 +834,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         bytes memory poolInfo = abi.encodePacked(rETH, uint24(100), WETH, uint24(500), USDC);
 
         OperatorSet memory operatorSet = OperatorSet({
-            avs: address(eigenCoverageDiamond),
-            id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
+            avs: address(eigenCoverageDiamond), id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
         });
         address[] memory operators = new address[](1);
         operators[0] = address(operator);
@@ -848,11 +847,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.mockCall(
             address(uniswapV3SwapperEngine),
             abi.encodeWithSelector(
-                ISwapperEngine.getQuote.selector,
-                poolInfo,
-                slashAmount,
-                strategyAsset,
-                coverageAsset
+                ISwapperEngine.getQuote.selector, poolInfo, slashAmount, strategyAsset, coverageAsset
             ),
             abi.encode(totalAllocatedStake + 1)
         );
@@ -860,19 +855,13 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.mockCall(
             address(uniswapV3SwapperEngine),
             abi.encodeWithSelector(
-                ISwapperEngine.getQuote.selector,
-                poolInfo,
-                totalAllocatedStake,
-                coverageAsset,
-                strategyAsset
+                ISwapperEngine.getQuote.selector, poolInfo, totalAllocatedStake, coverageAsset, strategyAsset
             ),
             abi.encode(slashAmount + 1)
         );
 
         vm.prank(address(eigenCoverageDiamond));
-        vm.expectRevert(
-            abi.encodeWithSelector(ICoverageProvider.InsufficientSlashableCoverageAvailable.selector, 0)
-        );
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.InsufficientSlashableCoverageAvailable.selector, 0));
         eigenServiceManager.slashOperator(address(operator), strategy, address(coverageAgent), slashAmount);
     }
 
@@ -889,8 +878,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         bytes memory poolInfo = abi.encodePacked(rETH, uint24(100), WETH, uint24(500), USDC);
 
         OperatorSet memory operatorSet = OperatorSet({
-            avs: address(eigenCoverageDiamond),
-            id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
+            avs: address(eigenCoverageDiamond), id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
         });
         address[] memory operators = new address[](1);
         operators[0] = address(operator);
@@ -903,11 +891,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.mockCall(
             address(uniswapV3SwapperEngine),
             abi.encodeWithSelector(
-                ISwapperEngine.getQuote.selector,
-                poolInfo,
-                slashAmount,
-                strategyAsset,
-                coverageAsset
+                ISwapperEngine.getQuote.selector, poolInfo, slashAmount, strategyAsset, coverageAsset
             ),
             abi.encode(totalAllocatedStake + 1)
         );
@@ -916,11 +900,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.mockCall(
             address(uniswapV3SwapperEngine),
             abi.encodeWithSelector(
-                ISwapperEngine.getQuote.selector,
-                poolInfo,
-                totalAllocatedStake,
-                coverageAsset,
-                strategyAsset
+                ISwapperEngine.getQuote.selector, poolInfo, totalAllocatedStake, coverageAsset, strategyAsset
             ),
             abi.encode(totalAllocatedStakeValue)
         );
@@ -928,10 +908,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.prank(address(eigenCoverageDiamond));
         uint256 expectedDeficit = slashAmount - totalAllocatedStakeValue;
         vm.expectRevert(
-            abi.encodeWithSelector(
-                ICoverageProvider.InsufficientSlashableCoverageAvailable.selector,
-                expectedDeficit
-            )
+            abi.encodeWithSelector(ICoverageProvider.InsufficientSlashableCoverageAvailable.selector, expectedDeficit)
         );
         eigenServiceManager.slashOperator(address(operator), strategy, address(coverageAgent), slashAmount);
     }

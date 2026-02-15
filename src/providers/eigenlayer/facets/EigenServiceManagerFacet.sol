@@ -289,7 +289,7 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         (total,) =
             IAssetPriceOracleAndSwapper(address(this)).getQuote(allocatedStake[0][0], coverageAsset, strategyAsset);
     }
-    
+
     /// @notice Calculates the WAD proportion to slash based on the amount
     function _calculateWadToSlash(address operator, address strategy, address coverageAgent, uint256 amount)
         private
