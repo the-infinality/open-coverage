@@ -450,9 +450,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
 
         IERC20 coverageAgentAsset = IERC20(ICoverageAgent(_coverageAgent).asset());
 
-        // Claim the funds to this contract first
-        // slither-disable-next-line arbitrary-from-in-transferfrom -- _coverageAgent == msg.sender enforced above
-        SafeERC20.safeTransferFrom(coverageAgentAsset, _coverageAgent, address(this), amount);
+        // Claim the funds to this contract first (msg.sender == _coverageAgent enforced above)
+        SafeERC20.safeTransferFrom(coverageAgentAsset, msg.sender, address(this), amount);
 
         if (_claim.status != CoverageClaimStatus.Repaid) {
             // Repayments amount greater than the slashed value is allowed
@@ -486,6 +485,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     /// ============ Rewards ============
 
     /// @inheritdoc ICoverageProvider
+    /// @dev Refundable/status checks and amount==0 guard are intentional; we never submit zero reward distributions.
+    // slither-disable-start incorrect-equality - amount == 0 guard is intentional
     function captureRewards(uint256 claimId)
         public
         returns (uint256 amount, uint32 resolvedDuration, uint32 resolvedDistributionStartTime)
@@ -505,9 +506,10 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             elapsedDuration = uint32(_claim.duration + _claim.createdAt - distributionStartTime);
         }
 
+        // Intentional enum/status checks for reward eligibility
         if (
             // No refund possible — operator earned the full reward on issuance
-            _position.refundable == Refundable.None || 
+            _position.refundable == Refundable.None ||
                 // Full rewards are distributed only after the claim is completed
                 (_position.refundable == Refundable.Full && _claim.status == CoverageClaimStatus.Completed)
         ) {
@@ -525,7 +527,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         }
 
         // Guard against submitting a zero-amount reward (e.g. already fully distributed,
-        // or reward was reduced to 0 after refund on early close)
+        // or reward was reduced to 0 after refund on early close).
         if (amount == 0) {
             return (0, 0, distributionStartTime);
         }
@@ -545,12 +547,14 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
 
         return (amount, resolvedDuration, resolvedDistributionStartTime);
     }
+    // slither-disable-end incorrect-equality
 
     /// @inheritdoc ICoverageLiquidatable
     function setLiquidationThreshold(uint16 threshold) external {
         LibDiamond.enforceIsContractOwner();
         if (threshold > 10000) revert ThresholdExceedsMax(10000, threshold);
         _liquidationThreshold = threshold;
+        emit ICoverageLiquidatable.LiquidationThresholdUpdated(threshold);
     }
 
     /// @inheritdoc ICoverageLiquidatable

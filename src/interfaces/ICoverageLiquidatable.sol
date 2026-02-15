@@ -5,6 +5,8 @@ pragma solidity ^0.8.24;
 interface ICoverageLiquidatable {
     /// @notice Emitted when a claim is liquidated.
     event ClaimLiquidated(uint256 indexed claimId, uint256 indexed oldPositionId, uint256 indexed newPositionId);
+    /// @notice Emitted when the liquidation threshold is updated.
+    event LiquidationThresholdUpdated(uint16 threshold);
     /// @notice The threshold exceeds the maximum allowed (10000 = 100%).
     error ThresholdExceedsMax(uint16 maxThreshold, uint16 threshold);
 

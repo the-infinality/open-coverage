@@ -35,7 +35,6 @@ struct ClaimRewardDistribution {
 ///      - coverageAgentToOperatorSetId: set per-agent in EigenCoverageProviderFacet.onIsRegistered when agent registers
 abstract contract EigenCoverageStorage {
     /// @notice Eigen protocol contract addresses (initialized in EigenCoverageDiamond constructor)
-    // slither-disable-next-line uninitialized-state-variables
     EigenAddresses internal _eigenAddresses;
 
     /// @notice Counter for operator set IDs, incremented when new coverage agents register
@@ -48,7 +47,6 @@ abstract contract EigenCoverageStorage {
     CoverageClaim[] public claims;
 
     /// @notice Mapping from coverage agent address to their operator set ID (written in EigenCoverageProviderFacet.onIsRegistered)
-    // slither-disable-next-line uninitialized-state-variables
     mapping(address => uint32) public coverageAgentToOperatorSetId;
 
     /// @notice Mapping of whitelisted strategies (address => 1 if whitelisted)
@@ -56,7 +54,6 @@ abstract contract EigenCoverageStorage {
     EnumerableMap.AddressToUintMap internal _strategyWhitelist;
 
     /// @notice Mapping from asset address to strategy address (written in EigenServiceManagerFacet.setStrategyWhitelist)
-    // slither-disable-next-line uninitialized-state-variables
     mapping(address => address) public assetToStrategy;
 
     /// @notice Mapping from operator address to their data
