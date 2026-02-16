@@ -109,6 +109,7 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         uint256 balanceAfter = IERC20(outputToken).balanceOf(address(this));
         amountOut = balanceAfter - balanceBefore;
     }
+
     // slither-disable-end uninitialized-local
 
     /// @inheritdoc ISwapperEngine
@@ -168,6 +169,7 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         uint256 balanceAfter = IERC20(inputToken).balanceOf(address(this));
         amountIn = balanceBefore - balanceAfter;
     }
+
     // slither-disable-end uninitialized-local
 
     /// @inheritdoc ISwapperEngine

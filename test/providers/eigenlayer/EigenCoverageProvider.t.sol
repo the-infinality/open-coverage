@@ -3066,7 +3066,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         // New operator gets 0 (full reward already paid to old operator at liquidation)
         vm.warp(claimAfter.createdAt + claimAfter.duration);
         (uint256 newOperatorAmount,,) = eigenCoverageProvider.captureRewards(claimId);
-        assertEq(newOperatorAmount, 0, "New operator must not receive reward (full reward already paid to old operator)");
+        assertEq(
+            newOperatorAmount, 0, "New operator must not receive reward (full reward already paid to old operator)"
+        );
     }
 
     /// @notice Test 15: Rewards are captured for old operator before position swap
@@ -3093,7 +3095,11 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         // New operator (Refundable.None): full reward was paid to old operator at liquidation, so new operator gets 0
         vm.warp(claimAfter.createdAt + claimAfter.duration);
         (uint256 newOperatorAmount,,) = eigenCoverageProvider.captureRewards(claimId);
-        assertEq(newOperatorAmount, 0, "New operator must not receive reward (None: full reward already paid to old operator)");
+        assertEq(
+            newOperatorAmount,
+            0,
+            "New operator must not receive reward (None: full reward already paid to old operator)"
+        );
     }
 
     /// @notice Test 16: TimeWeighted refundable rewards are captured correctly before swap
@@ -3142,7 +3148,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.prank(address(coverageAgent));
         eigenCoverageProvider.closeClaim(claimId);
         (uint256 newOperatorAmount,,) = eigenCoverageProvider.captureRewards(claimId);
-        assertEq(newOperatorAmount, claimAfter.reward, "New operator must receive full reward on completion (Full policy)");
+        assertEq(
+            newOperatorAmount, claimAfter.reward, "New operator must receive full reward on completion (Full policy)"
+        );
         (uint256 totalDistributed,) =
             EigenCoverageProviderFacet(address(eigenCoverageDiamond)).claimRewardDistributions(claimId);
         assertEq(totalDistributed, claimAfter.reward, "Total distributed must equal claim reward");

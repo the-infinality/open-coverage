@@ -59,7 +59,11 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     /// @dev The caller must have the `modifyAllocations` permission for the operator.
     /// @dev The operator address must be set in data.operatorId (as bytes32).
     /// @dev The strategy is derived from assetToStrategy[data.asset].
-    function createPosition(CoveragePosition memory data, bytes calldata) external nonReentrant returns (uint256 positionId) {
+    function createPosition(CoveragePosition memory data, bytes calldata)
+        external
+        nonReentrant
+        returns (uint256 positionId)
+    {
         if (data.expiryTimestamp < block.timestamp) revert TimestampInvalid(data.expiryTimestamp);
         if (data.minRate > 10000) revert MinRateInvalid(data.minRate);
 
@@ -307,7 +311,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
                 address coverageAgent = positionData.coverageAgent;
                 SafeERC20.safeTransfer(IERC20(ICoverageAgent(coverageAgent).asset()), coverageAgent, refundAmount);
                 ICoverageAgent(coverageAgent).onClaimRefunded(claimId, refundAmount);
-            }             
+            }
             // Refundable.None: no refund — operator already earned the full reward via captureRewards
         }
 
@@ -511,7 +515,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         // Intentional enum/status checks for reward eligibility
         if (
             // No refund possible — operator earned the full reward on issuance
-            _position.refundable == Refundable.None ||
+            _position.refundable == Refundable.None || 
                 // Full rewards are distributed only after the claim is completed
                 (_position.refundable == Refundable.Full && _claim.status == CoverageClaimStatus.Completed)
         ) {
@@ -549,6 +553,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
 
         return (amount, resolvedDuration, resolvedDistributionStartTime);
     }
+
     // slither-disable-end incorrect-equality
 
     /// @inheritdoc ICoverageLiquidatable
