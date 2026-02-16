@@ -34,6 +34,8 @@ struct ClaimRewardDistribution {
 ///      - assetToStrategy: set per-asset in EigenServiceManagerFacet.setStrategyWhitelist (owner-only)
 ///      - coverageAgentToOperatorSetId: set per-agent in EigenCoverageProviderFacet.onIsRegistered when agent registers
 abstract contract EigenCoverageStorage {
+    // slither-disable-start uninitialized-storage
+    // slither-disable-start uninitialized-state
     /// @notice Eigen protocol contract addresses (initialized in EigenCoverageDiamond constructor)
     EigenAddresses internal _eigenAddresses;
 
@@ -55,6 +57,8 @@ abstract contract EigenCoverageStorage {
 
     /// @notice Mapping from asset address to strategy address (written in EigenServiceManagerFacet.setStrategyWhitelist)
     mapping(address => address) public assetToStrategy;
+    // slither-disable-end uninitialized-state
+    // slither-disable-end uninitialized-storage
 
     /// @notice Mapping from operator address to their data
     mapping(address => OperatorData) public operators;

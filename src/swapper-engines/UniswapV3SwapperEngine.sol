@@ -50,6 +50,8 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
     }
 
     /// @inheritdoc ISwapperEngine
+    /// @dev Slither "uninitialized-local": inputToken, outputToken, pathToUse are assigned in both if/else-if branches; else reverts. No path uses them uninitialized.
+    // slither-disable-start uninitialized-local
     function swapForInput(bytes memory poolInfo, uint256 amountIn, uint256 amountOutMin, address base, address swap)
         external
         onlyDelegateCall
@@ -107,8 +109,11 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         uint256 balanceAfter = IERC20(outputToken).balanceOf(address(this));
         amountOut = balanceAfter - balanceBefore;
     }
+    // slither-disable-end uninitialized-local
 
     /// @inheritdoc ISwapperEngine
+    /// @dev Slither "uninitialized-local": inputToken, pathToUse assigned in both if/else-if; else reverts.
+    // slither-disable-start uninitialized-local
     function swapForOutput(bytes memory poolInfo, uint256 amountOut, uint256 amountInMax, address base, address swap)
         external
         onlyDelegateCall
@@ -163,8 +168,11 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         uint256 balanceAfter = IERC20(inputToken).balanceOf(address(this));
         amountIn = balanceBefore - balanceAfter;
     }
+    // slither-disable-end uninitialized-local
 
     /// @inheritdoc ISwapperEngine
+    /// @dev Slither "uninitialized-local": pathToUse assigned in both if/else-if; else reverts.
+    // slither-disable-start uninitialized-local
     function getQuote(bytes memory poolInfo, uint256 amountIn, address base, address quote)
         external
         view
@@ -212,6 +220,7 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         // Use checked math to prevent overflow
         amountOut = unitAmountOut * amountIn / unitAmount;
     }
+    // slither-disable-end uninitialized-local
 
     function onInit(bytes memory poolInfo) external {
         (address assetA, address assetB) = _getAssetAddresses(poolInfo);
