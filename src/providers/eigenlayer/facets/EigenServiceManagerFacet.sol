@@ -82,9 +82,9 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
     function coverageAllocated(address operator, address strategy, address coverageAgent)
         external
         view
-        returns (uint256)
+        returns (uint256 total)
     {
-        return _totalAllocatedValueToCoverageAgent(operator, strategy, coverageAgent);
+        (total,) = _totalAllocatedValueToCoverageAgent(operator, strategy, coverageAgent);
     }
 
     /// @inheritdoc IEigenServiceManager
@@ -274,7 +274,7 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
     function _totalAllocatedValueToCoverageAgent(address operator, address strategy, address coverageAgent)
         private
         view
-        returns (uint256 total)
+        returns (uint256 total, bool verified)
     {
         address[] memory _operators = new address[](1);
         _operators[0] = operator;
@@ -288,7 +288,7 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
                 _operators,
                 strategies
             );
-        (total,) =
+        (total, verified) =
             IAssetPriceOracleAndSwapper(address(this)).getQuote(allocatedStake[0][0], coverageAsset, strategyAsset);
     }
 
@@ -317,12 +317,21 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         wadToSlash = (requiredSlashAmount * WAD) / totalAllocatedStake;
         // Revert if the required slash amount is greater than the total allocated stake
         if (wadToSlash > WAD) {
-            (uint256 totalAllocatedStakeValue,) = IAssetPriceOracleAndSwapper(address(this))
+            (uint256 totalAllocatedStakeValue, bool verified) = IAssetPriceOracleAndSwapper(address(this))
                 .getQuote(
                     totalAllocatedStake,
                     address(ICoverageAgent(coverageAgent).asset()),
                     address(IStrategy(strategy).underlyingToken())
                 );
+
+            if (!verified) {
+                revert UnverifiedQuote(
+                    totalAllocatedStakeValue,
+                    amount,
+                    address(ICoverageAgent(coverageAgent).asset()),
+                    address(IStrategy(strategy).underlyingToken())
+                );
+            }
 
             // Capture edge case rounding issues
             if (totalAllocatedStakeValue > amount) {

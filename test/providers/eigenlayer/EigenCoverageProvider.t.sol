@@ -14,10 +14,11 @@ import {SlashCoordinationStatus} from "src/interfaces/ISlashCoordinator.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
 import {IAllocationManager} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
-import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {AssetPair, PriceStrategy} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {ISwapperEngine} from "src/interfaces/ISwapperEngine.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {MockSlashCoordinator, MockSlashCoordinatorImmediate} from "../../utils/mocks/MockSlashCoordinator.sol";
+import {MockPriceOracleZero} from "../../utils/mocks/MockPriceOracleZero.sol";
 import {EigenCoverageProviderFacet} from "src/providers/eigenlayer/facets/EigenCoverageProviderFacet.sol";
 import {ICoverageLiquidatable} from "src/interfaces/ICoverageLiquidatable.sol";
 
@@ -911,6 +912,87 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
             abi.encodeWithSelector(ICoverageProvider.InsufficientSlashableCoverageAvailable.selector, expectedDeficit)
         );
         eigenServiceManager.slashOperator(address(operator), strategy, address(coverageAgent), slashAmount);
+    }
+
+    /// @notice Test EigenServiceManagerFacet L327: slashOperator reverts UnverifiedQuote when getQuote returns verified=false
+    /// @dev Invokes slashClaims so the diamond calls slashOperator internally (msg.sender == address(this)). Re-registers
+    ///      with SwapperVerified and MockPriceOracleZero (0); mocks uniswapV3SwapperEngine so wadToSlash > WAD and
+    ///      getQuote returns verified=false, triggering the revert at L327.
+    function test_RevertWhen_slash_UnverifiedQuote() public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        uint256 slashAmount = 1000e6;
+        address strategy = address(_getTestStrategy());
+        address strategyAsset = address(IStrategy(strategy).underlyingToken());
+        address coverageAsset = coverageAgent.asset();
+        bytes memory poolInfo = abi.encodePacked(rETH, uint24(100), WETH, uint24(500), USDC);
+
+        uint256 totalAllocatedStake;
+        {
+            OperatorSet memory operatorSet = OperatorSet({
+                avs: address(eigenCoverageDiamond), id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
+            });
+            address[] memory operators = new address[](1);
+            operators[0] = address(operator);
+            IStrategy[] memory strategies = new IStrategy[](1);
+            strategies[0] = IStrategy(strategy);
+            totalAllocatedStake = IAllocationManager(eigenServiceManager.eigenAddresses().allocationManager)
+                .getAllocatedStake(operatorSet, operators, strategies)[0][0];
+        }
+
+        MockPriceOracleZero oracleZero = new MockPriceOracleZero();
+        {
+            vm.startPrank(owner);
+            eigenPriceOracle.register(
+                AssetPair({
+                    assetA: rETH,
+                    assetB: USDC,
+                    swapEngine: address(uniswapV3SwapperEngine),
+                    poolInfo: poolInfo,
+                    priceStrategy: PriceStrategy.SwapperVerified,
+                    swapperAccuracy: 1,
+                    priceOracle: address(oracleZero)
+                })
+            );
+            eigenPriceOracle.register(
+                AssetPair({
+                    assetA: USDC,
+                    assetB: rETH,
+                    swapEngine: address(uniswapV3SwapperEngine),
+                    poolInfo: poolInfo,
+                    priceStrategy: PriceStrategy.SwapperVerified,
+                    swapperAccuracy: 1,
+                    priceOracle: address(oracleZero)
+                })
+            );
+            vm.stopPrank();
+        }
+
+        // Mock swapper so swapForOutputQuote returns > totalAllocatedStake → wadToSlash > WAD
+        vm.mockCall(
+            address(uniswapV3SwapperEngine),
+            abi.encodeWithSelector(
+                ISwapperEngine.getQuote.selector, poolInfo, slashAmount, strategyAsset, coverageAsset
+            ),
+            abi.encode(totalAllocatedStake + 1)
+        );
+        // Mock swapper so getQuote( totalAllocatedStake, coverageAsset, strategyAsset ) returns 1e18; oracle returns 0 → verified=false
+        vm.mockCall(
+            address(uniswapV3SwapperEngine),
+            abi.encodeWithSelector(
+                ISwapperEngine.getQuote.selector, poolInfo, totalAllocatedStake, coverageAsset, strategyAsset
+            ),
+            abi.encode(1e18)
+        );
+
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, slashAmount);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IEigenServiceManager.UnverifiedQuote.selector, 1e18, slashAmount, coverageAsset, strategyAsset
+            )
+        );
+        _executeSlash(claimIds, amounts);
     }
 
     /// @notice Test slashing immediately after claim creation should succeed
@@ -3408,9 +3490,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         // The new operator's _checkCoverageForAgent passes only if:
         //   coveragePercentage <= coverageThreshold (9500) AND backing >= 0
-        // coveragePercentage = (claimAmount * 10000) / newMaxCoverage
-        // So we need: claimAmount * 10000 <= newMaxCoverage * 9500 (and newMaxCoverage > 0)
-        bool hasEnoughCoverage = newMaxCoverage > 0 && claimAmount * 10000 <= newMaxCoverage * 9500;
+        // coveragePercentage = (totalCoverageByOperator * 10000) / totalAllocatedCoverage (integer division)
+        // So use the same integer division so we match the contract's pass/fail boundary.
+        bool hasEnoughCoverage = newMaxCoverage > 0 && (claimAmount * 10000) / newMaxCoverage <= 9500;
 
         if (hasEnoughCoverage) {
             // New operator has enough coverage — should succeed

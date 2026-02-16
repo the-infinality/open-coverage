@@ -12,6 +12,7 @@ interface IEigenServiceManager {
     error InvalidAVS(address avs);
     error NotOperatorAuthorized(address operator, address handler);
     error NotAllocated(address operator, address strategy, address coverageAgent);
+    error UnverifiedQuote(uint256 quote, uint256 amount, address assetA, address assetB);
 
     /// @notice The threshold exceeds the maximum allowed (10000 = 100%).
     error ThresholdExceedsMax(uint16 maxThreshold, uint16 threshold);
