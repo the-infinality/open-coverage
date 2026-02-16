@@ -175,6 +175,7 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
     }
 
     /// @inheritdoc IEigenServiceManager
+    // slither-disable-next-line reentrancy-events -- owner-only; trusted AllocationManager; event-only after call
     function updateAVSMetadataURI(string calldata metadataURI) external {
         LibDiamond.enforceIsContractOwner();
         IAllocationManager(_eigenAddresses.allocationManager).updateAVSMetadataURI(address(this), metadataURI);

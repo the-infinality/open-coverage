@@ -49,17 +49,17 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         // Diamond receives slashed tokens to swap before forwarding back to coverage agent
         redistributionRecipients[0] = address(this);
 
+        coverageAgentToOperatorSetId[msg.sender] = operatorSetId;
+
         IAllocationManager(_eigenAddresses.allocationManager)
             .createRedistributingOperatorSets(address(this), params, redistributionRecipients);
-
-        coverageAgentToOperatorSetId[msg.sender] = operatorSetId;
     }
 
     /// @inheritdoc ICoverageProvider
     /// @dev The caller must have the `modifyAllocations` permission for the operator.
     /// @dev The operator address must be set in data.operatorId (as bytes32).
     /// @dev The strategy is derived from assetToStrategy[data.asset].
-    function createPosition(CoveragePosition memory data, bytes calldata) external returns (uint256 positionId) {
+    function createPosition(CoveragePosition memory data, bytes calldata) external nonReentrant returns (uint256 positionId) {
         if (data.expiryTimestamp < block.timestamp) revert TimestampInvalid(data.expiryTimestamp);
         if (data.minRate > 10000) revert MinRateInvalid(data.minRate);
 
@@ -92,6 +92,11 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         address operator = address(uint160(uint256(positionData.operatorId)));
         address strategy = assetToStrategy[positionData.asset];
 
+        require(
+            positionData.expiryTimestamp >= block.timestamp, PositionExpired(positionId, positionData.expiryTimestamp)
+        );
+        positions[positionId].expiryTimestamp = block.timestamp;
+
         if (
             _strategyWhitelist.contains(strategy)
                 && !_checkOperatorPermissions(
@@ -99,10 +104,6 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
                 )
         ) revert IEigenServiceManager.NotOperatorAuthorized(operator, msg.sender);
 
-        require(
-            positionData.expiryTimestamp >= block.timestamp, PositionExpired(positionId, positionData.expiryTimestamp)
-        );
-        positions[positionId].expiryTimestamp = block.timestamp;
         emit PositionClosed(positionId);
     }
 
@@ -258,7 +259,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     }
 
     /// @inheritdoc ICoverageProvider
-    function closeClaim(uint256 claimId) external {
+    function closeClaim(uint256 claimId) external nonReentrant {
         CoverageClaim storage _claim = claims[claimId];
         CoveragePosition storage positionData = positions[_claim.positionId];
 
@@ -306,7 +307,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
                 address coverageAgent = positionData.coverageAgent;
                 SafeERC20.safeTransfer(IERC20(ICoverageAgent(coverageAgent).asset()), coverageAgent, refundAmount);
                 ICoverageAgent(coverageAgent).onClaimRefunded(claimId, refundAmount);
-            }
+            }             
             // Refundable.None: no refund — operator already earned the full reward via captureRewards
         }
 
@@ -315,7 +316,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     }
 
     /// @inheritdoc ICoverageLiquidatable
-    function liquidateClaim(uint256 claimId, uint256 positionId) external {
+    function liquidateClaim(uint256 claimId, uint256 positionId) external nonReentrant {
         CoverageClaim storage _claim = claims[claimId];
         CoveragePosition storage oldPosition = positions[_claim.positionId];
         CoveragePosition storage newPosition = positions[positionId];
@@ -383,6 +384,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     /// @inheritdoc ICoverageProvider
     function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts)
         external
+        nonReentrant
         returns (CoverageClaimStatus[] memory slashStatuses)
     {
         slashStatuses = new CoverageClaimStatus[](claimIds.length);
@@ -742,6 +744,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         CoveragePosition storage _position = positions[_claim.positionId];
 
         if (_claim.status == CoverageClaimStatus.Slashed) revert InvalidClaim(claimId, _claim.status);
+        _claim.status = CoverageClaimStatus.Slashed;
 
         address operator = address(uint160(uint256(_position.operatorId)));
         address strategy = assetToStrategy[_position.asset];
@@ -749,6 +752,15 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         // Get balance of strategy asset in this address
         address strategyAsset = address(IStrategy(strategy).underlyingToken());
         uint256 openingStrategyAssetBalance = IERC20(strategyAsset).balanceOf(address(this));
+
+        _modifyCoverageForAgent(
+            operator,
+            strategy,
+            _position.coverageAgent,
+            // casting to 'int256' is safe because amount won't exceed max int256 for practical slash amounts
+            // forge-lint: disable-next-line(unsafe-typecast)
+            -int256(amount)
+        );
 
         // Slash the operator through EigenLayer and claim redistributed tokens
         IEigenServiceManager(address(this)).slashOperator(operator, strategy, _position.coverageAgent, amount);
@@ -760,18 +772,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         // Transfer swapped tokens to coverage agent
         SafeERC20.safeTransfer(IERC20(ICoverageAgent(_position.coverageAgent).asset()), _position.coverageAgent, amount);
 
-        _claim.status = CoverageClaimStatus.Slashed;
         ICoverageAgent(_position.coverageAgent).onSlashCompleted(claimId, amount);
         emit ClaimSlashed(claimId, amount);
-
-        _modifyCoverageForAgent(
-            operator,
-            strategy,
-            _position.coverageAgent,
-            // casting to 'int256' is safe because amount won't exceed max int256 for practical slash amounts
-            // forge-lint: disable-next-line(unsafe-typecast)
-            -int256(amount)
-        );
 
         // Calculate the difference in strategy asset balance
         uint256 closingStrategyAssetBalance = IERC20(strategyAsset).balanceOf(address(this));

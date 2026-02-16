@@ -14,6 +14,7 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
     /// @notice Internal registration of an asset pair (delegatecall to swap engine onInit).
     /// @dev Made internal to avoid controlled-delegatecall from untrusted callers; only facet/exposed entrypoints should call this after access control.
     /// @param _assetPair The asset pair configuration
+    // slither-disable-next-line reentrancy-events -- delegatecall same storage context; event after call is benign
     function _register(AssetPair calldata _assetPair) internal {
         bool priceOracleRequired = _assetPair.priceStrategy != PriceStrategy.SwapperOnly;
         if (_assetPair.priceOracle == address(0) && priceOracleRequired) revert PriceOracleRequired();

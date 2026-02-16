@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/EnumerableMap.sol";
+import {ReentrancyGuardTransient} from "@openzeppelin-v5/contracts/utils/ReentrancyGuardTransient.sol";
 import {EigenAddresses} from "./Types.sol";
 import {CoveragePosition, CoverageClaim} from "../../interfaces/ICoverageProvider.sol";
 
@@ -33,7 +34,7 @@ struct ClaimRewardDistribution {
 ///      - _eigenAddresses: set in EigenCoverageDiamond constructor (DiamondArgs.eigenAddresses)
 ///      - assetToStrategy: set per-asset in EigenServiceManagerFacet.setStrategyWhitelist (owner-only)
 ///      - coverageAgentToOperatorSetId: set per-agent in EigenCoverageProviderFacet.onIsRegistered when agent registers
-abstract contract EigenCoverageStorage {
+abstract contract EigenCoverageStorage is ReentrancyGuardTransient {
     // slither-disable-start uninitialized-storage
     // slither-disable-start uninitialized-state
     /// @notice Eigen protocol contract addresses (initialized in EigenCoverageDiamond constructor)
