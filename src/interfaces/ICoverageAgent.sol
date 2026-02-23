@@ -40,6 +40,8 @@ interface ICoverageAgent {
     event CoverageSlashed(uint256 indexed coverageId);
     /// @notice Emitted when slashed coverage is fully repaid.
     event CoverageRepaid(uint256 indexed coverageId);
+    /// @notice Emitted when coverage is closed.
+    event CoverageClosed(uint256 indexed coverageId);
     /// @notice Emitted when the agent's metadata URI is updated.
     event MetadataUpdated(string metadataUri);
 
