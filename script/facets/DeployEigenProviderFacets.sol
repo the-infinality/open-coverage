@@ -4,10 +4,10 @@ pragma solidity ^0.8.24;
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {VmSafe} from "forge-std/Vm.sol";
-import {EigenFacetsDeployer} from "utils/deployments/EigenFacetsDeployer.sol";
-import {DeploymentUtils} from "utils/deployments/DeploymentUtils.sol";
-import {EigenServiceManagerFacet} from "src/providers/eigenlayer/facets/EigenServiceManagerFacet.sol";
-import {EigenCoverageProviderFacet} from "src/providers/eigenlayer/facets/EigenCoverageProviderFacet.sol";
+import {EigenFacetsDeployer} from "../../utils/deployments/EigenFacetsDeployer.sol";
+import {DeploymentUtils} from "../../utils/deployments/DeploymentUtils.sol";
+import {EigenServiceManagerFacet} from "../../src/providers/eigenlayer/facets/EigenServiceManagerFacet.sol";
+import {EigenCoverageProviderFacet} from "../../src/providers/eigenlayer/facets/EigenCoverageProviderFacet.sol";
 
 /// @title DeployEigenProviderFacets
 /// @notice Script to deploy Eigen provider facets (EigenServiceManager, EigenCoverageProvider) and record them in config/deployments.json
@@ -77,8 +77,8 @@ contract DeployEigenProviderFacets is Script {
                 }
                 if (!anyExist) return;
                 string[2] memory artifacts = [
-                    "src/providers/eigenlayer/facets/EigenServiceManagerFacet.sol:EigenServiceManagerFacet",
-                    "src/providers/eigenlayer/facets/EigenCoverageProviderFacet.sol:EigenCoverageProviderFacet"
+                    "../../src/providers/eigenlayer/facets/EigenServiceManagerFacet.sol:EigenServiceManagerFacet",
+                    "../../src/providers/eigenlayer/facets/EigenCoverageProviderFacet.sol:EigenCoverageProviderFacet"
                 ];
                 bool allSameBytecode = true;
                 for (uint256 f = 0; f < 2; f++) {

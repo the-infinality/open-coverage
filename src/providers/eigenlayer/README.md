@@ -238,9 +238,9 @@ This modular approach ensures consistency between test deployments and productio
 After deployment, the owner can upgrade facets via `diamondCut()`:
 
 ```solidity
-import {IDiamond} from "src/diamond/interfaces/IDiamond.sol";
-import {IDiamondCut} from "src/diamond/interfaces/IDiamondCut.sol";
-import {EigenFacetsDeployer} from "utils/deployments/EigenFacetsDeployer.sol";
+import {IDiamond} from "../../diamond/interfaces/IDiamond.sol";
+import {IDiamondCut} from "../../diamond/interfaces/IDiamondCut.sol";
+import {EigenFacetsDeployer} from "../../../utils/deployments/EigenFacetsDeployer.sol";
 
 // Deploy new facet version
 EigenServiceManagerFacetV2 newFacet = new EigenServiceManagerFacetV2();

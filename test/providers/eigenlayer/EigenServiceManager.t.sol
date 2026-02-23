@@ -2,8 +2,8 @@
 pragma solidity ^0.8.24;
 
 import {EigenTestDeployer} from "../../utils/EigenTestDeployer.sol";
-import {EigenAddresses} from "src/providers/eigenlayer/Types.sol";
-import {IEigenServiceManager} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
+import {EigenAddresses} from "../../../src/providers/eigenlayer/Types.sol";
+import {IEigenServiceManager} from "../../../src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
 import {
     IAllocationManager,
     IAllocationManagerTypes,

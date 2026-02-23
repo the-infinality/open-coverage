@@ -7,7 +7,7 @@ import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/Enumerable
 import {IAllocationManager, IAllocationManagerTypes} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
 import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermissionController.sol";
-import {Refundable} from "src/interfaces/ICoverageProvider.sol";
+import {Refundable} from "../../../interfaces/ICoverageProvider.sol";
 import {IEigenServiceManager} from "../interfaces/IEigenServiceManager.sol";
 import {IEigenOperatorProxy} from "../interfaces/IEigenOperatorProxy.sol";
 import {
@@ -15,14 +15,14 @@ import {
     CoveragePosition,
     CoverageClaim,
     CoverageClaimStatus
-} from "src/interfaces/ICoverageProvider.sol";
-import {ICoverageAgent} from "src/interfaces/ICoverageAgent.sol";
-import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
+} from "../../../interfaces/ICoverageProvider.sol";
+import {ICoverageAgent} from "../../../interfaces/ICoverageAgent.sol";
+import {IAssetPriceOracleAndSwapper} from "../../../interfaces/IAssetPriceOracleAndSwapper.sol";
 import {EigenCoverageStorage, ClaimRewardDistribution} from "../EigenCoverageStorage.sol";
-import {ISlashCoordinator, SlashCoordinationStatus} from "src/interfaces/ISlashCoordinator.sol";
+import {ISlashCoordinator, SlashCoordinationStatus} from "../../../interfaces/ISlashCoordinator.sol";
 import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
-import {ICoverageLiquidatable} from "src/interfaces/ICoverageLiquidatable.sol";
-import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
+import {ICoverageLiquidatable} from "../../../interfaces/ICoverageLiquidatable.sol";
+import {LibDiamond} from "../../../diamond/libraries/LibDiamond.sol";
 
 /// @title EigenCoverageProviderFacet
 /// @author p-dealwis, Infinality

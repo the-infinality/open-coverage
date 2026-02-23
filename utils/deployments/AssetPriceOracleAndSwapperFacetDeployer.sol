@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {AssetPriceOracleAndSwapperFacet} from "src/facets/AssetPriceOracleAndSwapperFacet.sol";
-import {IDiamondCut} from "src/diamond/interfaces/IDiamondCut.sol";
-import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {AssetPriceOracleAndSwapperFacet} from "../../src/facets/AssetPriceOracleAndSwapperFacet.sol";
+import {IDiamondCut} from "../../src/diamond/interfaces/IDiamondCut.sol";
+import {IAssetPriceOracleAndSwapper} from "../../src/interfaces/IAssetPriceOracleAndSwapper.sol";
 
 /// @title AssetPriceOracleAndSwapperFacetDeployer
 /// @notice Helper contract for deploying AssetPriceOracleAndSwapperFacet

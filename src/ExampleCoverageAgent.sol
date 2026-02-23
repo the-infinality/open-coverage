@@ -5,10 +5,10 @@ import {SafeERC20} from "@openzeppelin-v5/contracts/token/ERC20/utils/SafeERC20.
 
 import {IERC20} from "@openzeppelin-v5/contracts/token/ERC20/IERC20.sol";
 import {EnumerableMap} from "@openzeppelin-v5/contracts/utils/structs/EnumerableMap.sol";
-import {ICoverageAgent, ClaimCoverageRequest, Coverage, Claim} from "src/interfaces/ICoverageAgent.sol";
-import {ICoverageProvider, CoverageClaim, CoverageClaimStatus} from "src/interfaces/ICoverageProvider.sol";
+import {ICoverageAgent, ClaimCoverageRequest, Coverage, Claim} from "./interfaces/ICoverageAgent.sol";
+import {ICoverageProvider, CoverageClaim, CoverageClaimStatus} from "./interfaces/ICoverageProvider.sol";
 import {SafeERC20} from "@openzeppelin-v5/contracts/token/ERC20/utils/SafeERC20.sol";
-import {IExampleCoverageAgent} from "src/interfaces/IExampleCoverageAgent.sol";
+import {IExampleCoverageAgent} from "./interfaces/IExampleCoverageAgent.sol";
 import {ERC165} from "@openzeppelin-v5/contracts/utils/introspection/ERC165.sol";
 
 /// @notice An example implementation of a coverage agent.

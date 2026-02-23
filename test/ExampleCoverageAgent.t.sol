@@ -4,17 +4,17 @@ pragma solidity ^0.8.24;
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {TestDeployer} from "test/utils/TestDeployer.sol";
-import {ExampleCoverageAgent} from "src/ExampleCoverageAgent.sol";
-import {ICoverageAgent, ClaimCoverageRequest, Coverage} from "src/interfaces/ICoverageAgent.sol";
-import {ICoverageLiquidatable} from "src/interfaces/ICoverageLiquidatable.sol";
+import {ExampleCoverageAgent} from "../src/ExampleCoverageAgent.sol";
+import {ICoverageAgent, ClaimCoverageRequest, Coverage} from "../src/interfaces/ICoverageAgent.sol";
+import {ICoverageLiquidatable} from "../src/interfaces/ICoverageLiquidatable.sol";
 import {
     ICoverageProvider,
     CoveragePosition,
     CoverageClaim,
     CoverageClaimStatus,
     Refundable
-} from "src/interfaces/ICoverageProvider.sol";
-import {IExampleCoverageAgent} from "src/interfaces/IExampleCoverageAgent.sol";
+} from "../src/interfaces/ICoverageProvider.sol";
+import {IExampleCoverageAgent} from "../src/interfaces/IExampleCoverageAgent.sol";
 
 /// @notice Mock Coverage Provider for testing
 contract MockCoverageProvider is ICoverageProvider, ICoverageLiquidatable {

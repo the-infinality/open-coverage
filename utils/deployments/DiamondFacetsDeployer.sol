@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {DiamondCutFacet} from "src/diamond/facets/DiamondCutFacet.sol";
-import {DiamondLoupeFacet} from "src/diamond/facets/DiamondLoupeFacet.sol";
-import {IDiamondCut} from "src/diamond/interfaces/IDiamondCut.sol";
-import {IDiamondLoupe} from "src/diamond/interfaces/IDiamondLoupe.sol";
-import {IERC165} from "src/diamond/interfaces/IERC165.sol";
-import {IERC173} from "src/diamond/interfaces/IERC173.sol";
-import {OwnershipFacet} from "src/diamond/facets/OwnershipFacet.sol";
+import {DiamondCutFacet} from "../../src/diamond/facets/DiamondCutFacet.sol";
+import {DiamondLoupeFacet} from "../../src/diamond/facets/DiamondLoupeFacet.sol";
+import {IDiamondCut} from "../../src/diamond/interfaces/IDiamondCut.sol";
+import {IDiamondLoupe} from "../../src/diamond/interfaces/IDiamondLoupe.sol";
+import {IERC165} from "../../src/diamond/interfaces/IERC165.sol";
+import {IERC173} from "../../src/diamond/interfaces/IERC173.sol";
+import {OwnershipFacet} from "../../src/diamond/facets/OwnershipFacet.sol";
 
 /// @title DiamondFacetsDeployer
 /// @notice Helper contract for deploying diamond core facets (DiamondCutFacet and DiamondLoupeFacet)

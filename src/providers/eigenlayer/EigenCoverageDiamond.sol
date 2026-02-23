@@ -2,15 +2,15 @@
 pragma solidity ^0.8.24;
 
 import {IAllocationManager} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
-import {IDiamondCut} from "src/diamond/interfaces/IDiamondCut.sol";
-import {Diamond} from "src/diamond/Diamond.sol";
-import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
+import {IDiamondCut} from "../../diamond/interfaces/IDiamondCut.sol";
+import {Diamond} from "../../diamond/Diamond.sol";
+import {LibDiamond} from "../../diamond/libraries/LibDiamond.sol";
 import {EigenAddresses} from "./Types.sol";
 import {EigenCoverageStorage} from "./EigenCoverageStorage.sol";
 import {AssetPriceOracleAndSwapperStorage} from "../../storage/AssetPriceOracleAndSwapperStorage.sol";
 import {IEigenServiceManager} from "./interfaces/IEigenServiceManager.sol";
-import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
-import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
+import {IAssetPriceOracleAndSwapper} from "../../interfaces/IAssetPriceOracleAndSwapper.sol";
+import {ICoverageProvider} from "../../interfaces/ICoverageProvider.sol";
 
 /// @title EigenCoverageDiamond
 /// @author p-dealwis, Infinality

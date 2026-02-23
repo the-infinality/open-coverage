@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 
-import {getConfig} from "utils/Config.sol";
+import {getConfig} from "../../utils/Config.sol";
 
 contract TestDeployer is Test {
     using stdJson for string;

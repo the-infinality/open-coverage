@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {ISwapperEngine} from "src/interfaces/ISwapperEngine.sol";
+import {ISwapperEngine} from "../interfaces/ISwapperEngine.sol";
 import {IUniversalRouter} from "@uniswap/universal-router/interfaces/IUniversalRouter.sol";
 import {IPermit2} from "@uniswap/permit2/src/interfaces/IPermit2.sol";
 import {Commands} from "@uniswap/universal-router/libraries/Commands.sol";
 import {Constants} from "@uniswap/universal-router/libraries/Constants.sol";
 import {IERC20} from "@openzeppelin-v5/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin-v5/contracts/token/ERC20/utils/SafeERC20.sol";
-import {IQuoter} from "src/interfaces/IQuoter.sol";
+import {IQuoter} from "../interfaces/IQuoter.sol";
 
 contract UniswapV3SwapperEngineStorage {
     IUniversalRouter public universalRouter;

@@ -2,8 +2,8 @@
 pragma solidity ^0.8.24;
 
 import {AssetPriceOracleAndSwapper} from "../mixins/AssetPriceOracleAndSwapper.sol";
-import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
-import {AssetPair} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {LibDiamond} from "../diamond/libraries/LibDiamond.sol";
+import {AssetPair} from "../interfaces/IAssetPriceOracleAndSwapper.sol";
 
 /// @title AssetPriceOracleAndSwapperFacet
 /// @author p-dealwis, Infinality

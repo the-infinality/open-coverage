@@ -11,12 +11,12 @@ import {IStrategyManager} from "eigenlayer-contracts/interfaces/IStrategyManager
 import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
 import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
 import {IRewardsCoordinatorTypes} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
-import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
-import {LibDiamond} from "src/diamond/libraries/LibDiamond.sol";
+import {ICoverageProvider} from "../../../interfaces/ICoverageProvider.sol";
+import {LibDiamond} from "../../../diamond/libraries/LibDiamond.sol";
 import {EigenAddresses} from "../Types.sol";
 import {IEigenServiceManager} from "../interfaces/IEigenServiceManager.sol";
-import {ICoverageAgent} from "src/interfaces/ICoverageAgent.sol";
-import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {ICoverageAgent} from "../../../interfaces/ICoverageAgent.sol";
+import {IAssetPriceOracleAndSwapper} from "../../../interfaces/IAssetPriceOracleAndSwapper.sol";
 import {EigenCoverageStorage} from "../EigenCoverageStorage.sol";
 import {WAD} from "eigenlayer-contracts/libraries/SlashingLib.sol";
 
