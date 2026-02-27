@@ -34,11 +34,28 @@ abstract contract AssetPriceOracleAndSwapperStorage {
         ds.swapSlippage = slippage;
     }
 
+    /// @notice Get the swap max delay
+    /// @return The swap max delay in seconds
+    function _swapMaxDelay() internal view returns (uint256) {
+        LibAssetPriceOracleAndSwapperStorage.AssetPriceOracleAndSwapperStorage storage ds =
+            LibAssetPriceOracleAndSwapperStorage.assetPriceOracleAndSwapperStorage();
+        return ds.swapMaxDelay;
+    }
+
+    /// @notice Set the swap max delay
+    /// @param delay The swap max delay in seconds
+    function _setSwapMaxDelay(uint256 delay) internal {
+        LibAssetPriceOracleAndSwapperStorage.AssetPriceOracleAndSwapperStorage storage ds =
+            LibAssetPriceOracleAndSwapperStorage.assetPriceOracleAndSwapperStorage();
+        ds.swapMaxDelay = delay;
+    }
+
     /// @notice Initialize the default swap slippage
     /// @dev Should be called during diamond construction to set default value
     function _initializeSwapSlippage() internal {
         LibAssetPriceOracleAndSwapperStorage.AssetPriceOracleAndSwapperStorage storage ds =
             LibAssetPriceOracleAndSwapperStorage.assetPriceOracleAndSwapperStorage();
         ds.swapSlippage = 100; // Default 1%
+        ds.swapMaxDelay = 300; // Default 5 minutes
     }
 }

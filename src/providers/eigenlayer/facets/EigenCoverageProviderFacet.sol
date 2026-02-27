@@ -94,19 +94,18 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     function closePosition(uint256 positionId) external {
         CoveragePosition storage positionData = positions[positionId];
         address operator = address(uint160(uint256(positionData.operatorId)));
-        address strategy = assetToStrategy[positionData.asset];
 
         require(
             positionData.expiryTimestamp >= block.timestamp, PositionExpired(positionId, positionData.expiryTimestamp)
         );
-        positions[positionId].expiryTimestamp = block.timestamp;
 
         if (
-            _strategyWhitelist.contains(strategy)
-                && !_checkOperatorPermissions(
-                    operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector
-                )
+            !_checkOperatorPermissions(
+                operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector
+            )
         ) revert IEigenServiceManager.NotOperatorAuthorized(operator, msg.sender);
+
+        positions[positionId].expiryTimestamp = block.timestamp;
 
         emit PositionClosed(positionId);
     }
@@ -512,12 +511,22 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             elapsedDuration = uint32(_claim.duration + _claim.createdAt - distributionStartTime);
         }
 
+        if (_claim.status == CoverageClaimStatus.Reserved) {
+            return (0, 0, distributionStartTime);
+        }
+
         // Intentional enum/status checks for reward eligibility
         if (
             // No refund possible — operator earned the full reward on issuance
-            _position.refundable == Refundable.None || 
-                // Full rewards are distributed only after the claim is completed
-                (_position.refundable == Refundable.Full && _claim.status == CoverageClaimStatus.Completed)
+            _position.refundable == Refundable.None
+                || (
+                    _position.refundable == Refundable.Full
+                        && (
+                            _claim.status == CoverageClaimStatus.Completed
+                                || _claim.status == CoverageClaimStatus.Slashed
+                                || _claim.status == CoverageClaimStatus.Repaid
+                        )
+                )
         ) {
             amount = _claim.reward - _claimRewardDistribution.amount;
             claimRewardDistributions[claimId].amount += amount;
@@ -633,15 +642,15 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     /// ============ Internal functions ============ //
 
     /// @notice Validates the claim parameters meet the position requirements
+    /// @dev Strategy whitelist is NOT checked here because the position was already validated at creation time.
+    ///      This decoupling ensures that claims remain issuable for the lifetime of a position
+    ///      even if the associated strategy is later removed from the whitelist.
     function _validatePosition(CoveragePosition memory data, uint256 amount, uint256 duration, uint256 reward)
         private
         view
     {
         uint256 minimumReward = (amount * data.minRate * duration) / (10000 * 365 days);
         if (minimumReward > reward) revert InsufficientReward(minimumReward, reward);
-        if (!_strategyWhitelist.contains(assetToStrategy[data.asset])) {
-            revert IEigenOperatorProxy.StrategyNotWhitelisted(assetToStrategy[data.asset]);
-        }
 
         if (data.maxDuration > 0 && duration > data.maxDuration) revert DurationExceedsMax(data.maxDuration, duration);
         require(

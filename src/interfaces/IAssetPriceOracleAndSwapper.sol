@@ -45,6 +45,7 @@ interface IAssetPriceOracleAndSwapper {
     error InvalidAssetPair();
     error InvalidSwapperAccuracy();
     error InvalidSwapSlippage();
+    error InvalidSwapMaxDelay();
 
     /// @notice Registers a price adaptor for an asset pair
     /// @param _assetPair The asset pair configuration
@@ -75,6 +76,14 @@ interface IAssetPriceOracleAndSwapper {
     /// @notice Gets the swap slippage
     /// @return The swap slippage
     function swapSlippage() external view returns (uint16);
+
+    /// @notice Sets the swap max delay for deadline enforcement
+    /// @param swapMaxDelay_ The max delay in seconds
+    function setSwapMaxDelay(uint256 swapMaxDelay_) external;
+
+    /// @notice Gets the swap max delay for deadline enforcement
+    /// @return The max delay in seconds
+    function swapMaxDelay() external view returns (uint256);
 
     /// @notice Gets a price quote for an asset pair
     /// @param amountIn The amount of `assetB` to get value for `assetA`

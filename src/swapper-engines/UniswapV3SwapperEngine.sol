@@ -52,11 +52,14 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
     /// @inheritdoc ISwapperEngine
     /// @dev Slither "uninitialized-local": inputToken, outputToken, pathToUse are assigned in both if/else-if branches; else reverts. No path uses them uninitialized.
     // slither-disable-start uninitialized-local
-    function swapForInput(bytes memory poolInfo, uint256 amountIn, uint256 amountOutMin, address base, address swap)
-        external
-        onlyDelegateCall
-        returns (uint256 amountOut)
-    {
+    function swapForInput(
+        bytes memory poolInfo,
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address base,
+        address swap,
+        uint256 deadline
+    ) external onlyDelegateCall returns (uint256 amountOut) {
         // Extract first and last tokens from the path
         (address pathFirst, address pathLast) = _getAssetAddresses(poolInfo);
 
@@ -102,8 +105,8 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
             true // Payer is user
         );
 
-        // Execute the swap
-        _getUniversalRouter().execute(commands, inputs, block.timestamp);
+        // Execute the swap with explicit deadline
+        _getUniversalRouter().execute(commands, inputs, deadline);
 
         // Calculate actual amount of output tokens received
         uint256 balanceAfter = IERC20(outputToken).balanceOf(address(this));
@@ -115,11 +118,14 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
     /// @inheritdoc ISwapperEngine
     /// @dev Slither "uninitialized-local": inputToken, pathToUse assigned in both if/else-if; else reverts.
     // slither-disable-start uninitialized-local
-    function swapForOutput(bytes memory poolInfo, uint256 amountOut, uint256 amountInMax, address base, address swap)
-        external
-        onlyDelegateCall
-        returns (uint256 amountIn)
-    {
+    function swapForOutput(
+        bytes memory poolInfo,
+        uint256 amountOut,
+        uint256 amountInMax,
+        address base,
+        address swap,
+        uint256 deadline
+    ) external onlyDelegateCall returns (uint256 amountIn) {
         // Extract first and last tokens from the path
         (address pathFirst, address pathLast) = _getAssetAddresses(poolInfo);
 
@@ -162,8 +168,8 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
             true // Payer is user
         );
 
-        // Execute the swap
-        _getUniversalRouter().execute(commands, inputs, block.timestamp);
+        // Execute the swap with explicit deadline
+        _getUniversalRouter().execute(commands, inputs, deadline);
 
         // Calculate actual amount of input tokens used
         uint256 balanceAfter = IERC20(inputToken).balanceOf(address(this));
@@ -221,6 +227,42 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         // Then multiply by amountIn to get the final quote
         // Use checked math to prevent overflow
         amountOut = unitAmountOut * amountIn / unitAmount;
+    }
+    // slither-disable-end uninitialized-local
+
+    /// @inheritdoc ISwapperEngine
+    /// @dev Slither "uninitialized-local": pathToUse assigned in both if/else-if; else reverts.
+    // slither-disable-start uninitialized-local
+    function getQuoteForOutput(bytes memory poolInfo, uint256 amountOut, address base, address quote)
+        external
+        view
+        returns (uint256 amountIn)
+    {
+        (address pathFirst, address pathLast) = _getAssetAddresses(poolInfo);
+
+        // For EXACT_OUT quote, path format is: output -> fee -> [intermediate -> fee ->]* input
+        // So pathFirst should be the output token (base) and pathLast should be the input token (quote)
+        bytes memory pathToUse;
+
+        if (pathFirst == base && pathLast == quote) {
+            pathToUse = poolInfo;
+        } else if (pathFirst == quote && pathLast == base) {
+            pathToUse = _reversePath(poolInfo);
+        } else {
+            revert InvalidPoolInfo();
+        }
+
+        uint8 baseDecimals = 18;
+        (bool success, bytes memory data) = base.staticcall(abi.encodeWithSelector(bytes4(0x313ce567)));
+        if (success && data.length >= 32) {
+            baseDecimals = abi.decode(data, (uint8));
+        }
+
+        uint256 unitAmount = 10 ** baseDecimals;
+        uint256 unitAmountIn;
+        (unitAmountIn,,,) = _getQuoter().quoteExactOutput(pathToUse, unitAmount);
+
+        amountIn = unitAmountIn * amountOut / unitAmount;
     }
     // slither-disable-end uninitialized-local
 

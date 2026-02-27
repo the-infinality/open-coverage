@@ -272,14 +272,14 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         bytes memory poolInfo = abi.encodePacked(USDC, uint24(500), USDT);
 
         vm.expectRevert(ISwapperEngine.OnlyDelegateCall.selector);
-        swapperEngine.swapForInput(poolInfo, 1000e6, 900e6, USDC, USDT);
+        swapperEngine.swapForInput(poolInfo, 1000e6, 900e6, USDC, USDT, block.timestamp + 300);
     }
 
     function test_RevertWhen_swapForOutput_calledDirectly() public {
         bytes memory poolInfo = abi.encodePacked(USDT, uint24(500), USDC);
 
         vm.expectRevert(ISwapperEngine.OnlyDelegateCall.selector);
-        swapperEngine.swapForOutput(poolInfo, 1000e6, 1100e6, USDC, USDT);
+        swapperEngine.swapForOutput(poolInfo, 1000e6, 1100e6, USDC, USDT, block.timestamp + 300);
     }
 
     // ============ getQuote() Tests ============ //

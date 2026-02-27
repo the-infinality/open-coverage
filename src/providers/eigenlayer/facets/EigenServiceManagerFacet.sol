@@ -34,7 +34,7 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
 
     /// @inheritdoc IEigenServiceManager
     function registerOperator(address operator, address _avs, uint32[] calldata, bytes calldata) external {
-        require(msg.sender != _eigenAddresses.delegationManager, "Not delegation manager");
+        require(msg.sender == _eigenAddresses.allocationManager, "Not allocation manager");
         if (_avs != address(this)) revert IEigenServiceManager.InvalidAVS(_avs);
 
         operators[operator].coverageThreshold = 7000; // Default coverage threshold to 70%

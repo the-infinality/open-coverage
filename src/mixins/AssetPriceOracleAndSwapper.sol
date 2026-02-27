@@ -45,18 +45,20 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
     function swapForOutput(uint256 amountOut, address assetA, address assetB) public {
         AssetPair memory _assetPair = _getRegisteredAssetPair(assetA, assetB);
 
-        uint256 maxAmountIn = swapForOutputQuote(amountOut, assetB, assetA);
+        uint256 maxAmountIn = swapForOutputQuote(amountOut, assetA, assetB);
+        uint256 deadline = block.timestamp + _swapMaxDelay();
 
         // Delegatecall version of swapForOutput
         (bool success,) = _assetPair.swapEngine
             .delegatecall(
                 abi.encodeWithSignature(
-                    "swapForOutput(bytes,uint256,uint256,address,address)",
+                    "swapForOutput(bytes,uint256,uint256,address,address,uint256)",
                     _assetPair.poolInfo,
                     amountOut,
                     maxAmountIn,
                     assetA,
-                    assetB
+                    assetB,
+                    deadline
                 )
             );
         if (!success) revert SwapFailed();
@@ -66,18 +68,20 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
     function swapForInput(uint256 amountIn, address assetA, address assetB) public {
         AssetPair memory _assetPair = _getRegisteredAssetPair(assetA, assetB);
 
-        uint256 minAmountOut = swapForInputQuote(amountIn, assetB, assetA);
+        uint256 minAmountOut = swapForInputQuote(amountIn, assetA, assetB);
+        uint256 deadline = block.timestamp + _swapMaxDelay();
 
         // Delegatecall version of swapForInput
         (bool success,) = _assetPair.swapEngine
             .delegatecall(
                 abi.encodeWithSignature(
-                    "swapForInput(bytes,uint256,uint256,address,address)",
+                    "swapForInput(bytes,uint256,uint256,address,address,uint256)",
                     _assetPair.poolInfo,
                     amountIn,
                     minAmountOut,
                     assetA,
-                    assetB
+                    assetB,
+                    deadline
                 )
             );
         if (!success) revert SwapFailed();
@@ -90,9 +94,21 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
         _setSwapSlippage(swapSlippage_);
     }
 
+    /// @notice Sets the swap max delay in seconds. Internal; expose via facet with access control.
+    /// @param swapMaxDelay_ The swap max delay in seconds
+    function _setSwapMaxDelayChecked(uint256 swapMaxDelay_) internal {
+        if (swapMaxDelay_ == 0) revert InvalidSwapMaxDelay();
+        _setSwapMaxDelay(swapMaxDelay_);
+    }
+
     /// @inheritdoc IAssetPriceOracleAndSwapper
     function swapSlippage() external view returns (uint16) {
         return _swapSlippage();
+    }
+
+    /// @inheritdoc IAssetPriceOracleAndSwapper
+    function swapMaxDelay() external view returns (uint256) {
+        return _swapMaxDelay();
     }
 
     /// @inheritdoc IAssetPriceOracleAndSwapper
@@ -136,7 +152,12 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
         returns (uint256 maxAmountIn)
     {
         AssetPair memory _assetPair = _getRegisteredAssetPair(assetA, assetB);
-        maxAmountIn = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountOut, assetA, assetB);
+        if (_assetPair.priceStrategy != PriceStrategy.SwapperOnly && _assetPair.priceOracle != address(0)) {
+            maxAmountIn = IPriceOracle(_assetPair.priceOracle).getQuote(amountOut, assetB, assetA);
+        } else {
+            maxAmountIn =
+                ISwapperEngine(_assetPair.swapEngine).getQuoteForOutput(_assetPair.poolInfo, amountOut, assetA, assetB);
+        }
         maxAmountIn = maxAmountIn + (uint256(_swapSlippage()) * maxAmountIn) / 10000;
     }
 
@@ -147,7 +168,12 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
         returns (uint256 minAmountOut)
     {
         AssetPair memory _assetPair = _getRegisteredAssetPair(assetA, assetB);
-        minAmountOut = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountIn, assetA, assetB);
+        if (_assetPair.priceStrategy != PriceStrategy.SwapperOnly && _assetPair.priceOracle != address(0)) {
+            minAmountOut = IPriceOracle(_assetPair.priceOracle).getQuote(amountIn, assetA, assetB);
+        } else {
+            minAmountOut =
+                ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountIn, assetA, assetB);
+        }
         minAmountOut = minAmountOut - (minAmountOut * uint256(_swapSlippage())) / 10000;
     }
 

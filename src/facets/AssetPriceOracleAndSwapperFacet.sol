@@ -26,4 +26,11 @@ contract AssetPriceOracleAndSwapperFacet is AssetPriceOracleAndSwapper {
         LibDiamond.enforceIsContractOwner();
         _setSwapSlippageChecked(swapSlippage_);
     }
+
+    /// @notice Sets the swap max delay for deadline enforcement (owner only).
+    /// @param swapMaxDelay_ The max delay in seconds
+    function setSwapMaxDelay(uint256 swapMaxDelay_) external {
+        LibDiamond.enforceIsContractOwner();
+        _setSwapMaxDelayChecked(swapMaxDelay_);
+    }
 }
