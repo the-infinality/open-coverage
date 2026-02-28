@@ -45,6 +45,8 @@ interface IAssetPriceOracleAndSwapper {
     error InvalidAssetPair();
     error InvalidSwapperAccuracy();
     error InvalidSwapSlippage();
+    error SwapDeadlineExpired(uint256 deadline, uint256 currentTimestamp);
+    error SwapDeadlineTooFar(uint256 deadline, uint256 maxAllowedDeadline);
 
     /// @notice Registers a price adaptor for an asset pair
     /// @param _assetPair The asset pair configuration
@@ -54,13 +56,15 @@ interface IAssetPriceOracleAndSwapper {
     /// @param amountOut The exact amount of `assetA` tokens to receive
     /// @param assetA The asset to receive (output/base)
     /// @param assetB The asset to spend (input/swap)
-    function swapForOutput(uint256 amountOut, address assetA, address assetB) external;
+    /// @param deadline Absolute timestamp after which execution must revert
+    function swapForOutput(uint256 amountOut, address assetA, address assetB, uint256 deadline) external;
 
     /// @notice Swaps an exact amount of input tokens
     /// @param amountIn The exact amount of `assetB` tokens to spend
     /// @param assetA The asset to receive (output/base)
     /// @param assetB The asset to spend (input/swap)
-    function swapForInput(uint256 amountIn, address assetA, address assetB) external;
+    /// @param deadline Absolute timestamp after which execution must revert
+    function swapForInput(uint256 amountIn, address assetA, address assetB, uint256 deadline) external;
 
     /// @notice Sets the swap slippage
     /// @param swapSlippage_ The swap slippage in basis points i.e. 1 = 0.01%

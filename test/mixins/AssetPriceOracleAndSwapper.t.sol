@@ -251,7 +251,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         deal(USDT, address(assetPriceOracleAndSwapper), amountIn);
 
         vm.expectRevert(IAssetPriceOracleAndSwapper.SwapFailed.selector);
-        assetPriceOracleAndSwapper.swapForInput(amountIn, USDC, USDT);
+        assetPriceOracleAndSwapper.swapForInput(amountIn, USDC, USDT, block.timestamp + 5 minutes);
     }
 
     function test_swapForOutput() public {
@@ -260,7 +260,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         deal(USDT, address(assetPriceOracleAndSwapper), amountOut * 2);
 
         // Swap from USDT (swap) to get amountOut of USDC (base)
-        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT);
+        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT, block.timestamp + 5 minutes);
 
         assertEq(IERC20(USDC).balanceOf(address(assetPriceOracleAndSwapper)), amountOut);
     }
@@ -271,7 +271,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         deal(USDT, address(assetPriceOracleAndSwapper), amountIn * 2);
 
         // Swap from USDT (swap) to get amountOut of USDC (base)
-        assetPriceOracleAndSwapper.swapForInput(amountIn, USDC, USDT);
+        assetPriceOracleAndSwapper.swapForInput(amountIn, USDC, USDT, block.timestamp + 5 minutes);
     }
 
     function test_RevertWhen_swapForOutput_slippageTooLow() public {
@@ -282,7 +282,32 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         deal(USDT, address(assetPriceOracleAndSwapper), amountOut * 2);
 
         vm.expectRevert(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.SwapFailed.selector));
-        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT);
+        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT, block.timestamp + 5 minutes);
+    }
+
+    function test_RevertWhen_swapForInput_expiredDeadline() public {
+        uint128 amountIn = 1000e6;
+        deal(USDT, address(assetPriceOracleAndSwapper), amountIn * 2);
+
+        uint256 deadline = block.timestamp - 1;
+        vm.expectRevert(
+            abi.encodeWithSelector(IAssetPriceOracleAndSwapper.SwapDeadlineExpired.selector, deadline, block.timestamp)
+        );
+        assetPriceOracleAndSwapper.swapForInput(amountIn, USDC, USDT, deadline);
+    }
+
+    function test_RevertWhen_swapForOutput_deadlineTooFar() public {
+        uint128 amountOut = 1000e6;
+        deal(USDT, address(assetPriceOracleAndSwapper), amountOut * 2);
+
+        uint256 deadline = block.timestamp + 16 minutes;
+        uint256 maxAllowedDeadline = block.timestamp + 15 minutes;
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAssetPriceOracleAndSwapper.SwapDeadlineTooFar.selector, deadline, maxAllowedDeadline
+            )
+        );
+        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT, deadline);
     }
 
     function test_RevertWhen_swapForOutput_slippageTooHigh() public {
@@ -296,9 +321,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         // Get the current slippage value
         uint16 slippage = assetPriceOracleAndSwapper.swapSlippage();
 
-        // Get the base quote from swapper using the registered asset pair's pool info
-        AssetPair memory pair = assetPriceOracleAndSwapper.assetPair(USDC, USDT);
-        uint256 baseQuote = uniswapV3SwapperEngine.getQuote(pair.poolInfo, amountOut, USDC, USDT);
+        uint256 baseQuote = mockPriceOracle.getQuote(amountOut, USDT, USDC);
 
         // Get quote with slippage
         uint256 maxAmountIn = assetPriceOracleAndSwapper.swapForOutputQuote(amountOut, USDC, USDT);
@@ -318,9 +341,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
 
         uint128 amountOut = 1000e6;
 
-        // Get the base quote from swapper using the registered asset pair's pool info
-        AssetPair memory pair = assetPriceOracleAndSwapper.assetPair(USDC, USDT);
-        uint256 baseQuote = uniswapV3SwapperEngine.getQuote(pair.poolInfo, amountOut, USDC, USDT);
+        uint256 baseQuote = mockPriceOracle.getQuote(amountOut, USDT, USDC);
 
         // Get quote with slippage
         uint256 maxAmountIn = assetPriceOracleAndSwapper.swapForOutputQuote(amountOut, USDC, USDT);
@@ -337,9 +358,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         // Get the current slippage value
         uint16 slippage = assetPriceOracleAndSwapper.swapSlippage();
 
-        // Get the base quote from swapper using the registered asset pair's pool info
-        AssetPair memory pair = assetPriceOracleAndSwapper.assetPair(USDC, USDT);
-        uint256 baseQuote = uniswapV3SwapperEngine.getQuote(pair.poolInfo, amountIn, USDC, USDT);
+        uint256 baseQuote = mockPriceOracle.getQuote(amountIn, USDC, USDT);
 
         // Get quote with slippage
         uint256 minAmountOut = assetPriceOracleAndSwapper.swapForInputQuote(amountIn, USDC, USDT);
@@ -359,9 +378,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
 
         uint128 amountIn = 1000e6;
 
-        // Get the base quote from swapper using the registered asset pair's pool info
-        AssetPair memory pair = assetPriceOracleAndSwapper.assetPair(USDC, USDT);
-        uint256 baseQuote = uniswapV3SwapperEngine.getQuote(pair.poolInfo, amountIn, USDC, USDT);
+        uint256 baseQuote = mockPriceOracle.getQuote(amountIn, USDC, USDT);
 
         // Get quote with slippage
         uint256 minAmountOut = assetPriceOracleAndSwapper.swapForInputQuote(amountIn, USDC, USDT);
@@ -378,9 +395,8 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         // Get the current slippage value
         uint16 slippage = assetPriceOracleAndSwapper.swapSlippage();
 
-        // Get the base quote from swapper using the registered asset pair's pool info
         AssetPair memory pair = assetPriceOracleAndSwapper.assetPair(rETH, USDC);
-        uint256 baseQuote = uniswapV3SwapperEngine.getQuote(pair.poolInfo, amountOut, rETH, USDC);
+        uint256 baseQuote = uniswapV3SwapperEngine.getQuoteForOutput(pair.poolInfo, amountOut, rETH, USDC);
 
         // Get quote with slippage
         uint256 maxAmountIn = assetPriceOracleAndSwapper.swapForOutputQuote(amountOut, rETH, USDC);
@@ -397,9 +413,8 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         // Get the current slippage value
         uint16 slippage = assetPriceOracleAndSwapper.swapSlippage();
 
-        // Get the base quote from swapper using the registered asset pair's pool info
         AssetPair memory pair = assetPriceOracleAndSwapper.assetPair(rETH, USDC);
-        uint256 baseQuote = uniswapV3SwapperEngine.getQuote(pair.poolInfo, amountOut, USDC, rETH);
+        uint256 baseQuote = uniswapV3SwapperEngine.getQuoteForOutput(pair.poolInfo, amountOut, USDC, rETH);
 
         // Get quote with slippage
         uint256 maxAmountIn = assetPriceOracleAndSwapper.swapForOutputQuote(amountOut, USDC, rETH);
@@ -449,7 +464,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         // V3 multi-hop path: rETH -> WETH (fee: 100) -> USDC (fee: 500)
         // For EXACT_OUT, path format: output -> fee -> intermediate -> fee -> input
         // Swap from USDC (swap) to get amountOut of rETH (base)
-        assetPriceOracleAndSwapper.swapForOutput(amountOut, rETH, USDC);
+        assetPriceOracleAndSwapper.swapForOutput(amountOut, rETH, USDC, block.timestamp + 5 minutes);
 
         assertEq(IERC20(rETH).balanceOf(address(assetPriceOracleAndSwapper)), amountOut);
     }
@@ -459,7 +474,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         deal(USDT, address(assetPriceOracleAndSwapper), amountOut * 2);
 
         vm.expectRevert(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.AssetPairNotRegistered.selector));
-        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, address(0));
+        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, address(0), block.timestamp + 5 minutes);
     }
 
     function test_getQuote_oracle_only() public view {

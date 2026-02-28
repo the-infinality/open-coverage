@@ -94,7 +94,6 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     function closePosition(uint256 positionId) external {
         CoveragePosition storage positionData = positions[positionId];
         address operator = address(uint160(uint256(positionData.operatorId)));
-        address strategy = assetToStrategy[positionData.asset];
 
         require(
             positionData.expiryTimestamp >= block.timestamp, PositionExpired(positionId, positionData.expiryTimestamp)
@@ -102,10 +101,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         positions[positionId].expiryTimestamp = block.timestamp;
 
         if (
-            _strategyWhitelist.contains(strategy)
-                && !_checkOperatorPermissions(
-                    operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector
-                )
+            !_checkOperatorPermissions(operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector)
         ) revert IEigenServiceManager.NotOperatorAuthorized(operator, msg.sender);
 
         emit PositionClosed(positionId);
@@ -517,7 +513,10 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             // No refund possible — operator earned the full reward on issuance
             _position.refundable == Refundable.None || 
                 // Full rewards are distributed only after the claim is completed
-                (_position.refundable == Refundable.Full && _claim.status == CoverageClaimStatus.Completed)
+                (
+                    _position.refundable == Refundable.Full
+                        && (_claim.status == CoverageClaimStatus.Completed || _claim.status == CoverageClaimStatus.Repaid)
+                )
         ) {
             amount = _claim.reward - _claimRewardDistribution.amount;
             claimRewardDistributions[claimId].amount += amount;
@@ -639,9 +638,6 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     {
         uint256 minimumReward = (amount * data.minRate * duration) / (10000 * 365 days);
         if (minimumReward > reward) revert InsufficientReward(minimumReward, reward);
-        if (!_strategyWhitelist.contains(assetToStrategy[data.asset])) {
-            revert IEigenOperatorProxy.StrategyNotWhitelisted(assetToStrategy[data.asset]);
-        }
 
         if (data.maxDuration > 0 && duration > data.maxDuration) revert DurationExceedsMax(data.maxDuration, duration);
         require(
@@ -772,7 +768,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
 
         // Swap the slashed strategy asset to the coverage agent's asset
         IAssetPriceOracleAndSwapper(address(this))
-            .swapForOutput(amount, ICoverageAgent(_position.coverageAgent).asset(), _position.asset);
+            .swapForOutput(amount, ICoverageAgent(_position.coverageAgent).asset(), _position.asset, block.timestamp + 5 minutes);
 
         // Transfer swapped tokens to coverage agent
         SafeERC20.safeTransfer(IERC20(ICoverageAgent(_position.coverageAgent).asset()), _position.coverageAgent, amount);

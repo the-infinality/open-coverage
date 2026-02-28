@@ -110,8 +110,8 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         eigenCoverageProvider.closePosition(positionId);
     }
 
-    /// @notice Test that anyone can close a position when the strategy is no longer whitelisted
-    function test_closePosition_strategyNotWhitelisted() public {
+    /// @notice Test that strategy whitelist removal no longer bypasses operator authorization checks
+    function test_RevertWhen_closePosition_strategyNotWhitelisted_notAuthorized() public {
         _setupwithAllocations();
 
         CoveragePosition memory data = CoveragePosition({
@@ -132,14 +132,38 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         eigenServiceManager.setStrategyWhitelist(strategy, false);
         assertFalse(eigenServiceManager.isStrategyWhitelisted(strategy));
 
-        // Now anyone can close the position (no authorization required)
+        // Unauthorized callers must still fail even after strategy removal
         address unauthorized = makeAddr("unauthorized");
         vm.prank(unauthorized);
+        vm.expectRevert(
+            abi.encodeWithSelector(IEigenServiceManager.NotOperatorAuthorized.selector, address(operator), unauthorized)
+        );
+        eigenCoverageProvider.closePosition(positionId);
+    }
 
-        // Expect PositionClosed event
+    /// @notice Test that authorized callers can still close a position after strategy removal
+    function test_closePosition_strategyNotWhitelisted_authorized() public {
+        _setupwithAllocations();
+
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(uint256(uint160(address(operator))))
+        });
+        uint256 positionId = eigenCoverageProvider.createPosition(data, "");
+
+        address strategy = address(_getTestStrategy());
+        eigenServiceManager.setStrategyWhitelist(strategy, false);
+        assertFalse(eigenServiceManager.isStrategyWhitelisted(strategy));
+
         vm.expectEmit(true, false, false, false);
         emit ICoverageProvider.PositionClosed(positionId);
-
         eigenCoverageProvider.closePosition(positionId);
     }
 
@@ -294,6 +318,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
     function test_coverageThreshold_defaultAfterRegistration() public {
         uint32[] memory operatorSetIds = new uint32[](0);
+        vm.prank(eigenServiceManager.eigenAddresses().allocationManager);
         eigenServiceManager.registerOperator(address(operator), address(eigenCoverageDiamond), operatorSetIds, "");
 
         uint16 threshold = eigenCoverageLiquidatable.coverageThreshold(bytes32(uint256(uint160(address(operator)))));
@@ -1414,8 +1439,8 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.stopPrank();
     }
 
-    /// @notice Test that issueClaim fails when strategy is no longer whitelisted after position creation
-    function test_RevertWhen_issueClaim_strategyNotWhitelisted() public {
+    /// @notice Test that issueClaim remains available for existing positions after strategy removal
+    function test_issueClaim_afterStrategyRemoved() public {
         // Setup position while strategy is whitelisted
         uint256 positionId = _setupSlashingPosition(10e18);
 
@@ -1424,16 +1449,18 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         eigenServiceManager.setStrategyWhitelist(strategy, false);
         assertFalse(eigenServiceManager.isStrategyWhitelisted(strategy));
 
-        // Attempt to issue a claim - should fail because strategy is no longer whitelisted
+        // Issue should still succeed for existing positions
         vm.startPrank(address(coverageAgent));
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
-        vm.expectRevert(abi.encodeWithSelector(IEigenOperatorProxy.StrategyNotWhitelisted.selector, strategy));
-        eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
+        uint256 claimId = eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
         vm.stopPrank();
+
+        CoverageClaim memory issuedClaim = eigenCoverageProvider.claim(claimId);
+        assertEq(uint8(issuedClaim.status), uint8(CoverageClaimStatus.Issued));
     }
 
-    /// @notice Test that reserveClaim fails when strategy is no longer whitelisted after position creation
-    function test_RevertWhen_reserveClaim_strategyNotWhitelisted() public {
+    /// @notice Test that reserveClaim remains available for existing positions after strategy removal
+    function test_reserveClaim_afterStrategyRemoved() public {
         // Setup position with reservation enabled while strategy is whitelisted
         uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
 
@@ -1442,11 +1469,13 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         eigenServiceManager.setStrategyWhitelist(strategy, false);
         assertFalse(eigenServiceManager.isStrategyWhitelisted(strategy));
 
-        // Attempt to reserve a claim - should fail because strategy is no longer whitelisted
+        // Reservation should still succeed for existing positions
         vm.startPrank(address(coverageAgent));
-        vm.expectRevert(abi.encodeWithSelector(IEigenOperatorProxy.StrategyNotWhitelisted.selector, strategy));
-        eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
         vm.stopPrank();
+
+        CoverageClaim memory reservedClaim = eigenCoverageProvider.claim(claimId);
+        assertEq(uint8(reservedClaim.status), uint8(CoverageClaimStatus.Reserved));
     }
 
     /// @notice Test converting a reserved claim to issued
@@ -3704,6 +3733,28 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         (uint256 amount,,) = eigenCoverageProvider.captureRewards(claimId);
         assertEq(amount, 10e6, "Amount should equal full reward for Full refundable when Completed");
+    }
+
+    function test_captureRewards_refundableFull_repaidClaim() public {
+        uint256 positionId = _setupSlashingPosition(1000e18, address(0), Refundable.Full);
+        uint256 reward = 10e6;
+        uint256 slashAmount = 5e6;
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 30 days, reward, 0);
+
+        vm.warp(block.timestamp + 15 days);
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, slashAmount);
+        _executeSlash(claimIds, amounts);
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), slashAmount);
+        eigenCoverageProvider.repaySlashedClaim(claimId, slashAmount);
+        vm.stopPrank();
+
+        CoverageClaim memory repaidClaim = eigenCoverageProvider.claim(claimId);
+        assertEq(uint8(repaidClaim.status), uint8(CoverageClaimStatus.Repaid), "Claim should be repaid");
+
+        (uint256 amount,,) = eigenCoverageProvider.captureRewards(claimId);
+        assertEq(amount, reward, "Amount should equal full reward for Full refundable when Repaid");
     }
 
     function test_captureRewards_refundableFull_afterEarlyClose() public {

@@ -234,10 +234,17 @@ contract EigenPermissionsTest is EigenTestDeployer {
 
     // ============ AVS validation ============
 
+    function test_RevertWhen_registerOperator_notAllocationManager() public {
+        uint32[] memory operatorSetIds = new uint32[](0);
+        vm.expectRevert("Not allocation manager");
+        eigenServiceManager.registerOperator(address(this), address(eigenCoverageDiamond), operatorSetIds, "");
+    }
+
     function test_RevertWhen_registerOperator_invalidAVS() public {
         address randomAVS = makeAddr("randomAVS");
         uint32[] memory operatorSetIds = new uint32[](0);
 
+        vm.prank(eigenServiceManager.eigenAddresses().allocationManager);
         vm.expectRevert(abi.encodeWithSelector(IEigenServiceManager.InvalidAVS.selector, randomAVS));
         eigenServiceManager.registerOperator(address(this), randomAVS, operatorSetIds, "");
     }
@@ -247,7 +254,7 @@ contract EigenPermissionsTest is EigenTestDeployer {
         uint32[] memory operatorSetIds = new uint32[](0);
 
         vm.prank(delegationManager);
-        vm.expectRevert("Not delegation manager");
+        vm.expectRevert("Not allocation manager");
         eigenServiceManager.registerOperator(address(this), address(eigenCoverageDiamond), operatorSetIds, "");
     }
 }

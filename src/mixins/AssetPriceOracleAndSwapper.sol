@@ -11,6 +11,9 @@ import {IPriceOracle} from "../interfaces/IPriceOracle.sol";
 /// @notice Mixin contract for quoting and swapping assets
 /// @dev This contract utlised Swapper Engines with optional price oracles
 abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorage, IAssetPriceOracleAndSwapper {
+    /// @dev Upper bound for externally supplied swap deadlines to avoid unbounded execution windows.
+    uint256 internal constant MAX_SWAP_DEADLINE_DELAY = 15 minutes;
+
     /// @notice Internal registration of an asset pair (delegatecall to swap engine onInit).
     /// @dev Made internal to avoid controlled-delegatecall from untrusted callers; only facet/exposed entrypoints should call this after access control.
     /// @param _assetPair The asset pair configuration
@@ -42,42 +45,46 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
     }
 
     /// @inheritdoc IAssetPriceOracleAndSwapper
-    function swapForOutput(uint256 amountOut, address assetA, address assetB) public {
+    function swapForOutput(uint256 amountOut, address assetA, address assetB, uint256 deadline) public {
+        _validateSwapDeadline(deadline);
         AssetPair memory _assetPair = _getRegisteredAssetPair(assetA, assetB);
 
-        uint256 maxAmountIn = swapForOutputQuote(amountOut, assetB, assetA);
+        uint256 maxAmountIn = swapForOutputQuote(amountOut, assetA, assetB);
 
         // Delegatecall version of swapForOutput
         (bool success,) = _assetPair.swapEngine
             .delegatecall(
-                abi.encodeWithSignature(
-                    "swapForOutput(bytes,uint256,uint256,address,address)",
+                abi.encodeWithSelector(
+                    ISwapperEngine.swapForOutput.selector,
                     _assetPair.poolInfo,
                     amountOut,
                     maxAmountIn,
                     assetA,
-                    assetB
+                    assetB,
+                    deadline
                 )
             );
         if (!success) revert SwapFailed();
     }
 
     /// @inheritdoc IAssetPriceOracleAndSwapper
-    function swapForInput(uint256 amountIn, address assetA, address assetB) public {
+    function swapForInput(uint256 amountIn, address assetA, address assetB, uint256 deadline) public {
+        _validateSwapDeadline(deadline);
         AssetPair memory _assetPair = _getRegisteredAssetPair(assetA, assetB);
 
-        uint256 minAmountOut = swapForInputQuote(amountIn, assetB, assetA);
+        uint256 minAmountOut = swapForInputQuote(amountIn, assetA, assetB);
 
         // Delegatecall version of swapForInput
         (bool success,) = _assetPair.swapEngine
             .delegatecall(
-                abi.encodeWithSignature(
-                    "swapForInput(bytes,uint256,uint256,address,address)",
+                abi.encodeWithSelector(
+                    ISwapperEngine.swapForInput.selector,
                     _assetPair.poolInfo,
                     amountIn,
                     minAmountOut,
                     assetA,
-                    assetB
+                    assetB,
+                    deadline
                 )
             );
         if (!success) revert SwapFailed();
@@ -136,7 +143,12 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
         returns (uint256 maxAmountIn)
     {
         AssetPair memory _assetPair = _getRegisteredAssetPair(assetA, assetB);
-        maxAmountIn = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountOut, assetA, assetB);
+        if (_assetPair.priceOracle != address(0)) {
+            maxAmountIn = IPriceOracle(_assetPair.priceOracle).getQuote(amountOut, assetB, assetA);
+        } else {
+            maxAmountIn =
+                ISwapperEngine(_assetPair.swapEngine).getQuoteForOutput(_assetPair.poolInfo, amountOut, assetA, assetB);
+        }
         maxAmountIn = maxAmountIn + (uint256(_swapSlippage()) * maxAmountIn) / 10000;
     }
 
@@ -147,8 +159,24 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
         returns (uint256 minAmountOut)
     {
         AssetPair memory _assetPair = _getRegisteredAssetPair(assetA, assetB);
-        minAmountOut = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountIn, assetA, assetB);
+        if (_assetPair.priceOracle != address(0)) {
+            minAmountOut = IPriceOracle(_assetPair.priceOracle).getQuote(amountIn, assetA, assetB);
+        } else {
+            minAmountOut = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountIn, assetA, assetB);
+        }
         minAmountOut = minAmountOut - (minAmountOut * uint256(_swapSlippage())) / 10000;
+    }
+
+    /// @notice Validates swap deadline bounds.
+    function _validateSwapDeadline(uint256 deadline) private view {
+        if (deadline < block.timestamp) {
+            revert SwapDeadlineExpired(deadline, block.timestamp);
+        }
+
+        uint256 maxAllowedDeadline = block.timestamp + MAX_SWAP_DEADLINE_DELAY;
+        if (deadline > maxAllowedDeadline) {
+            revert SwapDeadlineTooFar(deadline, maxAllowedDeadline);
+        }
     }
 
     /// @notice Gets the registered asset pair and reverts if not registered

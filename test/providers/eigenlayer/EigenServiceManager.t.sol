@@ -149,6 +149,7 @@ contract EigenServiceManagerTest is EigenTestDeployer {
 
     function test_registerOperator_succeeds() public {
         uint32[] memory operatorSetIds = new uint32[](0);
+        vm.prank(eigenServiceManager.eigenAddresses().allocationManager);
         eigenServiceManager.registerOperator(address(this), address(eigenCoverageDiamond), operatorSetIds, "");
     }
 
