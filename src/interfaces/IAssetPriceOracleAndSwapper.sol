@@ -92,18 +92,20 @@ interface IAssetPriceOracleAndSwapper {
     /// @param assetA The asset to receive (output/base)
     /// @param assetB The asset to spend (input/swap)
     /// @return maxAmountIn The maximum amount of `assetB` tokens that can be spent
+    /// @return verified Whether the quote has been verified based on the price strategy
     function swapForOutputQuote(uint256 amountOut, address assetA, address assetB)
         external
         view
-        returns (uint256 maxAmountIn);
+        returns (uint256 maxAmountIn, bool verified);
 
     /// @notice Gets the minimum amount of `assetA` tokens that can be received for `amountIn` of `assetB`
     /// @param amountIn The exact amount of `assetB` tokens to spend
     /// @param assetA The asset to receive (output/base)
     /// @param assetB The asset to spend (input/swap)
     /// @return minAmountOut The minimum amount of `assetA` tokens that can be received
+    /// @return verified Whether the quote has been verified based on the price strategy
     function swapForInputQuote(uint256 amountIn, address assetA, address assetB)
         external
         view
-        returns (uint256 minAmountOut);
+        returns (uint256 minAmountOut, bool verified);
 }
