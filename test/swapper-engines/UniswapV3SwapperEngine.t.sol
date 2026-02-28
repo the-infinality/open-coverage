@@ -2,10 +2,10 @@
 pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin-v5/contracts/token/ERC20/IERC20.sol";
-import {UniswapV3SwapperEngine} from "src/swapper-engines/UniswapV3SwapperEngine.sol";
-import {ISwapperEngine} from "src/interfaces/ISwapperEngine.sol";
+import {UniswapV3SwapperEngine} from "../../src/swapper-engines/UniswapV3SwapperEngine.sol";
+import {ISwapperEngine} from "../../src/interfaces/ISwapperEngine.sol";
 import {TestDeployer} from "test/utils/TestDeployer.sol";
-import {UniswapHelper, UniswapAddressbook} from "utils/UniswapHelper.sol";
+import {UniswapHelper, UniswapAddressbook} from "../../utils/UniswapHelper.sol";
 
 /// @notice Mock contract that can delegatecall to UniswapV3SwapperEngine
 contract DelegateCallProxy {

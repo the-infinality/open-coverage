@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {ISlashCoordinator, SlashCoordinationStatus} from "src/interfaces/ISlashCoordinator.sol";
+import {ISlashCoordinator, SlashCoordinationStatus} from "../../../src/interfaces/ISlashCoordinator.sol";
 
 contract MockSlashCoordinator is ISlashCoordinator {
     mapping(uint256 => SlashCoordinationStatus) private _statuses;

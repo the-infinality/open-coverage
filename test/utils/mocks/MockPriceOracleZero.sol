@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IPriceOracle} from "src/interfaces/IPriceOracle.sol";
+import {IPriceOracle} from "../../../src/interfaces/IPriceOracle.sol";
 
 /// @notice Oracle that always returns 0 for getQuote; used to force verified=false when used with SwapperVerified.
 contract MockPriceOracleZero is IPriceOracle {

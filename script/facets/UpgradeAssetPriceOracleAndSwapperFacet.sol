@@ -3,10 +3,12 @@ pragma solidity ^0.8.24;
 
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
-import {IDiamondCut} from "src/diamond/interfaces/IDiamondCut.sol";
-import {IDiamondLoupe} from "src/diamond/interfaces/IDiamondLoupe.sol";
-import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
-import {AssetPriceOracleAndSwapperFacetDeployer} from "utils/deployments/AssetPriceOracleAndSwapperFacetDeployer.sol";
+import {IDiamondCut} from "../../src/diamond/interfaces/IDiamondCut.sol";
+import {IDiamondLoupe} from "../../src/diamond/interfaces/IDiamondLoupe.sol";
+import {IAssetPriceOracleAndSwapper} from "../../src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {
+    AssetPriceOracleAndSwapperFacetDeployer
+} from "../../utils/deployments/AssetPriceOracleAndSwapperFacetDeployer.sol";
 
 /// @title UpgradeAssetPriceOracleAndSwapperFacet
 /// @notice Script to upgrade AssetPriceOracleAndSwapperFacet on an existing EigenCoverageDiamond

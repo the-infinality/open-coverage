@@ -10,7 +10,7 @@ import {IUniversalRouter} from "@uniswap/universal-router/interfaces/IUniversalR
 import {IPermit2} from "@uniswap/permit2/src/interfaces/IPermit2.sol";
 import {IV4Quoter} from "@uniswap/v4-periphery/src/interfaces/IV4Quoter.sol";
 import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
-import {IQuoter} from "src/interfaces/IQuoter.sol";
+import {IQuoter} from "../src/interfaces/IQuoter.sol";
 
 struct UniswapAddresses {
     address universalRouter;

@@ -3,13 +3,13 @@ pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20 as IERC20v5} from "@openzeppelin-v5/contracts/token/ERC20/IERC20.sol";
-import {IERC173} from "src/diamond/interfaces/IERC173.sol";
+import {IERC173} from "../../../src/diamond/interfaces/IERC173.sol";
 import {EigenTestDeployer} from "../../utils/EigenTestDeployer.sol";
-import {CoveragePosition, Refundable} from "src/interfaces/ICoverageProvider.sol";
-import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
-import {IEigenServiceManager} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
+import {CoveragePosition, Refundable} from "../../../src/interfaces/ICoverageProvider.sol";
+import {ICoverageProvider} from "../../../src/interfaces/ICoverageProvider.sol";
+import {IEigenServiceManager} from "../../../src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
-import {PriceStrategy, AssetPair} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {PriceStrategy, AssetPair} from "../../../src/interfaces/IAssetPriceOracleAndSwapper.sol";
 
 contract EigenPermissionsTest is EigenTestDeployer {
     // ============ Diamond ownership ============

@@ -4,11 +4,11 @@ pragma solidity ^0.8.24;
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {VmSafe} from "forge-std/Vm.sol";
-import {DiamondFacetsDeployer} from "utils/deployments/DiamondFacetsDeployer.sol";
-import {DeploymentUtils} from "utils/deployments/DeploymentUtils.sol";
-import {DiamondCutFacet} from "src/diamond/facets/DiamondCutFacet.sol";
-import {DiamondLoupeFacet} from "src/diamond/facets/DiamondLoupeFacet.sol";
-import {OwnershipFacet} from "src/diamond/facets/OwnershipFacet.sol";
+import {DiamondFacetsDeployer} from "../../utils/deployments/DiamondFacetsDeployer.sol";
+import {DeploymentUtils} from "../../utils/deployments/DeploymentUtils.sol";
+import {DiamondCutFacet} from "../../src/diamond/facets/DiamondCutFacet.sol";
+import {DiamondLoupeFacet} from "../../src/diamond/facets/DiamondLoupeFacet.sol";
+import {OwnershipFacet} from "../../src/diamond/facets/OwnershipFacet.sol";
 
 /// @title DeployDiamondFacets
 /// @notice Script to deploy core diamond facets (DiamondCut, DiamondLoupe, Ownership) and record them in config/deployments.json
@@ -81,9 +81,9 @@ contract DeployDiamondFacets is Script {
                 }
                 if (!anyExist) return;
                 string[3] memory artifacts = [
-                    "src/diamond/facets/DiamondCutFacet.sol:DiamondCutFacet",
-                    "src/diamond/facets/DiamondLoupeFacet.sol:DiamondLoupeFacet",
-                    "src/diamond/facets/OwnershipFacet.sol:OwnershipFacet"
+                    "../../src/diamond/facets/DiamondCutFacet.sol:DiamondCutFacet",
+                    "../../src/diamond/facets/DiamondLoupeFacet.sol:DiamondLoupeFacet",
+                    "../../src/diamond/facets/OwnershipFacet.sol:OwnershipFacet"
                 ];
                 bool allSameBytecode = true;
                 for (uint256 f = 0; f < 3; f++) {

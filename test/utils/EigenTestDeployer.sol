@@ -3,16 +3,16 @@ pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {TestDeployer} from "./TestDeployer.sol";
-import {EigenAddresses} from "src/providers/eigenlayer/Types.sol";
-import {EigenCoverageDiamond} from "src/providers/eigenlayer/EigenCoverageDiamond.sol";
-import {EigenServiceManagerFacet} from "src/providers/eigenlayer/facets/EigenServiceManagerFacet.sol";
-import {EigenCoverageProviderFacet} from "src/providers/eigenlayer/facets/EigenCoverageProviderFacet.sol";
-import {AssetPriceOracleAndSwapperFacet} from "src/facets/AssetPriceOracleAndSwapperFacet.sol";
-import {DiamondCutFacet} from "src/diamond/facets/DiamondCutFacet.sol";
-import {DiamondLoupeFacet} from "src/diamond/facets/DiamondLoupeFacet.sol";
-import {IDiamondCut} from "src/diamond/interfaces/IDiamondCut.sol";
+import {EigenAddresses} from "../../src/providers/eigenlayer/Types.sol";
+import {EigenCoverageDiamond} from "../../src/providers/eigenlayer/EigenCoverageDiamond.sol";
+import {EigenServiceManagerFacet} from "../../src/providers/eigenlayer/facets/EigenServiceManagerFacet.sol";
+import {EigenCoverageProviderFacet} from "../../src/providers/eigenlayer/facets/EigenCoverageProviderFacet.sol";
+import {AssetPriceOracleAndSwapperFacet} from "../../src/facets/AssetPriceOracleAndSwapperFacet.sol";
+import {DiamondCutFacet} from "../../src/diamond/facets/DiamondCutFacet.sol";
+import {DiamondLoupeFacet} from "../../src/diamond/facets/DiamondLoupeFacet.sol";
+import {IDiamondCut} from "../../src/diamond/interfaces/IDiamondCut.sol";
 import {EigenHelper, EigenAddressbook} from "../../utils/EigenHelper.sol";
-import {ExampleCoverageAgent} from "src/ExampleCoverageAgent.sol";
+import {ExampleCoverageAgent} from "../../src/ExampleCoverageAgent.sol";
 import {UniswapHelper, UniswapAddressbook} from "../../utils/UniswapHelper.sol";
 import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
 import {IStrategyManager} from "eigenlayer-contracts/interfaces/IStrategyManager.sol";
@@ -23,18 +23,18 @@ import {EigenFacetsDeployer} from "../../utils/deployments/EigenFacetsDeployer.s
 import {
     AssetPriceOracleAndSwapperFacetDeployer
 } from "../../utils/deployments/AssetPriceOracleAndSwapperFacetDeployer.sol";
-import {OwnershipFacet} from "src/diamond/facets/OwnershipFacet.sol";
-import {IEigenOperatorProxy} from "src/providers/eigenlayer/interfaces/IEigenOperatorProxy.sol";
-import {EigenOperatorProxy} from "src/providers/eigenlayer/EigenOperatorProxy.sol";
-import {IEigenServiceManager} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
-import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
-import {ICoverageLiquidatable} from "src/interfaces/ICoverageLiquidatable.sol";
-import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
-import {ISwapperEngine} from "src/interfaces/ISwapperEngine.sol";
-import {CoveragePosition, CoverageClaimStatus, Refundable} from "src/interfaces/ICoverageProvider.sol";
-import {PriceStrategy, AssetPair} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {OwnershipFacet} from "../../src/diamond/facets/OwnershipFacet.sol";
+import {IEigenOperatorProxy} from "../../src/providers/eigenlayer/interfaces/IEigenOperatorProxy.sol";
+import {EigenOperatorProxy} from "../../src/providers/eigenlayer/EigenOperatorProxy.sol";
+import {IEigenServiceManager} from "../../src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
+import {ICoverageProvider} from "../../src/interfaces/ICoverageProvider.sol";
+import {ICoverageLiquidatable} from "../../src/interfaces/ICoverageLiquidatable.sol";
+import {IAssetPriceOracleAndSwapper} from "../../src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {ISwapperEngine} from "../../src/interfaces/ISwapperEngine.sol";
+import {CoveragePosition, CoverageClaimStatus, Refundable} from "../../src/interfaces/ICoverageProvider.sol";
+import {PriceStrategy, AssetPair} from "../../src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {MockPriceOracle} from "./MockPriceOracle.sol";
-import {UniswapV3SwapperEngine} from "src/swapper-engines/UniswapV3SwapperEngine.sol";
+import {UniswapV3SwapperEngine} from "../../src/swapper-engines/UniswapV3SwapperEngine.sol";
 
 contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
     address public eigenOperatorInstance;

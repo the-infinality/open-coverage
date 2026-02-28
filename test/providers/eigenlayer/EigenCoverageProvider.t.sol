@@ -3,24 +3,29 @@ pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {EigenTestDeployer} from "../../utils/EigenTestDeployer.sol";
-import {CoveragePosition, CoverageClaim, CoverageClaimStatus, Refundable} from "src/interfaces/ICoverageProvider.sol";
-import {IEigenServiceManager} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
-import {IEigenOperatorProxy} from "src/providers/eigenlayer/interfaces/IEigenOperatorProxy.sol";
-import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
-import {ICoverageAgent} from "src/interfaces/ICoverageAgent.sol";
-import {IExampleCoverageAgent} from "src/interfaces/IExampleCoverageAgent.sol";
-import {ExampleCoverageAgent} from "src/ExampleCoverageAgent.sol";
-import {SlashCoordinationStatus} from "src/interfaces/ISlashCoordinator.sol";
+import {
+    CoveragePosition,
+    CoverageClaim,
+    CoverageClaimStatus,
+    Refundable
+} from "../../../src/interfaces/ICoverageProvider.sol";
+import {IEigenServiceManager} from "../../../src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
+import {IEigenOperatorProxy} from "../../../src/providers/eigenlayer/interfaces/IEigenOperatorProxy.sol";
+import {ICoverageProvider} from "../../../src/interfaces/ICoverageProvider.sol";
+import {ICoverageAgent} from "../../../src/interfaces/ICoverageAgent.sol";
+import {IExampleCoverageAgent} from "../../../src/interfaces/IExampleCoverageAgent.sol";
+import {ExampleCoverageAgent} from "../../../src/ExampleCoverageAgent.sol";
+import {SlashCoordinationStatus} from "../../../src/interfaces/ISlashCoordinator.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
 import {IAllocationManager} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
-import {AssetPair, PriceStrategy} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
-import {ISwapperEngine} from "src/interfaces/ISwapperEngine.sol";
+import {AssetPair, PriceStrategy} from "../../../src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {ISwapperEngine} from "../../../src/interfaces/ISwapperEngine.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {MockSlashCoordinator, MockSlashCoordinatorImmediate} from "../../utils/mocks/MockSlashCoordinator.sol";
 import {MockPriceOracleZero} from "../../utils/mocks/MockPriceOracleZero.sol";
-import {EigenCoverageProviderFacet} from "src/providers/eigenlayer/facets/EigenCoverageProviderFacet.sol";
-import {ICoverageLiquidatable} from "src/interfaces/ICoverageLiquidatable.sol";
+import {EigenCoverageProviderFacet} from "../../../src/providers/eigenlayer/facets/EigenCoverageProviderFacet.sol";
+import {ICoverageLiquidatable} from "../../../src/interfaces/ICoverageLiquidatable.sol";
 
 contract EigenCoverageProviderTest is EigenTestDeployer {
     /// @notice Test that coverage agent emits MetadataUpdated on deployment

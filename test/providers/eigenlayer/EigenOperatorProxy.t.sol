@@ -2,10 +2,10 @@
 pragma solidity ^0.8.24;
 
 import {EigenTestDeployer} from "../../utils/EigenTestDeployer.sol";
-import {EigenOperatorProxy} from "src/providers/eigenlayer/EigenOperatorProxy.sol";
-import {IEigenOperatorProxy} from "src/providers/eigenlayer/interfaces/IEigenOperatorProxy.sol";
-import {EigenAddresses} from "src/providers/eigenlayer/Types.sol";
-import {IEigenOperatorProxy} from "src/providers/eigenlayer/interfaces/IEigenOperatorProxy.sol";
+import {EigenOperatorProxy} from "../../../src/providers/eigenlayer/EigenOperatorProxy.sol";
+import {IEigenOperatorProxy} from "../../../src/providers/eigenlayer/interfaces/IEigenOperatorProxy.sol";
+import {EigenAddresses} from "../../../src/providers/eigenlayer/Types.sol";
+import {IEigenOperatorProxy} from "../../../src/providers/eigenlayer/interfaces/IEigenOperatorProxy.sol";
 import {IPermissionController} from "eigenlayer-contracts/interfaces/IPermissionController.sol";
 import {IDelegationManager} from "eigenlayer-contracts/interfaces/IDelegationManager.sol";
 import {IAllocationManager, IAllocationManagerTypes} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";

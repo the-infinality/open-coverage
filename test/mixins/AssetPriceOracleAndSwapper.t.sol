@@ -4,12 +4,12 @@ pragma solidity ^0.8.24;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {TestDeployer} from "test/utils/TestDeployer.sol";
 import {MockAssetPriceOracleAndSwapper} from "../utils/MockAssetPriceOracleAndSwapper.sol";
-import {IAssetPriceOracleAndSwapper} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
-import {UniswapHelper, UniswapAddressbook} from "utils/UniswapHelper.sol";
+import {IAssetPriceOracleAndSwapper} from "../../src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {UniswapHelper, UniswapAddressbook} from "../../utils/UniswapHelper.sol";
 import {MockPriceOracle} from "test/utils/MockPriceOracle.sol";
-import {ISwapperEngine} from "src/interfaces/ISwapperEngine.sol";
-import {UniswapV3SwapperEngine} from "src/swapper-engines/UniswapV3SwapperEngine.sol";
-import {PriceStrategy, AssetPair} from "src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {ISwapperEngine} from "../../src/interfaces/ISwapperEngine.sol";
+import {UniswapV3SwapperEngine} from "../../src/swapper-engines/UniswapV3SwapperEngine.sol";
+import {PriceStrategy, AssetPair} from "../../src/interfaces/IAssetPriceOracleAndSwapper.sol";
 
 contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
     MockAssetPriceOracleAndSwapper public assetPriceOracleAndSwapper;

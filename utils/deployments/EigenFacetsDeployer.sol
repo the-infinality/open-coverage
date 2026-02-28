@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {EigenServiceManagerFacet} from "src/providers/eigenlayer/facets/EigenServiceManagerFacet.sol";
-import {EigenCoverageProviderFacet} from "src/providers/eigenlayer/facets/EigenCoverageProviderFacet.sol";
-import {IDiamondCut} from "src/diamond/interfaces/IDiamondCut.sol";
-import {IEigenServiceManager} from "src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
-import {ICoverageProvider} from "src/interfaces/ICoverageProvider.sol";
-import {ICoverageLiquidatable} from "src/interfaces/ICoverageLiquidatable.sol";
+import {EigenServiceManagerFacet} from "../../src/providers/eigenlayer/facets/EigenServiceManagerFacet.sol";
+import {EigenCoverageProviderFacet} from "../../src/providers/eigenlayer/facets/EigenCoverageProviderFacet.sol";
+import {IDiamondCut} from "../../src/diamond/interfaces/IDiamondCut.sol";
+import {IEigenServiceManager} from "../../src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
+import {ICoverageProvider} from "../../src/interfaces/ICoverageProvider.sol";
+import {ICoverageLiquidatable} from "../../src/interfaces/ICoverageLiquidatable.sol";
 
 /// @title EigenFacetsDeployer
 /// @notice Helper contract for deploying Eigen-specific facets

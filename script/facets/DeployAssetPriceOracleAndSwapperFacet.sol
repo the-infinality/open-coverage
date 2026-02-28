@@ -4,9 +4,11 @@ pragma solidity ^0.8.24;
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {VmSafe} from "forge-std/Vm.sol";
-import {AssetPriceOracleAndSwapperFacet} from "src/facets/AssetPriceOracleAndSwapperFacet.sol";
-import {AssetPriceOracleAndSwapperFacetDeployer} from "utils/deployments/AssetPriceOracleAndSwapperFacetDeployer.sol";
-import {DeploymentUtils} from "utils/deployments/DeploymentUtils.sol";
+import {AssetPriceOracleAndSwapperFacet} from "../../src/facets/AssetPriceOracleAndSwapperFacet.sol";
+import {
+    AssetPriceOracleAndSwapperFacetDeployer
+} from "../../utils/deployments/AssetPriceOracleAndSwapperFacetDeployer.sol";
+import {DeploymentUtils} from "../../utils/deployments/DeploymentUtils.sol";
 
 /// @title DeployAssetPriceOracleAndSwapperFacet
 /// @notice Script to deploy a new version of AssetPriceOracleAndSwapperFacet
@@ -74,7 +76,7 @@ contract DeployAssetPriceOracleAndSwapperFacet is Script {
                     vm.parseJsonAddress(json, string.concat(chainPath, ".", ASSET_PRICE_ORACLE_AND_SWAPPER_FACET));
                 bytes memory onChain = existingAddr.code;
                 bytes memory compiled = vm.getDeployedCode(
-                    "src/facets/AssetPriceOracleAndSwapperFacet.sol:AssetPriceOracleAndSwapperFacet"
+                    "../../src/facets/AssetPriceOracleAndSwapperFacet.sol:AssetPriceOracleAndSwapperFacet"
                 );
                 bool bytecodeSame =
                     onChain.length > 0 && compiled.length > 0 && DeploymentUtils.bytecodeMatches(onChain, compiled);

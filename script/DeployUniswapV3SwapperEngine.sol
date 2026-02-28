@@ -72,7 +72,7 @@ contract DeployUniswapV3SwapperEngine is Script, UniswapHelper {
                     vm.parseJsonAddress(json, string.concat(chainPath, ".", UNISWAP_V3_SWAPPER_ENGINE));
                 bytes memory onChain = existingAddr.code;
                 bytes memory compiled =
-                    vm.getDeployedCode("src/swapper-engines/UniswapV3SwapperEngine.sol:UniswapV3SwapperEngine");
+                    vm.getDeployedCode("../src/swapper-engines/UniswapV3SwapperEngine.sol:UniswapV3SwapperEngine");
                 bool bytecodeSame =
                     onChain.length > 0 && compiled.length > 0 && DeploymentUtils.bytecodeMatches(onChain, compiled);
                 if (bytecodeSame) {
