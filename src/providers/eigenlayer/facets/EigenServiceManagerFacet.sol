@@ -304,22 +304,20 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
         IStrategy[] memory strats = new IStrategy[](1);
         strats[0] = IStrategy(strategy);
 
-        uint256 totalAllocatedStake = IAllocationManager(_eigenAddresses.allocationManager)
+        uint256 sharesAllocated = IAllocationManager(_eigenAddresses.allocationManager)
             .getAllocatedStake(
                 OperatorSet({avs: address(this), id: coverageAgentToOperatorSetId[coverageAgent]}), ops, strats
             )[0][0];
 
-        // Convert amount to strategy asset and calculate proportion
-        uint256 requiredSlashAmount = IAssetPriceOracleAndSwapper(address(this))
-            .swapForOutputQuote(
-                amount, address(IStrategy(strategy).underlyingToken()), address(ICoverageAgent(coverageAgent).asset())
-            );
-        wadToSlash = (requiredSlashAmount * WAD) / totalAllocatedStake;
+        uint256 sharesToSlash = IStrategy(strategy).underlyingToSharesView(amount);
+        
+        wadToSlash = (sharesToSlash * WAD) / sharesAllocated;
         // Revert if the required slash amount is greater than the total allocated stake
         if (wadToSlash > WAD) {
+            uint256 underlyingValue = IStrategy(strategy).sharesToUnderlyingView(sharesAllocated);
             (uint256 totalAllocatedStakeValue, bool verified) = IAssetPriceOracleAndSwapper(address(this))
                 .getQuote(
-                    totalAllocatedStake,
+                    underlyingValue,
                     address(ICoverageAgent(coverageAgent).asset()),
                     address(IStrategy(strategy).underlyingToken())
                 );

@@ -82,7 +82,7 @@ interface IEigenServiceManager {
     /// @param operator The operator to slash
     /// @param strategy The strategy to slash
     /// @param coverageAgent The coverage agent associated with the slash
-    /// @param amount The amount to slash in coverage asset terms
+    /// @param amount The amount of strategy underlying assets to slash
     /// @return tokensReceived The amount of tokens received from the slash
     function slashOperator(address operator, address strategy, address coverageAgent, uint256 amount)
         external

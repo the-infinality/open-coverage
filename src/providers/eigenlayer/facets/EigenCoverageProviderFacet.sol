@@ -802,6 +802,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         address operator = address(uint160(uint256(_position.operatorId)));
         address strategy = assetToStrategy[_position.asset];
 
+        address coverageAsset = address(ICoverageAgent(_position.coverageAgent).asset());
+
         // Get balance of strategy asset in this address
         address strategyAsset = address(IStrategy(strategy).underlyingToken());
         uint256 openingStrategyAssetBalance = IERC20(strategyAsset).balanceOf(address(this));
@@ -816,15 +818,24 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             -int256(amount)
         );
 
+        (uint256 totalStrategyAssetValueToSlash, bool verified) =
+            IAssetPriceOracleAndSwapper(address(this)).swapForOutputQuote(amount, coverageAsset, strategyAsset);
+
+        if (!verified) {
+            revert IEigenServiceManager.UnverifiedQuote(
+                totalStrategyAssetValueToSlash, amount, strategyAsset, coverageAsset
+            );
+        }
+
         // Slash the operator through EigenLayer and claim redistributed tokens
-        IEigenServiceManager(address(this)).slashOperator(operator, strategy, _position.coverageAgent, amount);
+        IEigenServiceManager(address(this))
+            .slashOperator(operator, strategy, _position.coverageAgent, totalStrategyAssetValueToSlash);
 
         // Swap the slashed strategy asset to the coverage agent's asset
-        IAssetPriceOracleAndSwapper(address(this))
-            .swapForOutput(amount, ICoverageAgent(_position.coverageAgent).asset(), _position.asset);
+        IAssetPriceOracleAndSwapper(address(this)).swapForOutput(amount, coverageAsset, strategyAsset);
 
         // Transfer swapped tokens to coverage agent
-        SafeERC20.safeTransfer(IERC20(ICoverageAgent(_position.coverageAgent).asset()), _position.coverageAgent, amount);
+        SafeERC20.safeTransfer(IERC20(coverageAsset), _position.coverageAgent, amount);
 
         ICoverageAgent(_position.coverageAgent).onSlashCompleted(claimId, amount);
         emit ClaimSlashed(claimId, amount);
