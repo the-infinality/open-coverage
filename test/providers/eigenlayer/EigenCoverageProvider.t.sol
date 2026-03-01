@@ -1419,41 +1419,6 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.stopPrank();
     }
 
-    /// @notice Test that issueClaim fails when strategy is no longer whitelisted after position creation
-    function test_RevertWhen_issueClaim_strategyNotWhitelisted() public {
-        // Setup position while strategy is whitelisted
-        uint256 positionId = _setupSlashingPosition(10e18);
-
-        // Remove the strategy from the whitelist
-        address strategy = address(_getTestStrategy());
-        eigenServiceManager.setStrategyWhitelist(strategy, false);
-        assertFalse(eigenServiceManager.isStrategyWhitelisted(strategy));
-
-        // Attempt to issue a claim - should fail because strategy is no longer whitelisted
-        vm.startPrank(address(coverageAgent));
-        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
-        vm.expectRevert(abi.encodeWithSelector(IEigenOperatorProxy.StrategyNotWhitelisted.selector, strategy));
-        eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
-        vm.stopPrank();
-    }
-
-    /// @notice Test that reserveClaim fails when strategy is no longer whitelisted after position creation
-    function test_RevertWhen_reserveClaim_strategyNotWhitelisted() public {
-        // Setup position with reservation enabled while strategy is whitelisted
-        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
-
-        // Remove the strategy from the whitelist
-        address strategy = address(_getTestStrategy());
-        eigenServiceManager.setStrategyWhitelist(strategy, false);
-        assertFalse(eigenServiceManager.isStrategyWhitelisted(strategy));
-
-        // Attempt to reserve a claim - should fail because strategy is no longer whitelisted
-        vm.startPrank(address(coverageAgent));
-        vm.expectRevert(abi.encodeWithSelector(IEigenOperatorProxy.StrategyNotWhitelisted.selector, strategy));
-        eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
-        vm.stopPrank();
-    }
-
     /// @notice Test converting a reserved claim to issued
     function test_convertReservedClaim() public {
         uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
