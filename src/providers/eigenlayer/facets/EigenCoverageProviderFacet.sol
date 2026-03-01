@@ -94,19 +94,18 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     function closePosition(uint256 positionId) external {
         CoveragePosition storage positionData = positions[positionId];
         address operator = address(uint160(uint256(positionData.operatorId)));
-        address strategy = assetToStrategy[positionData.asset];
+
+        require(
+            _checkOperatorPermissions(
+                operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector
+            ),
+            IEigenServiceManager.NotOperatorAuthorized(operator, msg.sender)
+        );
 
         require(
             positionData.expiryTimestamp >= block.timestamp, PositionExpired(positionId, positionData.expiryTimestamp)
         );
         positions[positionId].expiryTimestamp = block.timestamp;
-
-        if (
-            _strategyWhitelist.contains(strategy)
-                && !_checkOperatorPermissions(
-                    operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector
-                )
-        ) revert IEigenServiceManager.NotOperatorAuthorized(operator, msg.sender);
 
         emit PositionClosed(positionId);
     }
@@ -640,7 +639,9 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         uint256 minimumReward = (amount * positionData.minRate * duration) / (10000 * 365 days);
         if (minimumReward > reward) revert InsufficientReward(minimumReward, reward);
 
-        if (positionData.maxDuration > 0 && duration > positionData.maxDuration) revert DurationExceedsMax(positionData.maxDuration, duration);
+        if (positionData.maxDuration > 0 && duration > positionData.maxDuration) {
+            revert DurationExceedsMax(positionData.maxDuration, duration);
+        }
         require(
             duration + block.timestamp <= positionData.expiryTimestamp,
             DurationExceedsExpiry(positionData.expiryTimestamp, duration + block.timestamp)

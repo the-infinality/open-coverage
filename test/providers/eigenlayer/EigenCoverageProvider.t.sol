@@ -115,39 +115,6 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         eigenCoverageProvider.closePosition(positionId);
     }
 
-    /// @notice Test that anyone can close a position when the strategy is no longer whitelisted
-    function test_closePosition_strategyNotWhitelisted() public {
-        _setupwithAllocations();
-
-        CoveragePosition memory data = CoveragePosition({
-            coverageAgent: address(coverageAgent),
-            minRate: 100,
-            maxDuration: 30 days,
-            expiryTimestamp: block.timestamp + 365 days,
-            asset: address(_getTestStrategy().underlyingToken()),
-            refundable: Refundable.None,
-            slashCoordinator: address(0),
-            maxReservationTime: 0,
-            operatorId: bytes32(uint256(uint160(address(operator))))
-        });
-        uint256 positionId = eigenCoverageProvider.createPosition(data, "");
-
-        // Remove the strategy from the whitelist
-        address strategy = address(_getTestStrategy());
-        eigenServiceManager.setStrategyWhitelist(strategy, false);
-        assertFalse(eigenServiceManager.isStrategyWhitelisted(strategy));
-
-        // Now anyone can close the position (no authorization required)
-        address unauthorized = makeAddr("unauthorized");
-        vm.prank(unauthorized);
-
-        // Expect PositionClosed event
-        vm.expectEmit(true, false, false, false);
-        emit ICoverageProvider.PositionClosed(positionId);
-
-        eigenCoverageProvider.closePosition(positionId);
-    }
-
     function test_claimPosition() public {
         _setupwithAllocations();
 
