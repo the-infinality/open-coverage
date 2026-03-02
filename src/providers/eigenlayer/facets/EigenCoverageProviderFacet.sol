@@ -505,6 +505,11 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
 
         uint32 distributionStartTime = _claimRewardDistribution.lastDistributedTimestamp;
 
+        // Reserved claims are unfunded (no reward tokens transferred); do not allow reward capture.
+        if (_claim.status == CoverageClaimStatus.Reserved) {
+            return (0, 0, distributionStartTime);
+        }
+
         uint32 elapsedDuration = uint32(block.timestamp - distributionStartTime);
         if (_claim.duration + _claim.createdAt < distributionStartTime) {
             elapsedDuration = 0;
@@ -515,9 +520,12 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         // Intentional enum/status checks for reward eligibility
         if (
             // No refund possible — operator earned the full reward on issuance
-            _position.refundable == Refundable.None || 
-                // Full rewards are distributed only after the claim is completed
-                (_position.refundable == Refundable.Full && _claim.status == CoverageClaimStatus.Completed)
+            _position.refundable == Refundable.None
+                // Full rewards are distributed when claim is completed or slashed/repaid (terminal states)
+                || (_position.refundable == Refundable.Full
+                    && (_claim.status == CoverageClaimStatus.Completed
+                        || _claim.status == CoverageClaimStatus.Repaid
+                        || _claim.status == CoverageClaimStatus.Slashed))
         ) {
             amount = _claim.reward - _claimRewardDistribution.amount;
             claimRewardDistributions[claimId].amount += amount;
