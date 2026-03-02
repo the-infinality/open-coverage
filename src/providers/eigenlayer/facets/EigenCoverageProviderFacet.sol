@@ -381,7 +381,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
 
         emit ClaimLiquidated(claimId, _claim.positionId, positionId);
 
-        // Update the claim to the new position and reset the createdAt to the current block timestamp
+        // Update the claim to the new position (createdAt is preserved to maintain original expiry timeline)
         _claim.positionId = positionId;
     }
 
