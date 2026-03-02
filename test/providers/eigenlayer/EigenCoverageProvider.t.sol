@@ -265,8 +265,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
     // ============ setCoverageThreshold / coverageThreshold (ICoverageLiquidatable) ============
 
     function test_coverageThreshold_defaultAfterRegistration() public {
-        uint32[] memory operatorSetIds = new uint32[](0);
-        eigenServiceManager.registerOperator(address(operator), address(eigenCoverageDiamond), operatorSetIds, "");
+        operator.registerCoverageAgent(address(eigenCoverageDiamond), address(coverageAgent), 0);
 
         uint16 threshold = eigenCoverageLiquidatable.coverageThreshold(bytes32(uint256(uint160(address(operator)))));
         assertEq(threshold, 7000, "Default coverage threshold should be 7000 (70%)");
