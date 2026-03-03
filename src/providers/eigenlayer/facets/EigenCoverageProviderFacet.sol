@@ -383,6 +383,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             assetToStrategy[oldPosition.asset], // Strategy
             oldPosition.coverageAgent,
             claimId,
+            // forge-lint: disable-next-line(unsafe-typecast)
             -int256(claimAmount)
         );
 
@@ -392,6 +393,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             assetToStrategy[newPosition.asset], // Strategy
             newPosition.coverageAgent,
             claimId,
+            // forge-lint: disable-next-line(unsafe-typecast)
             int256(claimAmount)
         );
 
@@ -444,14 +446,11 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             } else {
                 slashStatuses[i] = CoverageClaimStatus.PendingSlash;
                 _claim.status = CoverageClaimStatus.PendingSlash;
-                SlashCoordinationStatus status =
-                    ISlashCoordinator(_position.slashCoordinator).initiateSlash(address(this), claimIds[i], amounts[i]);
-                // It may be possible that the slash coordinator automatically passes the slash, otherwise the slash will be pending.
-                if (status == SlashCoordinationStatus.Passed) {
-                    _initiateSlash(claimIds[i], amounts[i]);
-                } else {
-                    emit ClaimSlashPending(claimIds[i], _position.slashCoordinator);
-                }
+                pendingClaimSlashAmounts[claimIds[i]] += amounts[i];
+
+                emit ClaimSlashPending(claimIds[i], _position.slashCoordinator);
+
+                _pendingSlashCompletion(claimIds[i]);
             }
         }
     }
@@ -460,13 +459,14 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     function completeSlash(uint256 claimId) external {
         CoverageClaim storage _claim = claims[claimId];
         if (_claim.status != CoverageClaimStatus.PendingSlash) revert InvalidClaim(claimId, _claim.status);
-        if (
+
+        require(
             ISlashCoordinator(positions[_claim.positionId].slashCoordinator).status(address(this), claimId)
-                != SlashCoordinationStatus.Passed
-        ) {
-            revert SlashFailed(claimId);
-        }
-        _initiateSlash(claimId, claimSlashAmounts[claimId]);
+                != SlashCoordinationStatus.Pending,
+            SlashFailed(claimId)
+        );
+
+        _pendingSlashCompletion(claimId);
     }
 
     /// @inheritdoc ICoverageProvider
@@ -849,6 +849,31 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
                     calculationInterval,
                     "Slash Refund"
                 );
+        }
+    }
+
+    function _pendingSlashCompletion(uint256 claimId) private {
+        CoverageClaim storage _claim = claims[claimId];
+        SlashCoordinationStatus slashStatus =
+            ISlashCoordinator(positions[_claim.positionId].slashCoordinator).status(address(this), claimId);
+
+        if (slashStatus == SlashCoordinationStatus.Failed) {
+            claimSlashAmounts[claimId] -= pendingClaimSlashAmounts[claimId];
+            pendingClaimSlashAmounts[claimId] = 0;
+
+            if (claimSlashAmounts[claimId] > 0) {
+                // The claim was slashed previously so leave the status as Slashed
+                _claim.status = CoverageClaimStatus.Slashed;
+            } else {
+                // Revert the claim back to issued
+                _claim.status = CoverageClaimStatus.Issued;
+            }
+        }
+
+        if (slashStatus == SlashCoordinationStatus.Passed) {
+            uint256 pendingAmount = pendingClaimSlashAmounts[claimId];
+            pendingClaimSlashAmounts[claimId] = 0;
+            _initiateSlash(claimId, pendingAmount);
         }
     }
 

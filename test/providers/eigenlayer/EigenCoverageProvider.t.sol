@@ -15,14 +15,18 @@ import {ICoverageProvider} from "../../../src/interfaces/ICoverageProvider.sol";
 import {ICoverageAgent} from "../../../src/interfaces/ICoverageAgent.sol";
 import {IExampleCoverageAgent} from "../../../src/interfaces/IExampleCoverageAgent.sol";
 import {ExampleCoverageAgent} from "../../../src/ExampleCoverageAgent.sol";
-import {SlashCoordinationStatus} from "../../../src/interfaces/ISlashCoordinator.sol";
+import {ISlashCoordinator, SlashCoordinationStatus} from "../../../src/interfaces/ISlashCoordinator.sol";
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
 import {IAllocationManager} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
 import {AssetPair, PriceStrategy} from "../../../src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {ISwapperEngine} from "../../../src/interfaces/ISwapperEngine.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {MockSlashCoordinator, MockSlashCoordinatorImmediate} from "../../utils/mocks/MockSlashCoordinator.sol";
+import {
+    MockSlashCoordinator,
+    MockSlashCoordinatorImmediate,
+    MockSlashCoordinatorImmediateFail
+} from "../../utils/mocks/MockSlashCoordinator.sol";
 import {MockPriceOracleZero} from "../../utils/mocks/MockPriceOracleZero.sol";
 import {EigenCoverageProviderFacet} from "../../../src/providers/eigenlayer/facets/EigenCoverageProviderFacet.sol";
 import {ICoverageLiquidatable} from "../../../src/interfaces/ICoverageLiquidatable.sol";
@@ -1394,8 +1398,6 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         // Complete slashing once coordinator passes; accounting should now reflect total pending slash amount.
         coordinator.setStatus(claimId, SlashCoordinationStatus.Passed);
-        vm.expectEmit(true, false, false, true);
-        emit ICoverageProvider.ClaimSlashed(claimId, 600e6);
         eigenCoverageProvider.completeSlash(claimId);
 
         CoverageClaim memory claimAfterComplete = eigenCoverageProvider.claim(claimId);
@@ -1488,6 +1490,190 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         eigenCoverageProvider.completeSlash(claimId);
     }
 
+    /// @notice Test completeSlash when coordinator returns Failed on a fresh (never-slashed) claim
+    function test_completeSlash_slashFails_freshClaim() public {
+        MockSlashCoordinator coordinator = new MockSlashCoordinator();
+        uint256 positionId = _setupSlashingPosition(1000e18, address(coordinator), Refundable.None);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        uint256 amountBeforeSlash = eigenCoverageProvider.claim(claimId).amount;
+        (int256 backingBeforeSlash,) = eigenCoverageProvider.positionBacking(positionId);
+
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 500e6);
+
+        vm.warp(block.timestamp + 15 days);
+        vm.startPrank(address(coverageAgent));
+        eigenCoverageProvider.slashClaims(claimIds, amounts);
+        vm.stopPrank();
+
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.PendingSlash));
+        assertEq(eigenCoverageDiamond.claimSlashAmounts(claimId), 500e6, "claimSlashAmounts should track pending");
+
+        // Coordinator rejects the slash
+        coordinator.setStatus(claimId, SlashCoordinationStatus.Failed);
+        eigenCoverageProvider.completeSlash(claimId);
+
+        // Status should revert to Issued
+        assertEq(
+            uint8(eigenCoverageProvider.claim(claimId).status),
+            uint8(CoverageClaimStatus.Issued),
+            "Claim status should revert to Issued after failed slash"
+        );
+
+        // Coverage amount should be unchanged from before the slash was requested
+        assertEq(
+            eigenCoverageProvider.claim(claimId).amount,
+            amountBeforeSlash,
+            "Coverage amount should be unchanged after failed slash"
+        );
+
+        // claimSlashAmounts should be reverted to 0 (no prior executed slashes)
+        assertEq(
+            eigenCoverageDiamond.claimSlashAmounts(claimId),
+            0,
+            "claimSlashAmounts should revert to 0 after failed slash on fresh claim"
+        );
+
+        // Position backing should be unchanged
+        (int256 backingAfterFail,) = eigenCoverageProvider.positionBacking(positionId);
+        assertEq(backingAfterFail, backingBeforeSlash, "Position backing should be unchanged after failed slash");
+    }
+
+    /// @notice Test completeSlash when coordinator returns Failed on an already partially slashed claim
+    function test_completeSlash_slashFails_partiallySlashedClaim() public {
+        MockSlashCoordinator coordinator = new MockSlashCoordinator();
+        uint256 positionId = _setupSlashingPosition(1000e18, address(coordinator), Refundable.None);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        // --- First slash: passes through coordinator ---
+        uint256 firstSlashAmount = 400e6;
+        (uint256[] memory claimIds1, uint256[] memory amounts1) = _prepareSingleSlash(claimId, firstSlashAmount);
+
+        vm.warp(block.timestamp + 15 days);
+        vm.startPrank(address(coverageAgent));
+        eigenCoverageProvider.slashClaims(claimIds1, amounts1);
+        vm.stopPrank();
+
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.PendingSlash));
+
+        coordinator.setStatus(claimId, SlashCoordinationStatus.Passed);
+        eigenCoverageProvider.completeSlash(claimId);
+
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
+        uint256 amountAfterFirstSlash = eigenCoverageProvider.claim(claimId).amount;
+        assertEq(amountAfterFirstSlash, 1000e6 - firstSlashAmount, "Amount should be reduced by first slash");
+        uint256 slashAmountsAfterFirstSlash = eigenCoverageDiamond.claimSlashAmounts(claimId);
+        assertEq(slashAmountsAfterFirstSlash, firstSlashAmount, "claimSlashAmounts should reflect executed slash");
+
+        // Reset coordinator to Pending so second slash request enters PendingSlash (initiateSlash sets Pending)
+        coordinator.setStatus(claimId, SlashCoordinationStatus.Pending);
+
+        // --- Second slash: fails through coordinator ---
+        uint256 secondSlashAmount = 200e6;
+        (uint256[] memory claimIds2, uint256[] memory amounts2) = _prepareSingleSlash(claimId, secondSlashAmount);
+
+        vm.startPrank(address(coverageAgent));
+        eigenCoverageProvider.slashClaims(claimIds2, amounts2);
+        vm.stopPrank();
+
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.PendingSlash));
+        assertEq(
+            eigenCoverageDiamond.claimSlashAmounts(claimId),
+            firstSlashAmount + secondSlashAmount,
+            "claimSlashAmounts should accumulate pending amount"
+        );
+
+        // Coordinator rejects the second slash
+        coordinator.setStatus(claimId, SlashCoordinationStatus.Failed);
+        eigenCoverageProvider.completeSlash(claimId);
+
+        // Status should stay Slashed (was previously partially slashed)
+        assertEq(
+            uint8(eigenCoverageProvider.claim(claimId).status),
+            uint8(CoverageClaimStatus.Slashed),
+            "Claim status should remain Slashed for previously slashed claim"
+        );
+
+        // Coverage amount should be unchanged from after first slash
+        assertEq(
+            eigenCoverageProvider.claim(claimId).amount,
+            amountAfterFirstSlash,
+            "Coverage amount should be unchanged after failed second slash"
+        );
+
+        // claimSlashAmounts should revert to the value after first slash only
+        assertEq(
+            eigenCoverageDiamond.claimSlashAmounts(claimId),
+            slashAmountsAfterFirstSlash,
+            "claimSlashAmounts should revert to first slash amount after failed second slash"
+        );
+    }
+
+    /// @notice Test completeSlash reverts when coordinator status is still Pending
+    function test_RevertWhen_completeSlash_slashStillPending() public {
+        MockSlashCoordinator coordinator = new MockSlashCoordinator();
+        uint256 positionId = _setupSlashingPosition(1000e18, address(coordinator), Refundable.None);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 500e6);
+        _executeSlash(claimIds, amounts, 15 days);
+
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.PendingSlash));
+        assertEq(
+            uint8(coordinator.status(address(eigenCoverageDiamond), claimId)), uint8(SlashCoordinationStatus.Pending)
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.SlashFailed.selector, claimId));
+        eigenCoverageProvider.completeSlash(claimId);
+
+        // Verify nothing changed
+        assertEq(
+            uint8(eigenCoverageProvider.claim(claimId).status),
+            uint8(CoverageClaimStatus.PendingSlash),
+            "Claim should remain PendingSlash after failed completion attempt"
+        );
+    }
+
+    /// @notice Test completeSlash succeeds when coordinator returns Passed
+    function test_completeSlash_slashPasses() public {
+        MockSlashCoordinator coordinator = new MockSlashCoordinator();
+        uint256 positionId = _setupSlashingPosition(1000e18, address(coordinator), Refundable.None);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        uint256 slashAmount = 600e6;
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, slashAmount);
+
+        vm.warp(block.timestamp + 15 days);
+        vm.startPrank(address(coverageAgent));
+        eigenCoverageProvider.slashClaims(claimIds, amounts);
+        vm.stopPrank();
+
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.PendingSlash));
+
+        coordinator.setStatus(claimId, SlashCoordinationStatus.Passed);
+
+        vm.expectEmit(true, false, false, true);
+        emit ICoverageProvider.ClaimSlashed(claimId, slashAmount);
+
+        eigenCoverageProvider.completeSlash(claimId);
+
+        assertEq(
+            uint8(eigenCoverageProvider.claim(claimId).status),
+            uint8(CoverageClaimStatus.Slashed),
+            "Claim status should be Slashed after passed slash"
+        );
+        assertEq(
+            eigenCoverageProvider.claim(claimId).amount,
+            1000e6 - slashAmount,
+            "Claim amount should be reduced by slash amount"
+        );
+        assertEq(
+            eigenCoverageDiamond.claimSlashAmounts(claimId),
+            slashAmount,
+            "claimSlashAmounts should reflect total slashed"
+        );
+    }
+
     /// @notice Test that _initiateSlash runs immediately when coordinator returns Completed status
     function test_slashClaims_coordinatorCompletedImmediately() public {
         MockSlashCoordinatorImmediate coordinator = new MockSlashCoordinatorImmediate();
@@ -1496,24 +1682,102 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 1000e6);
 
-        // Warp time and expect ClaimSlashed event (coordinator returns Completed immediately)
         vm.warp(block.timestamp + 15 days);
 
-        vm.expectEmit(true, false, false, true);
-        emit ICoverageProvider.ClaimSlashed(claimId, 1000e6);
+        // Mock coordinator.status() to return Passed so _pendingSlashCompletion resolves in same tx
+        vm.mockCall(
+            address(coordinator),
+            abi.encodeWithSelector(ISlashCoordinator.status.selector, address(eigenCoverageDiamond), claimId),
+            abi.encode(SlashCoordinationStatus.Passed)
+        );
 
         vm.startPrank(address(coverageAgent));
         CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts);
         vm.stopPrank();
 
-        // Verify status is PendingSlash in return value (set before initiateSlash is called)
         assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.PendingSlash));
-
-        // But the actual claim status should be Slashed (updated by _initiateSlash)
         assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
-
-        // Verify slash amount was recorded
         assertEq(eigenCoverageDiamond.claimSlashAmounts(claimId), 1000e6);
+    }
+
+    /// @notice Test slashClaims when coordinator instantly returns Passed: claim is slashed in same tx
+    function test_slashClaims_coordinatorReturnsPassImmediately() public {
+        MockSlashCoordinatorImmediate coordinator = new MockSlashCoordinatorImmediate();
+        uint256 positionId = _setupSlashingPosition(1000e18, address(coordinator), Refundable.None);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        uint256 amountBefore = eigenCoverageProvider.claim(claimId).amount;
+        assertEq(amountBefore, 1000e6);
+
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 600e6);
+
+        vm.warp(block.timestamp + 15 days);
+
+        // Mock coordinator.status() to return Passed so _pendingSlashCompletion resolves in same tx
+        vm.mockCall(
+            address(coordinator),
+            abi.encodeWithSelector(ISlashCoordinator.status.selector, address(eigenCoverageDiamond), claimId),
+            abi.encode(SlashCoordinationStatus.Passed)
+        );
+
+        vm.startPrank(address(coverageAgent));
+        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts);
+        vm.stopPrank();
+
+        assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.PendingSlash));
+        assertEq(
+            uint8(eigenCoverageProvider.claim(claimId).status),
+            uint8(CoverageClaimStatus.Slashed),
+            "Claim should be Slashed immediately when coordinator returns Passed"
+        );
+        assertEq(
+            eigenCoverageProvider.claim(claimId).amount,
+            amountBefore - 600e6,
+            "Claim amount should be reduced by slash in same tx"
+        );
+        assertEq(eigenCoverageDiamond.claimSlashAmounts(claimId), 600e6);
+    }
+
+    /// @notice Test slashClaims when coordinator instantly returns Failed: claim reverts to Issued in same tx
+    function test_slashClaims_coordinatorReturnsFailImmediately() public {
+        MockSlashCoordinatorImmediateFail coordinator = new MockSlashCoordinatorImmediateFail();
+        uint256 positionId = _setupSlashingPosition(1000e18, address(coordinator), Refundable.None);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        uint256 amountBefore = eigenCoverageProvider.claim(claimId).amount;
+        (int256 backingBefore,) = eigenCoverageProvider.positionBacking(positionId);
+
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 500e6);
+
+        vm.warp(block.timestamp + 15 days);
+
+        // Mock coordinator.status() to return Failed so _pendingSlashCompletion reverts to Issued in same tx
+        vm.mockCall(
+            address(coordinator),
+            abi.encodeWithSelector(ISlashCoordinator.status.selector, address(eigenCoverageDiamond), claimId),
+            abi.encode(SlashCoordinationStatus.Failed)
+        );
+
+        vm.startPrank(address(coverageAgent));
+        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts);
+        vm.stopPrank();
+
+        assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.PendingSlash));
+        assertEq(
+            uint8(eigenCoverageProvider.claim(claimId).status),
+            uint8(CoverageClaimStatus.Issued),
+            "Claim should revert to Issued immediately when coordinator returns Failed"
+        );
+        assertEq(
+            eigenCoverageProvider.claim(claimId).amount,
+            amountBefore,
+            "Coverage amount should be unchanged when slash fails immediately"
+        );
+        assertEq(
+            eigenCoverageDiamond.claimSlashAmounts(claimId), 0, "claimSlashAmounts should be 0 after immediate fail"
+        );
+        (int256 backingAfter,) = eigenCoverageProvider.positionBacking(positionId);
+        assertEq(backingAfter, backingBefore, "Position backing should be unchanged when slash fails immediately");
     }
 
     // ============ Reservation Tests ============
