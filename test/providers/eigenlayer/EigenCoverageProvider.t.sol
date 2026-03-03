@@ -1338,6 +1338,80 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         assertEq(eigenCoverageProvider.claim(claimId).amount, 0, "Claim amount should be 0 after full slash");
     }
 
+    /// @notice Test multiple partial slashes enter PendingSlash with coordinator and preserve accounting until completed
+    function test_slashClaims_multiplePartialSlashSameClaim_withCoordinatorPending_accounting() public {
+        MockSlashCoordinator coordinator = new MockSlashCoordinator();
+        uint256 positionId = _setupSlashingPosition(1000e18, address(coordinator), Refundable.None);
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
+        (int256 backingBeforePending, uint16 coveragePctBeforePending) =
+            eigenCoverageProvider.positionBacking(positionId);
+        assertGt(backingBeforePending, 0, "Position should be fully backed before pending slashes");
+
+        // Warp to a valid slashing window.
+        vm.warp(block.timestamp + 15 days);
+
+        // First partial slash request enters PendingSlash.
+        {
+            (uint256[] memory claimIds1, uint256[] memory amounts1) = _prepareSingleSlash(claimId, 400e6);
+            vm.expectEmit(true, false, false, true);
+            emit ICoverageProvider.ClaimSlashPending(claimId, address(coordinator));
+            vm.startPrank(address(coverageAgent));
+            eigenCoverageProvider.slashClaims(claimIds1, amounts1);
+            vm.stopPrank();
+
+            assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.PendingSlash));
+            assertEq(
+                eigenCoverageProvider.claim(claimId).amount, 1000e6, "Pending slash should not reduce claim amount"
+            );
+            assertEq(eigenCoverageDiamond.claimSlashAmounts(claimId), 400e6, "First pending slash should be tracked");
+            (int256 backingAfterFirstPending, uint16 coveragePctAfterFirstPending) =
+                eigenCoverageProvider.positionBacking(positionId);
+            assertEq(backingAfterFirstPending, backingBeforePending, "Backing should not change while slash is pending");
+            assertEq(
+                coveragePctAfterFirstPending,
+                coveragePctBeforePending,
+                "Coverage utilization should not change while slash is pending"
+            );
+        }
+
+        // Second partial slash request on the same claim also remains pending and accumulates slash amount.
+        {
+            (uint256[] memory claimIds2, uint256[] memory amounts2) = _prepareSingleSlash(claimId, 200e6);
+            vm.expectEmit(true, false, false, true);
+            emit ICoverageProvider.ClaimSlashPending(claimId, address(coordinator));
+            vm.startPrank(address(coverageAgent));
+            eigenCoverageProvider.slashClaims(claimIds2, amounts2);
+            vm.stopPrank();
+
+            assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.PendingSlash));
+            assertEq(
+                eigenCoverageProvider.claim(claimId).amount, 1000e6, "Claim amount stays unchanged until completion"
+            );
+            assertEq(eigenCoverageDiamond.claimSlashAmounts(claimId), 600e6, "Pending slash amount should accumulate");
+            (int256 backingAfterSecondPending,) = eigenCoverageProvider.positionBacking(positionId);
+            assertEq(backingAfterSecondPending, backingBeforePending, "Backing should still be unchanged while pending");
+        }
+
+        // Complete slashing once coordinator passes; accounting should now reflect total pending slash amount.
+        coordinator.setStatus(claimId, SlashCoordinationStatus.Passed);
+        vm.expectEmit(true, false, false, true);
+        emit ICoverageProvider.ClaimSlashed(claimId, 600e6);
+        eigenCoverageProvider.completeSlash(claimId);
+
+        CoverageClaim memory claimAfterComplete = eigenCoverageProvider.claim(claimId);
+        assertEq(uint8(claimAfterComplete.status), uint8(CoverageClaimStatus.Slashed));
+        assertEq(claimAfterComplete.amount, 400e6, "Claim amount should reduce by the total completed slash amount");
+        (int256 backingAfterComplete, uint16 coveragePctAfterComplete) =
+            eigenCoverageProvider.positionBacking(positionId);
+        assertTrue(
+            backingAfterComplete != backingBeforePending, "Backing should update once pending slash is completed"
+        );
+        assertTrue(
+            coveragePctAfterComplete != coveragePctBeforePending,
+            "Coverage utilization should update once pending slash is completed"
+        );
+    }
+
     /// @notice Test completeSlash with invalid status should revert
     function test_RevertWhen_completeSlash_invalidStatus() public {
         MockSlashCoordinator coordinator = new MockSlashCoordinator();
@@ -1385,7 +1459,6 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
         assertEq(eigenCoverageProvider.claim(claimId).amount, 0, "Claim amount should be 0 after full slash");
     }
-
 
     /// @notice Test that _initiateSlash reverts when claim status is already Slashed
     function test_RevertWhen_initiateSlash_alreadySlashed() public {
