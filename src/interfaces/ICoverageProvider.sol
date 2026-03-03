@@ -91,6 +91,10 @@ interface ICoverageProvider {
     event ClaimRepayment(uint256 indexed claimId, uint256 amount);
     /// @notice Emitted when a slashed claim is fully repaid.
     event ClaimRepaid(uint256 indexed claimId);
+    /// @notice Emitted when a claim reward is refunded.
+    event ClaimRewardRefund(uint256 indexed claimId, uint256 amount);
+    /// @notice Emitted when the coverage amount for a claim is updated.
+    event CoverageAmountUpdated(address indexed coverageAgent, uint256 indexed claimId, int256 amount);
     /// @notice Emitted when the provider's metadata URI is updated.
     event MetadataUpdated(string metadataUri);
 
@@ -138,8 +142,6 @@ interface ICoverageProvider {
     error ClaimNotExpired(uint256 claimId, uint256 expiresAt);
     /// @notice The claim has already expired.
     error ClaimExpired(uint256 claimId, uint256 expiredAt);
-    /// @notice The replacement position is the same as the liquidated claim's position.
-    error SamePosition(uint256 positionId);
 
     /// ============ Hooks ============
 

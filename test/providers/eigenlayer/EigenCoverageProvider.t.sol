@@ -2845,7 +2845,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 positionId = _setupSlashingPosition(1000e18);
         uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 10e6);
 
-        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.SamePosition.selector, positionId));
+        vm.expectRevert(abi.encodeWithSelector(ICoverageLiquidatable.SamePosition.selector, positionId));
         eigenCoverageLiquidatable.liquidateClaim(claimId, positionId);
     }
 
