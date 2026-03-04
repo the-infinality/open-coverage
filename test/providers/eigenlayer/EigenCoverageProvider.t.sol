@@ -4321,5 +4321,69 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         assertEq(amountAgain, 0, "Second capture in same block should return 0");
         assertEq(durationAgain, 0, "Duration should be 0 for second capture in same block");
     }
+
+    function test_captureRewards_refundableFull_slashed() public {
+        uint256 positionId = _setupSlashingPosition(1000e18, address(0), Refundable.Full);
+        uint256 reward = 10e6;
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 30 days, reward, 0);
+
+        vm.warp(block.timestamp + 15 days);
+
+        // Before slashing, Full refundable claim should return 0 (not yet terminal)
+        (uint256 amountBefore,,) = eigenCoverageProvider.captureRewards(claimId);
+        assertEq(amountBefore, 0, "Full refundable should not release reward before terminal status");
+
+        // Slash the claim
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, 500e6);
+        _executeSlash(claimIds, amounts);
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
+
+        // After slashing, captureRewards should release the full reward
+        (uint256 amountAfter,,) = eigenCoverageProvider.captureRewards(claimId);
+        assertEq(amountAfter, reward, "Full reward should be released for slashed Full refundable claim");
+
+        // Second call should return 0
+        (uint256 amountAgain,,) = eigenCoverageProvider.captureRewards(claimId);
+        assertEq(amountAgain, 0, "No remaining reward after capture");
+    }
+
+    function test_captureRewards_refundableFull_repaid() public {
+        uint256 positionId = _setupSlashingPosition(1000e18, address(0), Refundable.Full);
+        uint256 reward = 10e6;
+        uint256 slashAmount = 500e6;
+        uint256 claimId = _createAndApproveClaim(positionId, 1000e6, 30 days, reward, 0);
+
+        // Slash the claim
+        (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, slashAmount);
+        _executeSlash(claimIds, amounts, 15 days);
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
+
+        // Repay the slashed claim fully
+        vm.startPrank(address(coverageAgent));
+        deal(coverageAgent.asset(), address(coverageAgent), slashAmount);
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), slashAmount);
+        eigenCoverageProvider.repaySlashedClaim(claimId, slashAmount);
+        vm.stopPrank();
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Repaid));
+
+        // captureRewards should release the full reward for a Repaid Full claim
+        (uint256 amount,,) = eigenCoverageProvider.captureRewards(claimId);
+        assertEq(amount, reward, "Full reward should be released for repaid Full refundable claim");
+    }
+
+    function test_captureRewards_reservedClaim_returnsZero() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+
+        assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Reserved));
+
+        (uint256 amount, uint32 duration, uint32 distributionStartTime) = eigenCoverageProvider.captureRewards(claimId);
+        assertEq(amount, 0, "Reserved claims should not release any reward");
+        assertEq(duration, 0, "Duration should be 0 for reserved claims");
+        assertEq(distributionStartTime, 0, "Distribution start time should be 0 for reserved claims");
+    }
 }
 
