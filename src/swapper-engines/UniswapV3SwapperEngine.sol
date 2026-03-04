@@ -230,6 +230,7 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
     }
     // slither-disable-end uninitialized-local
 
+    /// @inheritdoc ISwapperEngine
     function onInit(bytes memory poolInfo) external {
         (address assetA, address assetB) = _getAssetAddresses(poolInfo);
         if (assetA == address(0) || assetB == address(0)) revert InvalidPoolInfo();
