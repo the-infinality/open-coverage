@@ -94,19 +94,18 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     function closePosition(uint256 positionId) external {
         CoveragePosition storage positionData = positions[positionId];
         address operator = address(uint160(uint256(positionData.operatorId)));
-        address strategy = assetToStrategy[positionData.asset];
+
+        require(
+            _checkOperatorPermissions(
+                operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector
+            ),
+            IEigenServiceManager.NotOperatorAuthorized(operator, msg.sender)
+        );
 
         require(
             positionData.expiryTimestamp >= block.timestamp, PositionExpired(positionId, positionData.expiryTimestamp)
         );
         positions[positionId].expiryTimestamp = block.timestamp;
-
-        if (
-            _strategyWhitelist.contains(strategy)
-                && !_checkOperatorPermissions(
-                    operator, _eigenAddresses.allocationManager, IAllocationManager.modifyAllocations.selector
-                )
-        ) revert IEigenServiceManager.NotOperatorAuthorized(operator, msg.sender);
 
         emit PositionClosed(positionId);
     }
@@ -668,20 +667,19 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     /// ============ Internal functions ============ //
 
     /// @notice Validates the claim parameters meet the position requirements
-    function _validatePosition(CoveragePosition memory data, uint256 amount, uint256 duration, uint256 reward)
+    function _validatePosition(CoveragePosition memory positionData, uint256 amount, uint256 duration, uint256 reward)
         private
         view
     {
-        uint256 minimumReward = (amount * data.minRate * duration) / (10000 * 365 days);
+        uint256 minimumReward = (amount * positionData.minRate * duration) / (10000 * 365 days);
         if (minimumReward > reward) revert InsufficientReward(minimumReward, reward);
-        if (!_strategyWhitelist.contains(assetToStrategy[data.asset])) {
-            revert IEigenOperatorProxy.StrategyNotWhitelisted(assetToStrategy[data.asset]);
-        }
 
-        if (data.maxDuration > 0 && duration > data.maxDuration) revert DurationExceedsMax(data.maxDuration, duration);
+        if (positionData.maxDuration > 0 && duration > positionData.maxDuration) {
+            revert DurationExceedsMax(positionData.maxDuration, duration);
+        }
         require(
-            duration + block.timestamp <= data.expiryTimestamp,
-            DurationExceedsExpiry(data.expiryTimestamp, duration + block.timestamp)
+            duration + block.timestamp <= positionData.expiryTimestamp,
+            DurationExceedsExpiry(positionData.expiryTimestamp, duration + block.timestamp)
         );
     }
 

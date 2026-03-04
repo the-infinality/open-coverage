@@ -231,23 +231,4 @@ contract EigenPermissionsTest is EigenTestDeployer {
         vm.expectRevert("Only internal calls");
         eigenServiceManager.slashOperator(address(operator), strategy, address(coverageAgent), 100e6);
     }
-
-    // ============ AVS validation ============
-
-    function test_RevertWhen_registerOperator_invalidAVS() public {
-        address randomAVS = makeAddr("randomAVS");
-        uint32[] memory operatorSetIds = new uint32[](0);
-
-        vm.expectRevert(abi.encodeWithSelector(IEigenServiceManager.InvalidAVS.selector, randomAVS));
-        eigenServiceManager.registerOperator(address(this), randomAVS, operatorSetIds, "");
-    }
-
-    function test_RevertWhen_registerOperator_calledByDelegationManager() public {
-        address delegationManager = eigenServiceManager.eigenAddresses().delegationManager;
-        uint32[] memory operatorSetIds = new uint32[](0);
-
-        vm.prank(delegationManager);
-        vm.expectRevert("Not delegation manager");
-        eigenServiceManager.registerOperator(address(this), address(eigenCoverageDiamond), operatorSetIds, "");
-    }
 }
