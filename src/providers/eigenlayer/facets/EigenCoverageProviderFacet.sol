@@ -449,7 +449,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
 
                 emit ClaimSlashPending(claimIds[i], _position.slashCoordinator);
 
-                _pendingSlashCompletion(claimIds[i]);
+                _pendingSlashCompletion(claimIds[i], deadline);
             }
         }
     }
@@ -465,7 +465,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             SlashFailed(claimId)
         );
 
-        _pendingSlashCompletion(claimId);
+        _pendingSlashCompletion(claimId, deadline);
     }
 
     /// @inheritdoc ICoverageProvider
@@ -668,18 +668,25 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
 
     /// @notice Validates the claim parameters meet the position requirements
     function _validateClaimAgainstPosition(
-        CoveragePosition memory data,
+        CoveragePosition memory positionData,
         uint256 amount,
         uint256 duration,
         uint256 reward
     ) private view {
         require(duration > 0, ZeroDuration());
-        uint256 minimumReward = (amount * data.minRate * duration) / (10000 * 365 days);
-        if (minimumReward > reward) revert InsufficientReward(minimumReward, reward);
+
+        uint256 minimumReward = (amount * positionData.minRate * duration) / (10000 * 365 days);
+        require(minimumReward <= reward, InsufficientReward(minimumReward, reward));
+
+        require(
+            _strategyWhitelist.contains(assetToStrategy[positionData.asset]),
+            IEigenOperatorProxy.StrategyNotWhitelisted(assetToStrategy[positionData.asset])
+        );
 
         if (positionData.maxDuration > 0 && duration > positionData.maxDuration) {
             revert DurationExceedsMax(positionData.maxDuration, duration);
         }
+
         require(
             duration + block.timestamp <= positionData.expiryTimestamp,
             DurationExceedsExpiry(positionData.expiryTimestamp, duration + block.timestamp)
@@ -872,7 +879,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         }
     }
 
-    function _pendingSlashCompletion(uint256 claimId) private {
+    function _pendingSlashCompletion(uint256 claimId, uint256 deadline) private {
         CoverageClaim storage _claim = claims[claimId];
         SlashCoordinationStatus slashStatus =
             ISlashCoordinator(positions[_claim.positionId].slashCoordinator).status(address(this), claimId);
@@ -893,7 +900,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         if (slashStatus == SlashCoordinationStatus.Passed) {
             uint256 pendingAmount = pendingClaimSlashAmounts[claimId];
             pendingClaimSlashAmounts[claimId] = 0;
-            _initiateSlash(claimId, pendingAmount);
+            _initiateSlash(claimId, pendingAmount, deadline);
         }
     }
 

@@ -228,6 +228,7 @@ contract UniswapV3SwapperEngine is ISwapperEngine, UniswapV3SwapperEngineStorage
         // Use checked math to prevent overflow
         amountOut = unitAmountOut * amountIn / unitAmount;
     }
+
     // slither-disable-end uninitialized-local
 
     /// @inheritdoc ISwapperEngine
