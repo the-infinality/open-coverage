@@ -120,6 +120,8 @@ interface ICoverageProvider {
     error InvalidCoverageAsset(address requiredAsset, address providedAsset);
     /// @notice The requested duration exceeds the position's maximum.
     error DurationExceedsMax(uint256 maxDuration, uint256 duration);
+    /// @notice The provided duration is zero.
+    error ZeroDuration();
     /// @notice The claim would complete after the position expires.
     error DurationExceedsExpiry(uint256 expiryTimestamp, uint256 completionTimestamp);
     /// @notice The claim is in an invalid state for the requested operation.

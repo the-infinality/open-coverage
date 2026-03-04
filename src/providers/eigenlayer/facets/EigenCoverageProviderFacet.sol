@@ -122,7 +122,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             revert NotCoverageAgent(msg.sender, positionData.coverageAgent);
         }
 
-        _validatePosition(positionData, amount, duration, reward);
+        _validateClaimAgainstPosition(positionData, amount, duration, reward);
 
         // Capture rewards funds from coverage agent
         SafeERC20.safeTransferFrom(
@@ -175,7 +175,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             revert ReservationNotAllowed(positionId);
         }
 
-        _validatePosition(positionData, amount, duration, reward);
+        _validateClaimAgainstPosition(positionData, amount, duration, reward);
 
         // Reserve coverage in the coverage map (without transferring rewards yet)
         address operator = address(uint160(uint256(positionData.operatorId)));
@@ -667,11 +667,14 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     /// ============ Internal functions ============ //
 
     /// @notice Validates the claim parameters meet the position requirements
-    function _validatePosition(CoveragePosition memory positionData, uint256 amount, uint256 duration, uint256 reward)
-        private
-        view
-    {
-        uint256 minimumReward = (amount * positionData.minRate * duration) / (10000 * 365 days);
+    function _validateClaimAgainstPosition(
+        CoveragePosition memory data,
+        uint256 amount,
+        uint256 duration,
+        uint256 reward
+    ) private view {
+        require(duration > 0, ZeroDuration());
+        uint256 minimumReward = (amount * data.minRate * duration) / (10000 * 365 days);
         if (minimumReward > reward) revert InsufficientReward(minimumReward, reward);
 
         if (positionData.maxDuration > 0 && duration > positionData.maxDuration) {
