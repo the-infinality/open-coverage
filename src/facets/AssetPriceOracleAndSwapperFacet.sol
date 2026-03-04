@@ -26,4 +26,11 @@ contract AssetPriceOracleAndSwapperFacet is AssetPriceOracleAndSwapper {
         LibDiamond.enforceIsContractOwner();
         _setSwapSlippageChecked(swapSlippage_);
     }
+
+    /// @notice Sets the maximum deadline offset for a swap (owner only).
+    /// @param maxDeadlineOffset_ The maximum deadline offset for a swap
+    function setMaxDeadlineOffset(uint256 maxDeadlineOffset_) external {
+        LibDiamond.enforceIsContractOwner();
+        _setMaxDeadlineOffset(maxDeadlineOffset_);
+    }
 }

@@ -114,7 +114,7 @@ contract MockCoverageProvider is ICoverageProvider, ICoverageLiquidatable {
         emit ClaimLiquidated(claimId, _claims[claimId].positionId, positionId);
     }
 
-    function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts)
+    function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts, uint256)
         external
         override
         returns (CoverageClaimStatus[] memory slashStatuses)
@@ -137,7 +137,7 @@ contract MockCoverageProvider is ICoverageProvider, ICoverageLiquidatable {
         }
     }
 
-    function completeSlash(uint256 claimId) external override {
+    function completeSlash(uint256 claimId, uint256) external override {
         if (_claimSlashAmounts[claimId] > _claims[claimId].amount) {
             revert SlashAmountExceedsClaim(claimId, _claimSlashAmounts[claimId], _claims[claimId].amount);
         }

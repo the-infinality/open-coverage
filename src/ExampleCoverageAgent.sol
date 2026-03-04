@@ -232,7 +232,7 @@ contract ExampleCoverageAgent is IExampleCoverageAgent, ERC165 {
             claimIds[0] = claimId;
             amounts[0] = slashAmount;
 
-            CoverageClaimStatus[] memory statuses = provider.slashClaims(claimIds, amounts);
+            CoverageClaimStatus[] memory statuses = provider.slashClaims(claimIds, amounts, block.timestamp);
             slashStatuses[i] = statuses[0];
 
             totalSlashed += slashAmount;

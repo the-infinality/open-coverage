@@ -409,7 +409,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     }
 
     /// @inheritdoc ICoverageProvider
-    function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts)
+    function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts, uint256 deadline)
         external
         nonReentrant
         returns (CoverageClaimStatus[] memory slashStatuses)
@@ -441,7 +441,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             if (_position.slashCoordinator == address(0)) {
                 // If no slash coordinator is set, the coverage provider will instantly slash the coverage position.
                 slashStatuses[i] = CoverageClaimStatus.Slashed;
-                _initiateSlash(claimIds[i], amounts[i]);
+                _initiateSlash(claimIds[i], amounts[i], deadline);
             } else {
                 slashStatuses[i] = CoverageClaimStatus.PendingSlash;
                 _claim.status = CoverageClaimStatus.PendingSlash;
@@ -455,7 +455,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     }
 
     /// @inheritdoc ICoverageProvider
-    function completeSlash(uint256 claimId) external {
+    function completeSlash(uint256 claimId, uint256 deadline) external {
         CoverageClaim storage _claim = claims[claimId];
         if (_claim.status != CoverageClaimStatus.PendingSlash) revert InvalidClaim(claimId, _claim.status);
 
@@ -792,7 +792,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         ICoverageAgent(coverageAgent).onRegisterPosition(positionId);
     }
 
-    function _initiateSlash(uint256 claimId, uint256 amount) private {
+    function _initiateSlash(uint256 claimId, uint256 amount, uint256 deadline) private {
         CoverageClaim storage _claim = claims[claimId];
         CoveragePosition storage _position = positions[_claim.positionId];
 
@@ -832,7 +832,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             .slashOperator(operator, strategy, _position.coverageAgent, totalStrategyAssetValueToSlash);
 
         // Swap the slashed strategy asset to the coverage agent's asset
-        IAssetPriceOracleAndSwapper(address(this)).swapForOutput(amount, coverageAsset, strategyAsset);
+        IAssetPriceOracleAndSwapper(address(this)).swapForOutput(amount, coverageAsset, strategyAsset, deadline);
 
         // Transfer swapped tokens to coverage agent
         SafeERC20.safeTransfer(IERC20(coverageAsset), _position.coverageAgent, amount);

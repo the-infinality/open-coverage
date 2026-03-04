@@ -247,7 +247,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         deal(USDT, address(assetPriceOracleAndSwapper), amountIn);
 
         vm.expectRevert(IAssetPriceOracleAndSwapper.SwapFailed.selector);
-        assetPriceOracleAndSwapper.swapForInput(amountIn, USDC, USDT);
+        assetPriceOracleAndSwapper.swapForInput(amountIn, USDC, USDT, block.timestamp);
     }
 
     function test_swapForOutput() public {
@@ -256,7 +256,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         deal(USDT, address(assetPriceOracleAndSwapper), amountOut * 2);
 
         // Swap from USDT (swap) to get amountOut of USDC (base)
-        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT);
+        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT, block.timestamp);
 
         assertEq(IERC20(USDC).balanceOf(address(assetPriceOracleAndSwapper)), amountOut);
     }
@@ -267,7 +267,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         deal(USDT, address(assetPriceOracleAndSwapper), amountIn * 2);
 
         // Swap from USDT (swap) to get amountOut of USDC (base)
-        assetPriceOracleAndSwapper.swapForInput(amountIn, USDC, USDT);
+        assetPriceOracleAndSwapper.swapForInput(amountIn, USDC, USDT, block.timestamp);
     }
 
     function test_RevertWhen_swapForOutput_slippageTooLow() public {
@@ -278,7 +278,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         deal(USDT, address(assetPriceOracleAndSwapper), amountOut * 2);
 
         vm.expectRevert(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.SwapFailed.selector));
-        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT);
+        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT, block.timestamp);
     }
 
     function test_RevertWhen_swapForOutput_slippageTooHigh() public {
@@ -503,7 +503,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         // V3 multi-hop path: rETH -> WETH (fee: 100) -> USDC (fee: 500)
         // For EXACT_OUT, path format: output -> fee -> intermediate -> fee -> input
         // Swap from USDC (swap) to get amountOut of rETH (base)
-        assetPriceOracleAndSwapper.swapForOutput(amountOut, rETH, USDC);
+        assetPriceOracleAndSwapper.swapForOutput(amountOut, rETH, USDC, block.timestamp);
 
         assertEq(IERC20(rETH).balanceOf(address(assetPriceOracleAndSwapper)), amountOut);
     }
@@ -513,7 +513,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         deal(USDT, address(assetPriceOracleAndSwapper), amountOut * 2);
 
         vm.expectRevert(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.AssetPairNotRegistered.selector));
-        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, address(0));
+        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, address(0), block.timestamp);
     }
 
     function test_getQuote_oracle_only() public view {
@@ -630,5 +630,98 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         uint256 amountIn = 1000e6;
         vm.expectRevert(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.AssetPairNotRegistered.selector));
         assetPriceOracleAndSwapper.getQuote(amountIn, USDC, address(0));
+    }
+
+    // ========== maxDeadlineOffset view and setMaxDeadlineOffset ==========
+
+    function test_maxDeadlineOffset_returnsDefaultZero() public view {
+        assertEq(assetPriceOracleAndSwapper.maxDeadlineOffset(), 0);
+    }
+
+    function test_maxDeadlineOffset_returnsSetValue() public {
+        uint256 newMax = 3600;
+        assetPriceOracleAndSwapper.setMaxDeadlineOffset(newMax);
+        assertEq(assetPriceOracleAndSwapper.maxDeadlineOffset(), newMax);
+    }
+
+    function test_setMaxDeadlineOffset_updatesValue() public {
+        assetPriceOracleAndSwapper.setMaxDeadlineOffset(100);
+        assertEq(assetPriceOracleAndSwapper.maxDeadlineOffset(), 100);
+
+        assetPriceOracleAndSwapper.setMaxDeadlineOffset(type(uint256).max);
+        assertEq(assetPriceOracleAndSwapper.maxDeadlineOffset(), type(uint256).max);
+    }
+
+    function test_RevertWhen_setMaxDeadlineOffset_not_owner() public {
+        address nonOwner = makeAddr("nonOwner");
+        vm.prank(nonOwner);
+        vm.expectRevert(MockAssetPriceOracleAndSwapper.NotOwner.selector);
+        assetPriceOracleAndSwapper.setMaxDeadlineOffset(3600);
+    }
+
+    function test_RevertWhen_swapForOutput_exceedsMaxDeadline() public {
+        uint256 maxDuration = 100;
+        assetPriceOracleAndSwapper.setMaxDeadlineOffset(maxDuration);
+        // Allowed deadline = block.timestamp + maxDuration; use one past that
+        uint256 allowedDeadline = block.timestamp + maxDuration;
+        uint256 deadlineOverMax = allowedDeadline + 1;
+
+        uint128 amountOut = 1000e6;
+        deal(USDT, address(assetPriceOracleAndSwapper), amountOut * 2);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAssetPriceOracleAndSwapper.ExceedsMaxDeadline.selector, allowedDeadline, deadlineOverMax
+            )
+        );
+        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT, deadlineOverMax);
+    }
+
+    function test_RevertWhen_swapForInput_exceedsMaxDeadline() public {
+        uint256 maxDuration = 100;
+        assetPriceOracleAndSwapper.setMaxDeadlineOffset(maxDuration);
+        uint256 allowedDeadline = block.timestamp + maxDuration;
+        uint256 deadlineOverMax = allowedDeadline + 1;
+
+        uint128 amountIn = 1000e6;
+        deal(USDT, address(assetPriceOracleAndSwapper), amountIn * 2);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAssetPriceOracleAndSwapper.ExceedsMaxDeadline.selector, allowedDeadline, deadlineOverMax
+            )
+        );
+        assetPriceOracleAndSwapper.swapForInput(amountIn, USDC, USDT, deadlineOverMax);
+    }
+
+    function test_swapForOutput_succeedsWhenDeadlineWithinMax() public {
+        // maxDeadlineOffset is duration: allowed absolute deadline = block.timestamp + 3600
+        assetPriceOracleAndSwapper.setMaxDeadlineOffset(3600);
+
+        uint128 amountOut = 1000e6;
+        deal(USDT, address(assetPriceOracleAndSwapper), amountOut * 2);
+
+        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT, block.timestamp);
+        assertEq(IERC20(USDC).balanceOf(address(assetPriceOracleAndSwapper)), amountOut);
+    }
+
+    function test_swapForInput_succeedsWhenDeadlineWithinMax() public {
+        assetPriceOracleAndSwapper.setMaxDeadlineOffset(3600);
+
+        uint128 amountIn = 1000e6;
+        deal(USDT, address(assetPriceOracleAndSwapper), amountIn * 2);
+
+        assetPriceOracleAndSwapper.swapForInput(amountIn, USDC, USDT, block.timestamp);
+    }
+
+    function test_swapForOutput_succeedsWhenDeadlineEqualsMaxDeadline() public {
+        // With offset 0, allowed deadline = block.timestamp + 0 = block.timestamp
+        assetPriceOracleAndSwapper.setMaxDeadlineOffset(0);
+
+        uint128 amountOut = 1000e6;
+        deal(USDT, address(assetPriceOracleAndSwapper), amountOut * 2);
+
+        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT, block.timestamp);
+        assertEq(IERC20(USDC).balanceOf(address(assetPriceOracleAndSwapper)), amountOut);
     }
 }

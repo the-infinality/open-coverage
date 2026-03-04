@@ -26,12 +26,28 @@ abstract contract AssetPriceOracleAndSwapperStorage {
         return ds.swapSlippage;
     }
 
+    /// @notice Get the maximum deadline offset
+    /// @return The maximum deadline offset
+    function _maxDeadlineOffset() internal view returns (uint256) {
+        LibAssetPriceOracleAndSwapperStorage.AssetPriceOracleAndSwapperStorage storage ds =
+            LibAssetPriceOracleAndSwapperStorage.assetPriceOracleAndSwapperStorage();
+        return ds.maxDeadlineOffset;
+    }
+
     /// @notice Set the swap slippage
     /// @param slippage The swap slippage in basis points (0-10000)
     function _setSwapSlippage(uint16 slippage) internal {
         LibAssetPriceOracleAndSwapperStorage.AssetPriceOracleAndSwapperStorage storage ds =
             LibAssetPriceOracleAndSwapperStorage.assetPriceOracleAndSwapperStorage();
         ds.swapSlippage = slippage;
+    }
+
+    /// @notice Set the maximum deadline offset
+    /// @param maxDeadlineOffset The maximum deadline offset
+    function _setMaxDeadlineOffset(uint256 maxDeadlineOffset) internal {
+        LibAssetPriceOracleAndSwapperStorage.AssetPriceOracleAndSwapperStorage storage ds =
+            LibAssetPriceOracleAndSwapperStorage.assetPriceOracleAndSwapperStorage();
+        ds.maxDeadlineOffset = maxDeadlineOffset;
     }
 
     /// @notice Initialize the default swap slippage

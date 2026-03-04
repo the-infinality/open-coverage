@@ -34,4 +34,10 @@ contract MockAssetPriceOracleAndSwapper is AssetPriceOracleAndSwapper {
     function setSwapSlippage(uint16 swapSlippage_) public override onlyOwner {
         _setSwapSlippageChecked(swapSlippage_);
     }
+
+    /// @notice Override setMaxDeadlineOffset to add owner check
+    /// @param maxDeadlineOffset_ The maximum deadline offset for a swap
+    function setMaxDeadlineOffset(uint256 maxDeadlineOffset_) public override onlyOwner {
+        _setMaxDeadlineOffset(maxDeadlineOffset_);
+    }
 }

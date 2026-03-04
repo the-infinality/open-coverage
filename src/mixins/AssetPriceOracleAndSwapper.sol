@@ -42,8 +42,12 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
     }
 
     /// @inheritdoc IAssetPriceOracleAndSwapper
-    function swapForOutput(uint256 amountOut, address assetA, address assetB) public {
+    function swapForOutput(uint256 amountOut, address assetA, address assetB, uint256 deadline) public {
         AssetPair memory _assetPair = _getRegisteredAssetPair(assetA, assetB);
+        require(
+            deadline <= _maxDeadlineOffset() + block.timestamp,
+            ExceedsMaxDeadline(_maxDeadlineOffset() + block.timestamp, deadline)
+        );
 
         (uint256 maxAmountIn,) = swapForOutputQuote(amountOut, assetA, assetB);
 
@@ -51,20 +55,25 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
         (bool success,) = _assetPair.swapEngine
             .delegatecall(
                 abi.encodeWithSignature(
-                    "swapForOutput(bytes,uint256,uint256,address,address)",
+                    "swapForOutput(bytes,uint256,uint256,address,address,uint256)",
                     _assetPair.poolInfo,
                     amountOut,
                     maxAmountIn,
                     assetA,
-                    assetB
+                    assetB,
+                    deadline
                 )
             );
         if (!success) revert SwapFailed();
     }
 
     /// @inheritdoc IAssetPriceOracleAndSwapper
-    function swapForInput(uint256 amountIn, address assetA, address assetB) public {
+    function swapForInput(uint256 amountIn, address assetA, address assetB, uint256 deadline) public {
         AssetPair memory _assetPair = _getRegisteredAssetPair(assetA, assetB);
+        require(
+            deadline <= _maxDeadlineOffset() + block.timestamp,
+            ExceedsMaxDeadline(_maxDeadlineOffset() + block.timestamp, deadline)
+        );
 
         (uint256 minAmountOut,) = swapForInputQuote(amountIn, assetA, assetB);
 
@@ -72,12 +81,13 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
         (bool success,) = _assetPair.swapEngine
             .delegatecall(
                 abi.encodeWithSignature(
-                    "swapForInput(bytes,uint256,uint256,address,address)",
+                    "swapForInput(bytes,uint256,uint256,address,address,uint256)",
                     _assetPair.poolInfo,
                     amountIn,
                     minAmountOut,
                     assetA,
-                    assetB
+                    assetB,
+                    deadline
                 )
             );
         if (!success) revert SwapFailed();
@@ -93,6 +103,11 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
     /// @inheritdoc IAssetPriceOracleAndSwapper
     function swapSlippage() external view returns (uint16) {
         return _swapSlippage();
+    }
+
+    /// @inheritdoc IAssetPriceOracleAndSwapper
+    function maxDeadlineOffset() external view returns (uint256) {
+        return _maxDeadlineOffset();
     }
 
     /// @inheritdoc IAssetPriceOracleAndSwapper

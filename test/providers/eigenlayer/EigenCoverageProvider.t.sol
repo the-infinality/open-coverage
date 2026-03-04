@@ -1117,7 +1117,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.expectEmit(true, false, false, false);
         emit ICoverageProvider.ClaimSlashed(claimId, 1000e6);
 
-        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts);
+        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts, block.timestamp);
         vm.stopPrank();
 
         assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.Slashed));
@@ -1331,7 +1331,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         emit ICoverageProvider.ClaimSlashPending(claimId, address(coordinator));
 
         vm.startPrank(address(coverageAgent));
-        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts);
+        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts, block.timestamp);
         vm.stopPrank();
 
         assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.PendingSlash));
@@ -1345,7 +1345,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.expectEmit(true, false, false, true);
         emit ICoverageProvider.ClaimSlashed(claimId, 1000e6);
 
-        eigenCoverageProvider.completeSlash(claimId);
+        eigenCoverageProvider.completeSlash(claimId, block.timestamp);
 
         assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
         assertEq(eigenCoverageProvider.claim(claimId).amount, 0, "Claim amount should be 0 after full slash");
@@ -1433,7 +1433,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.expectRevert(
             abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId, CoverageClaimStatus.Issued)
         );
-        eigenCoverageProvider.completeSlash(claimId);
+        eigenCoverageProvider.completeSlash(claimId, block.timestamp);
     }
 
     /// @notice Test completeSlash with coordinator status not completed should revert
@@ -1452,7 +1452,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         // Try to complete slash
         vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.SlashFailed.selector, claimId));
-        eigenCoverageProvider.completeSlash(claimId);
+        eigenCoverageProvider.completeSlash(claimId, block.timestamp);
     }
 
     /// @notice Test that slashing updates claim status correctly
@@ -1482,12 +1482,12 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         // First slash with coordinator
         vm.warp(block.timestamp + 15 days);
         vm.startPrank(address(coverageAgent));
-        eigenCoverageProvider.slashClaims(claimIds, amounts);
+        eigenCoverageProvider.slashClaims(claimIds, amounts, block.timestamp);
         vm.stopPrank();
 
         // Complete the slash through coordinator
         coordinator.setStatus(claimId, SlashCoordinationStatus.Passed);
-        eigenCoverageProvider.completeSlash(claimId);
+        eigenCoverageProvider.completeSlash(claimId, block.timestamp);
 
         // Verify claim is slashed
         assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
@@ -1496,7 +1496,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.expectRevert(
             abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId, CoverageClaimStatus.Slashed)
         );
-        eigenCoverageProvider.completeSlash(claimId);
+        eigenCoverageProvider.completeSlash(claimId, block.timestamp);
     }
 
     /// @notice Test completeSlash when coordinator returns Failed on a fresh (never-slashed) claim
@@ -1701,7 +1701,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         );
 
         vm.startPrank(address(coverageAgent));
-        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts);
+        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts, block.timestamp);
         vm.stopPrank();
 
         assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.PendingSlash));
@@ -2714,7 +2714,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, slashAmount);
 
         vm.startPrank(address(coverageAgent));
-        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts);
+        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts, block.timestamp);
         vm.stopPrank();
 
         // Verify status is PendingSlash
@@ -2725,7 +2725,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         // Complete the slash via coordinator
         mockCoordinator.setStatus(claimId, SlashCoordinationStatus.Passed);
-        eigenCoverageProvider.completeSlash(claimId);
+        eigenCoverageProvider.completeSlash(claimId, block.timestamp);
 
         // Verify slash amount remains the same after completion
         assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId), slashAmount);

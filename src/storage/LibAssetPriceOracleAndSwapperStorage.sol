@@ -19,6 +19,8 @@ library LibAssetPriceOracleAndSwapperStorage {
         /// @notice The swap slippage in basis points i.e. 1 = 0.01%
         /// @dev Default slippage is 100 (1%), initialized in constructor
         uint16 swapSlippage;
+        /// @notice The maximum deadline offset for a swap (duration in seconds from block.timestamp)
+        uint256 maxDeadlineOffset;
     }
 
     /// @notice Get the diamond storage for AssetPriceOracleAndSwapper

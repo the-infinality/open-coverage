@@ -310,7 +310,7 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
             )[0][0];
 
         uint256 sharesToSlash = IStrategy(strategy).underlyingToSharesView(amount);
-        
+
         wadToSlash = (sharesToSlash * WAD) / sharesAllocated;
         // Revert if the required slash amount is greater than the total allocated stake
         if (wadToSlash > WAD) {
