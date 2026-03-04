@@ -50,3 +50,22 @@ contract MockSlashCoordinatorImmediate is ISlashCoordinator {
         return _statuses[claimId];
     }
 }
+
+/// @notice Mock slash coordinator that immediately returns Failed status
+contract MockSlashCoordinatorImmediateFail is ISlashCoordinator {
+    mapping(uint256 => SlashCoordinationStatus) private _statuses;
+
+    function initiateSlash(address coverageProvider, uint256 claimId, uint256 amount)
+        external
+        returns (SlashCoordinationStatus)
+    {
+        _statuses[claimId] = SlashCoordinationStatus.Failed;
+        emit SlashRequested(coverageProvider, claimId, amount);
+        emit SlashFailed(coverageProvider, claimId);
+        return SlashCoordinationStatus.Failed;
+    }
+
+    function status(address, uint256 claimId) external view returns (SlashCoordinationStatus) {
+        return _statuses[claimId];
+    }
+}

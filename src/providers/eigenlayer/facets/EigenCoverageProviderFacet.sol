@@ -132,22 +132,23 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
 
         address operator = address(uint160(uint256(positionData.operatorId)));
         address strategy = assetToStrategy[positionData.asset];
-        // casting to 'int256' is safe because amount won't exceed max int256 for practical coverage amounts
-        // forge-lint: disable-next-line(unsafe-typecast)
-        _modifyCoverageForAgent(operator, strategy, positionData.coverageAgent, int256(amount));
-        _checkCoverageForAgent(operator, strategy, positionData.coverageAgent);
 
         claimId = claims.length;
         claims.push(
             CoverageClaim({
                 positionId: positionId,
-                amount: amount,
                 duration: duration,
+                amount: 0,
                 createdAt: block.timestamp,
                 status: CoverageClaimStatus.Issued,
                 reward: reward
             })
         );
+
+        // casting to 'int256' is safe because amount won't exceed max int256 for practical coverage amounts
+        // forge-lint: disable-next-line(unsafe-typecast)
+        _modifyCoverageForAgent(operator, strategy, positionData.coverageAgent, claimId, int256(amount));
+        _checkCoverageForAgent(operator, strategy, positionData.coverageAgent);
 
         // Initialize the claim reward distribution
         if (positionData.refundable != Refundable.Full) {
@@ -180,22 +181,23 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         // Reserve coverage in the coverage map (without transferring rewards yet)
         address operator = address(uint160(uint256(positionData.operatorId)));
         address strategy = assetToStrategy[positionData.asset];
-        // casting to 'int256' is safe because amount won't exceed max int256 for practical coverage amounts
-        // forge-lint: disable-next-line(unsafe-typecast)
-        _modifyCoverageForAgent(operator, strategy, positionData.coverageAgent, int256(amount));
-        _checkCoverageForAgent(operator, strategy, positionData.coverageAgent);
 
         claimId = claims.length;
         claims.push(
             CoverageClaim({
                 positionId: positionId,
-                amount: amount,
+                amount: 0,
                 duration: duration,
                 createdAt: block.timestamp,
                 status: CoverageClaimStatus.Reserved,
                 reward: reward
             })
         );
+
+        // casting to 'int256' is safe because amount won't exceed max int256 for practical coverage amounts
+        // forge-lint: disable-next-line(unsafe-typecast)
+        _modifyCoverageForAgent(operator, strategy, positionData.coverageAgent, claimId, int256(amount));
+        _checkCoverageForAgent(operator, strategy, positionData.coverageAgent);
 
         emit ClaimReserved(positionId, claimId, amount, duration);
     }
@@ -238,7 +240,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             // casting to 'int256' is safe because difference won't exceed max int256 for practical coverage amounts
             // forge-lint: disable-next-line(unsafe-typecast)
             int256 releasedAmount = int256(_claim.amount - amount);
-            _modifyCoverageForAgent(operator, strategy, positionData.coverageAgent, -releasedAmount);
+            _modifyCoverageForAgent(operator, strategy, positionData.coverageAgent, claimId, -releasedAmount);
         }
 
         // Capture rewards funds from coverage agent
@@ -247,7 +249,6 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         );
 
         // Update claim to Issued status with new values
-        _claim.amount = amount;
         _claim.duration = duration;
         _claim.reward = reward;
         _claim.createdAt = block.timestamp; // Reset createdAt to current time
@@ -271,23 +272,40 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         bool isReservation = _claim.status == CoverageClaimStatus.Reserved;
         bool isIssued = _claim.status == CoverageClaimStatus.Issued;
 
-        // Can not close claim that are not reserved or issued
-        if (!(isReservation || isIssued)) revert InvalidClaim(claimId, _claim.status);
+        uint256 expiresAt =
+            isReservation ? _claim.createdAt + positionData.maxReservationTime : _claim.createdAt + _claim.duration;
+        bool isExpired = expiresAt < block.timestamp;
 
         // Anyone can close an expired reservation or an issued claim whose duration has elapsed
         // However, only the coverage agent can close their own reserved or issued claim early
-        uint256 expiresAt =
-            isReservation ? _claim.createdAt + positionData.maxReservationTime : _claim.createdAt + _claim.duration;
-        if (
-            ((isReservation || isIssued) && (block.timestamp <= expiresAt)) && msg.sender != positionData.coverageAgent // Ensure the caller is not the coverage agent
-        ) {
-            revert ClaimNotExpired(claimId, expiresAt);
+        require(
+            isExpired || msg.sender == positionData.coverageAgent, // Ensure the caller is not the coverage agent
+            ClaimNotExpired(claimId, expiresAt)
+        );
+
+        // Pending slash and already completed claims are not closable.
+        // Pending slash claims need to be converted to the slashed state first. The operator is responsible for
+        // for completing the slashing process in order to release the funds locked up by the claim.
+        // Slashed (Slashed or Repaid status) claims can not be closed early.
+        // Only the Issued claim can be closed early and a reward refund is also possible.
+        bool isClosable =
+            (isExpired && (_claim.status == CoverageClaimStatus.Slashed || _claim.status == CoverageClaimStatus.Repaid))
+                || isIssued || isReservation;
+
+        require(isClosable, InvalidClaim(claimId, _claim.status));
+
+        if (!isReservation) {
+            // Reserved claims are not converted to completed, they simply become useless after expiry
+            // since they can't be converted to issued claims.
+            _claim.status = CoverageClaimStatus.Completed;
         }
 
+        // Remove remaining coverage lock for the claim from the operator
         _modifyCoverageForAgent(
             address(uint160(uint256(positionData.operatorId))), // Operator
             assetToStrategy[positionData.asset], // Strategy
             positionData.coverageAgent,
+            claimId,
             -int256(_claim.amount)
         );
 
@@ -301,7 +319,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
 
             // Both Full and TimeWeighted use time-proportional refund on early close.
             // Full refund (100%) only applies during liquidation, not closeClaim.
-            if (positionData.refundable != Refundable.None) {
+            if (positionData.refundable == Refundable.Full || positionData.refundable == Refundable.TimeWeighted) {
                 uint256 refundAmount = (_claim.reward * (originalDuration - elapsedTime)) / originalDuration;
 
                 // Reduce reward to match what remains for captureRewards distribution,
@@ -311,11 +329,11 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
                 address coverageAgent = positionData.coverageAgent;
                 SafeERC20.safeTransfer(IERC20(ICoverageAgent(coverageAgent).asset()), coverageAgent, refundAmount);
                 ICoverageAgent(coverageAgent).onClaimRefunded(claimId, refundAmount);
+                emit ClaimRewardRefund(claimId, refundAmount);
             }
             // Refundable.None: no refund — operator already earned the full reward via captureRewards
         }
 
-        _claim.status = CoverageClaimStatus.Completed;
         emit ClaimClosed(claimId);
     }
 
@@ -357,20 +375,26 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         // Distribute the existing rewards to old operator
         captureRewards(claimId);
 
+        uint256 claimAmount = _claim.amount;
+
         // Reduce coverage from the previous operator
         _modifyCoverageForAgent(
             address(uint160(uint256(oldPosition.operatorId))), // Operator
             assetToStrategy[oldPosition.asset], // Strategy
             oldPosition.coverageAgent,
-            -int256(_claim.amount)
+            claimId,
+            // forge-lint: disable-next-line(unsafe-typecast)
+            -int256(claimAmount)
         );
 
-        // Increase coverage for the new operator
+        // Increase coverage for the new operator (restore claim amount; _claim.amount was zeroed above)
         _modifyCoverageForAgent(
             operator, // Operator
             assetToStrategy[newPosition.asset], // Strategy
             newPosition.coverageAgent,
-            int256(_claim.amount)
+            claimId,
+            // forge-lint: disable-next-line(unsafe-typecast)
+            int256(claimAmount)
         );
 
         _checkCoverageForAgent(
@@ -400,7 +424,11 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             }
 
             // Status needs to be Issused to start the slashing process
-            if (_claim.status != CoverageClaimStatus.Issued) revert InvalidClaim(claimIds[i], _claim.status);
+            require(
+                _claim.status == CoverageClaimStatus.Issued || _claim.status == CoverageClaimStatus.Slashed
+                    || _claim.status == CoverageClaimStatus.PendingSlash,
+                InvalidClaim(claimIds[i], _claim.status)
+            );
 
             // Ensure the claim cannot be slashed before after its duration has elapsed
             if (block.timestamp > _claim.createdAt + _claim.duration) {
@@ -409,7 +437,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
 
             if (amounts[i] > _claim.amount) revert SlashAmountExceedsClaim(claimIds[i], amounts[i], _claim.amount);
 
-            claimSlashAmounts[claimIds[i]] = amounts[i];
+            claimSlashAmounts[claimIds[i]] += amounts[i];
 
             if (_position.slashCoordinator == address(0)) {
                 // If no slash coordinator is set, the coverage provider will instantly slash the coverage position.
@@ -418,13 +446,11 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             } else {
                 slashStatuses[i] = CoverageClaimStatus.PendingSlash;
                 _claim.status = CoverageClaimStatus.PendingSlash;
-                SlashCoordinationStatus status =
-                    ISlashCoordinator(_position.slashCoordinator).initiateSlash(address(this), claimIds[i], amounts[i]);
-                if (status == SlashCoordinationStatus.Passed) {
-                    _initiateSlash(claimIds[i], amounts[i]);
-                } else {
-                    emit ClaimSlashPending(claimIds[i], _position.slashCoordinator);
-                }
+                pendingClaimSlashAmounts[claimIds[i]] += amounts[i];
+
+                emit ClaimSlashPending(claimIds[i], _position.slashCoordinator);
+
+                _pendingSlashCompletion(claimIds[i]);
             }
         }
     }
@@ -433,13 +459,14 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     function completeSlash(uint256 claimId) external {
         CoverageClaim storage _claim = claims[claimId];
         if (_claim.status != CoverageClaimStatus.PendingSlash) revert InvalidClaim(claimId, _claim.status);
-        if (
+
+        require(
             ISlashCoordinator(positions[_claim.positionId].slashCoordinator).status(address(this), claimId)
-                != SlashCoordinationStatus.Passed
-        ) {
-            revert SlashFailed(claimId);
-        }
-        _initiateSlash(claimId, claimSlashAmounts[claimId]);
+                != SlashCoordinationStatus.Pending,
+            SlashFailed(claimId)
+        );
+
+        _pendingSlashCompletion(claimId);
     }
 
     /// @inheritdoc ICoverageProvider
@@ -655,7 +682,13 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     /// @param strategy The strategy address
     /// @param coverageAgent The coverage agent address
     /// @param amount Positive to increase coverage, negative to decrease coverage
-    function _modifyCoverageForAgent(address operator, address strategy, address coverageAgent, int256 amount) private {
+    function _modifyCoverageForAgent(
+        address operator,
+        address strategy,
+        address coverageAgent,
+        uint256 claimId,
+        int256 amount
+    ) private {
         EnumerableMap.AddressToUintMap storage coverageMap = operators[operator].coverageStrategies[strategy];
 
         // Get the current value, or 0 if the key doesn't exist
@@ -666,14 +699,23 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         if (amount >= 0) {
             // casting to 'uint256' is safe because we've checked amount >= 0
             // forge-lint: disable-next-line(unsafe-typecast)
+            claims[claimId].amount += uint256(amount);
+
+            // forge-lint: disable-next-line(unsafe-typecast)
             newValue = current + uint256(amount);
         } else {
             // casting to 'uint256' is safe because we've checked amount < 0, so -amount is positive
+            // forge-lint: disable-next-line(unsafe-typecast)
+            require(claims[claimId].amount >= uint256(-amount), "Insufficient coverage available for unlocking"); // This should never happen
+            // forge-lint: disable-next-line(unsafe-typecast)
+            claims[claimId].amount -= uint256(-amount);
+
             // forge-lint: disable-next-line(unsafe-typecast)
             uint256 decrease = uint256(-amount);
             newValue = current >= decrease ? current - decrease : 0;
         }
 
+        emit CoverageAmountUpdated(coverageAgent, claimId, amount);
         coverageMap.set(coverageAgent, newValue);
     }
 
@@ -748,7 +790,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         CoverageClaim storage _claim = claims[claimId];
         CoveragePosition storage _position = positions[_claim.positionId];
 
-        if (_claim.status == CoverageClaimStatus.Slashed) revert InvalidClaim(claimId, _claim.status);
+        // Allow multiple partial slashes: status may already be Slashed from a previous partial slash
         _claim.status = CoverageClaimStatus.Slashed;
 
         address operator = address(uint160(uint256(_position.operatorId)));
@@ -762,6 +804,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             operator,
             strategy,
             _position.coverageAgent,
+            claimId,
             // casting to 'int256' is safe because amount won't exceed max int256 for practical slash amounts
             // forge-lint: disable-next-line(unsafe-typecast)
             -int256(amount)
@@ -806,6 +849,31 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
                     calculationInterval,
                     "Slash Refund"
                 );
+        }
+    }
+
+    function _pendingSlashCompletion(uint256 claimId) private {
+        CoverageClaim storage _claim = claims[claimId];
+        SlashCoordinationStatus slashStatus =
+            ISlashCoordinator(positions[_claim.positionId].slashCoordinator).status(address(this), claimId);
+
+        if (slashStatus == SlashCoordinationStatus.Failed) {
+            claimSlashAmounts[claimId] -= pendingClaimSlashAmounts[claimId];
+            pendingClaimSlashAmounts[claimId] = 0;
+
+            if (claimSlashAmounts[claimId] > 0) {
+                // The claim was slashed previously so leave the status as Slashed
+                _claim.status = CoverageClaimStatus.Slashed;
+            } else {
+                // Revert the claim back to issued
+                _claim.status = CoverageClaimStatus.Issued;
+            }
+        }
+
+        if (slashStatus == SlashCoordinationStatus.Passed) {
+            uint256 pendingAmount = pendingClaimSlashAmounts[claimId];
+            pendingClaimSlashAmounts[claimId] = 0;
+            _initiateSlash(claimId, pendingAmount);
         }
     }
 

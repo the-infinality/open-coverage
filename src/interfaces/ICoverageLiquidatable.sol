@@ -12,6 +12,8 @@ interface ICoverageLiquidatable {
 
     /// @notice The position's coverage percentage meets or exceeds the liquidation threshold.
     error MeetsLiquidationThreshold(uint16 liquidationThreshold, uint16 coveragePercentage);
+    /// @notice The replacement position is the same as the liquidated claim's position.
+    error SamePosition(uint256 positionId);
 
     /// @notice Liquidate a coverage claim if it doesn't meet its obligations.
     /// @dev This should be called by the coverage agent if the coverage position doesn't meet its obligations.

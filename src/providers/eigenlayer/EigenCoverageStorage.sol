@@ -70,6 +70,10 @@ abstract contract EigenCoverageStorage is ReentrancyGuardTransient {
     /// @notice The amount of coverage agent assets to slash for a given claim
     mapping(uint256 claimId => uint256 amount) public claimSlashAmounts;
 
+    /// @notice The amount of coverage agent assets pending coordinator approval for a given claim
+    /// @dev Tracked separately so that on coordinator failure the pending portion can be reverted
+    mapping(uint256 claimId => uint256 amount) public pendingClaimSlashAmounts;
+
     /// @notice The liquidity threshold for an operator before their claims can be liquidated by another operator
     uint16 internal _liquidationThreshold = 9000;
 
