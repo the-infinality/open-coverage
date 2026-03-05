@@ -18,6 +18,7 @@ import {
     AlertTriangle,
     ArrowRightLeft,
     X,
+    Clock,
 } from "lucide-react"
 import {
     useReadContract,
@@ -29,7 +30,7 @@ import {
 import { readContract } from "wagmi/actions"
 import { toast } from "sonner"
 import type { CoverageContract } from "@/types/contracts"
-import { iCoverageAgentAbi, iCoverageProviderAbi, iExampleCoverageAgentAbi } from "@/generated/abis"
+import { iCoverageAgentAbi, iCoverageProviderAbi, iExampleCoverageAgentAbi, iSlashCoordinatorAbi } from "@/generated/abis"
 import { ierc20Abi } from "@/generated/eigen-abis"
 import { ContractCard } from "@/components/ContractCard"
 import { CoverageProviderSelect } from "@/components/ContractSelects"
@@ -81,6 +82,7 @@ const combinedErrorAbi = [
         name: "ClaimNotExpired",
     },
     { type: "error", inputs: [{ name: "claimId", type: "uint256" }], name: "ClaimNotReserved" },
+    { type: "error", inputs: [{ name: "claimId", type: "uint256" }], name: "SlashFailed" },
     {
         type: "error",
         inputs: [
@@ -185,6 +187,7 @@ const errorMessages: Record<string, string> = {
     SlashAmountExceedsClaimAmount: "Slash amount exceeds the claim amount.",
     ClaimAlreadySlashed: "This claim has already been slashed.",
     ClaimNotActive: "The claim is not active.",
+    SlashFailed: "Slash is still pending in the slash coordinator.",
     NotContractOwner: "Only the contract owner can perform this action.",
     ZeroAddress: "Cannot use zero address.",
 }
@@ -252,17 +255,27 @@ interface CoverageAgentInfoProps {
     contract: CoverageContract
 }
 
-// Claim status enum matching the contract
+// CoverageClaimStatus enum from ICoverageProvider.sol
 const CLAIM_STATUS_LABELS: Record<
     number,
     { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
 > = {
     0: { label: "Issued", variant: "default" },
-    1: { label: "Liquidated", variant: "destructive" },
-    2: { label: "Completed", variant: "secondary" },
-    3: { label: "Pending Slash", variant: "outline" },
-    4: { label: "Slashed", variant: "destructive" },
-    5: { label: "Reserved", variant: "outline" },
+    1: { label: "Completed", variant: "secondary" },
+    2: { label: "Pending Slash", variant: "outline" },
+    3: { label: "Slashed", variant: "destructive" },
+    4: { label: "Reserved", variant: "outline" },
+    5: { label: "Repaid", variant: "secondary" },
+}
+
+// SlashCoordinationStatus enum from ISlashCoordinator.sol
+const SLASH_COORDINATION_STATUS_LABELS: Record<
+    number,
+    { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
+> = {
+    0: { label: "Pending", variant: "outline" },
+    1: { label: "Passed", variant: "default" },
+    2: { label: "Failed", variant: "destructive" },
 }
 
 interface CoverageClaimData {
@@ -301,11 +314,13 @@ function ClaimItem({
     tokenDecimals,
     tokenSymbol,
     totalSlashAmount,
+    onCompleteSlash,
 }: {
     claimData: LoadedClaimData
     tokenDecimals: number
     totalSlashAmount: bigint
     tokenSymbol: string
+    onCompleteSlash?: (claimData: LoadedClaimData) => void
 }) {
     const { claim, claimId, providerAddress, backing } = claimData
     const statusInfo = CLAIM_STATUS_LABELS[claim.status] || {
@@ -380,6 +395,18 @@ function ClaimItem({
                     </div>
                 )}
             </div>
+
+            {claim.status === 2 && onCompleteSlash && (
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onCompleteSlash(claimData)}
+                    className="w-full"
+                >
+                    <CheckCircle2 className="mr-2 size-4" />
+                    Complete Slash
+                </Button>
+            )}
         </div>
     )
 }
@@ -419,6 +446,7 @@ function SlashCoverageDialog({
         error: receiptError,
     } = useWaitForTransactionReceipt({ hash })
 
+    const [deadlineMinutes, setDeadlineMinutes] = useState("5")
     const prevSuccessRef = useRef(false)
     const hasShownReceiptError = useRef<string>("")
 
@@ -451,12 +479,14 @@ function SlashCoverageDialog({
     const handleSlash = () => {
         if (coverageId === null) return
 
+        const minutes = parseInt(deadlineMinutes) || 5
+        const deadline = BigInt(Math.floor(Date.now() / 1000) + minutes * 60)
         writeContract(
             {
                 address: contractAddress,
                 abi: iExampleCoverageAgentAbi,
                 functionName: "slashCoverage",
-                args: [BigInt(coverageId), totalAmount],
+                args: [BigInt(coverageId), totalAmount, deadline],
                 chainId,
             },
             {
@@ -531,6 +561,26 @@ function SlashCoverageDialog({
                             </div>
                         </ScrollArea>
                     </div>
+
+                    {/* Deadline */}
+                    <div className="space-y-2">
+                        <Label htmlFor="slashDeadline">Deadline (minutes from now)</Label>
+                        <div className="flex items-center gap-2">
+                            <Clock className="size-4 text-muted-foreground" />
+                            <Input
+                                id="slashDeadline"
+                                type="number"
+                                min="1"
+                                value={deadlineMinutes}
+                                onChange={(e) => setDeadlineMinutes(e.target.value)}
+                                className="font-mono"
+                                disabled={isPending || isConfirming}
+                            />
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            Timestamp deadline for the slash transaction to be mined
+                        </p>
+                    </div>
                 </div>
 
                 <DialogFooter>
@@ -556,6 +606,293 @@ function SlashCoverageDialog({
                             : isConfirming
                               ? "Slashing..."
                               : "Slash Coverage"}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+/**
+ * Complete Slash Dialog - completes a pending slash via the CoverageProvider
+ */
+function CompleteSlashDialog({
+    open,
+    onOpenChange,
+    claimData,
+    chainId,
+    tokenDecimals,
+    tokenSymbol,
+    onSuccess,
+}: {
+    open: boolean
+    onOpenChange: (open: boolean) => void
+    claimData: LoadedClaimData | null
+    chainId: SupportedChainId | undefined
+    tokenDecimals: number
+    tokenSymbol: string
+    onSuccess: () => void
+}) {
+    const config = useConfig()
+    const { writeContract, isPending, data: hash } = useWriteContract()
+    const {
+        isLoading: isConfirming,
+        isSuccess,
+        isError: isReceiptError,
+        error: receiptError,
+    } = useWaitForTransactionReceipt({ hash })
+
+    const [deadlineMinutes, setDeadlineMinutes] = useState("5")
+    const [slashStatus, setSlashStatus] = useState<number | null>(null)
+    const [isLoadingStatus, setIsLoadingStatus] = useState(false)
+    const [slashCoordinatorAddress, setSlashCoordinatorAddress] = useState<Address | null>(null)
+    const prevSuccessRef = useRef(false)
+    const hasShownReceiptError = useRef<string>("")
+
+    const fetchStatus = useCallback(async () => {
+        if (!claimData || !chainId) return
+
+        setIsLoadingStatus(true)
+        try {
+            const positionData = await readContract(config, {
+                address: claimData.providerAddress,
+                abi: iCoverageProviderAbi,
+                functionName: "position",
+                args: [claimData.claim.positionId],
+                chainId,
+            })
+
+            const position = positionData as { slashCoordinator: Address }
+            const scAddress = position.slashCoordinator
+            setSlashCoordinatorAddress(scAddress)
+
+            if (scAddress === "0x0000000000000000000000000000000000000000") {
+                setSlashStatus(1)
+                return
+            }
+
+            const status = await readContract(config, {
+                address: scAddress,
+                abi: iSlashCoordinatorAbi,
+                functionName: "status",
+                args: [claimData.providerAddress, BigInt(claimData.claimId)],
+                chainId,
+            })
+
+            setSlashStatus(Number(status))
+        } catch (error) {
+            console.error("Error fetching slash status:", error)
+            toast.error("Failed to fetch slash coordinator status")
+        } finally {
+            setIsLoadingStatus(false)
+        }
+    }, [claimData, chainId, config])
+
+    useEffect(() => {
+        if (!open) {
+            setSlashStatus(null)
+            setSlashCoordinatorAddress(null)
+            return
+        }
+        fetchStatus()
+    }, [open, fetchStatus])
+
+    useEffect(() => {
+        if (isSuccess && !prevSuccessRef.current) {
+            toast.success("Slash completed successfully!")
+            onSuccess()
+            onOpenChange(false)
+        }
+        prevSuccessRef.current = isSuccess
+    }, [isSuccess, onSuccess, onOpenChange])
+
+    useEffect(() => {
+        if (isReceiptError && receiptError && hash && hasShownReceiptError.current !== hash) {
+            hasShownReceiptError.current = hash
+            const decodedError = decodeContractError(receiptError)
+            toast.error(`Transaction failed: ${decodedError}`, {
+                duration: 10000,
+            })
+        }
+    }, [isReceiptError, receiptError, hash])
+
+    const handleCompleteSlash = () => {
+        if (!claimData) return
+
+        const minutes = parseInt(deadlineMinutes) || 5
+        const deadline = BigInt(Math.floor(Date.now() / 1000) + minutes * 60)
+
+        writeContract(
+            {
+                address: claimData.providerAddress,
+                abi: iCoverageProviderAbi,
+                functionName: "completeSlash",
+                args: [BigInt(claimData.claimId), deadline],
+                chainId,
+            },
+            {
+                onSuccess: (hash) => {
+                    toast.success(`Complete slash submitted: ${hash.slice(0, 10)}...`)
+                },
+                onError: (error) => {
+                    const decodedError = decodeContractError(error)
+                    toast.error(decodedError, {
+                        duration: 8000,
+                    })
+                },
+            }
+        )
+    }
+
+    const canCompleteSlash = slashStatus !== null && slashStatus !== 0
+
+    if (!claimData) return null
+
+    const statusInfo = SLASH_COORDINATION_STATUS_LABELS[slashStatus ?? -1]
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <CheckCircle2 className="size-5" />
+                        Complete Slash - Claim #{claimData.claimId}
+                    </DialogTitle>
+                    <DialogDescription>
+                        Complete the pending slash for this claim. The slash coordinator must have
+                        resolved the slash request before it can be completed.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4">
+                    {/* Claim Summary */}
+                    <div className="rounded-lg border p-4 space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Provider</span>
+                            <CopyableAddress address={claimData.providerAddress} />
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Position ID</span>
+                            <span className="font-mono">
+                                {claimData.claim.positionId.toString()}
+                            </span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Amount</span>
+                            <span className="font-mono">
+                                {formatUnits(claimData.claim.amount, tokenDecimals)} {tokenSymbol}
+                            </span>
+                        </div>
+                        {claimData.totalSlashAmount > 0n && (
+                            <div className="flex items-center justify-between text-sm">
+                                <span className="text-muted-foreground">Total Slashed</span>
+                                <span className="font-mono text-destructive">
+                                    {formatUnits(claimData.totalSlashAmount, tokenDecimals)}{" "}
+                                    {tokenSymbol}
+                                </span>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Slash Coordinator Status */}
+                    <div className="rounded-lg border p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-medium">Slash Coordinator Status</h4>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={fetchStatus}
+                                disabled={isLoadingStatus}
+                            >
+                                {isLoadingStatus ? (
+                                    <Loader2 className="size-3 animate-spin" />
+                                ) : (
+                                    <RefreshCw className="size-3" />
+                                )}
+                            </Button>
+                        </div>
+                        {isLoadingStatus ? (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Loader2 className="size-4 animate-spin" />
+                                Fetching status...
+                            </div>
+                        ) : slashStatus !== null ? (
+                            <div className="space-y-2">
+                                {slashCoordinatorAddress && (
+                                    <div className="flex items-center justify-between text-sm">
+                                        <span className="text-muted-foreground">Coordinator</span>
+                                        <CopyableAddress address={slashCoordinatorAddress} />
+                                    </div>
+                                )}
+                                <div className="flex items-center justify-between text-sm">
+                                    <span className="text-muted-foreground">Status</span>
+                                    {statusInfo ? (
+                                        <Badge variant={statusInfo.variant}>
+                                            {statusInfo.label}
+                                        </Badge>
+                                    ) : (
+                                        <Badge variant="outline">Unknown ({slashStatus})</Badge>
+                                    )}
+                                </div>
+                                {slashStatus === 0 && (
+                                    <p className="text-xs text-muted-foreground">
+                                        The slash coordinator has not yet resolved this request.
+                                        Complete slash is not available until the status changes to
+                                        Passed or Failed.
+                                    </p>
+                                )}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">
+                                Unable to fetch status
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Deadline */}
+                    <div className="space-y-2">
+                        <Label htmlFor="completeSlashDeadline">
+                            Deadline (minutes from now)
+                        </Label>
+                        <div className="flex items-center gap-2">
+                            <Clock className="size-4 text-muted-foreground" />
+                            <Input
+                                id="completeSlashDeadline"
+                                type="number"
+                                min="1"
+                                value={deadlineMinutes}
+                                onChange={(e) => setDeadlineMinutes(e.target.value)}
+                                className="font-mono"
+                                disabled={isPending || isConfirming}
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <DialogFooter>
+                    <Button
+                        variant="outline"
+                        onClick={() => onOpenChange(false)}
+                        disabled={isPending || isConfirming}
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={handleCompleteSlash}
+                        disabled={
+                            isPending || isConfirming || !canCompleteSlash || isLoadingStatus
+                        }
+                    >
+                        {isPending || isConfirming ? (
+                            <Loader2 className="mr-2 size-4 animate-spin" />
+                        ) : (
+                            <CheckCircle2 className="mr-2 size-4" />
+                        )}
+                        {isPending
+                            ? "Confirm in wallet..."
+                            : isConfirming
+                              ? "Completing..."
+                              : "Complete Slash"}
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -1154,6 +1491,10 @@ function CoverageClaimsManagement({
     const [slashDialogOpen, setSlashDialogOpen] = useState(false)
     const [slashCoverageId, setSlashCoverageId] = useState<number | null>(null)
 
+    // Complete slash dialog state
+    const [completeSlashDialogOpen, setCompleteSlashDialogOpen] = useState(false)
+    const [completeSlashClaimData, setCompleteSlashClaimData] = useState<LoadedClaimData | null>(null)
+
     // Get selected provider addresses from contract IDs
     const selectedProvider = getSelectedProvider(selectedProviderId, registeredProviderContracts)
     const selectedProviderAddress = selectedProvider?.address ?? ""
@@ -1727,6 +2068,17 @@ function CoverageClaimsManagement({
         loadCoverage(coverageIdToReload, true)
     }
 
+    const handleCompleteSlashSuccess = () => {
+        if (!completeSlashClaimData) return
+
+        const coverageIdToReload = completeSlashClaimData.coverageId
+
+        setLoadedClaims((prev) => prev.filter((c) => c.coverageId !== coverageIdToReload))
+        setCompleteSlashClaimData(null)
+
+        loadCoverage(coverageIdToReload, true)
+    }
+
     const isValidClaimForm = useMemo(() => {
         return (
             selectedProviderAddress &&
@@ -2226,7 +2578,7 @@ function CoverageClaimsManagement({
                                                         )}
                                                         {!reservationCoverageIds.has(coverageId) &&
                                                             claims.some(
-                                                                (c) => c.claim.status !== 4
+                                                                (c) => c.claim.status === 0
                                                             ) && (
                                                                 <Button
                                                                     variant="ghost"
@@ -2275,6 +2627,10 @@ function CoverageClaimsManagement({
                                                             }
                                                             tokenDecimals={tokenDecimals}
                                                             tokenSymbol={tokenSymbol}
+                                                            onCompleteSlash={(data) => {
+                                                                setCompleteSlashClaimData(data)
+                                                                setCompleteSlashDialogOpen(true)
+                                                            }}
                                                         />
                                                     ))}
                                                 </div>
@@ -2311,6 +2667,17 @@ function CoverageClaimsManagement({
                         tokenDecimals={tokenDecimals}
                         tokenSymbol={tokenSymbol}
                         onSuccess={handleConvertSuccess}
+                    />
+
+                    {/* Complete Slash Dialog */}
+                    <CompleteSlashDialog
+                        open={completeSlashDialogOpen}
+                        onOpenChange={setCompleteSlashDialogOpen}
+                        claimData={completeSlashClaimData}
+                        chainId={chainId}
+                        tokenDecimals={tokenDecimals}
+                        tokenSymbol={tokenSymbol}
+                        onSuccess={handleCompleteSlashSuccess}
                     />
                 </WalletRequirement>
             </CardContent>

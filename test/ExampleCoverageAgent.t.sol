@@ -571,7 +571,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
 
         // Slash the coverage (use type(uint256).max to slash full amount)
         (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed) =
-            coverageAgent.slashCoverage(coverageId, type(uint256).max);
+            coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         // Verify slash statuses
         assertEq(slashStatuses.length, 1);
@@ -638,7 +638,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
 
         // Slash the coverage (use type(uint256).max to slash full amount)
         (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed) =
-            coverageAgent.slashCoverage(coverageId, type(uint256).max);
+            coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         // Verify slash statuses
         assertEq(slashStatuses.length, 2);
@@ -706,7 +706,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
 
         // Slash the coverage (use type(uint256).max to slash full amount)
         (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed) =
-            coverageAgent.slashCoverage(coverageId, type(uint256).max);
+            coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         // Verify slash statuses
         assertEq(slashStatuses.length, 2);
@@ -763,13 +763,13 @@ contract ExampleCoverageAgentTest is TestDeployer {
         // Try to slash as non-coordinator
         vm.prank(nonHandler);
         vm.expectRevert(IExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
-        coverageAgent.slashCoverage(coverageId, type(uint256).max);
+        coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
     }
 
     function test_RevertWhen_slashCoverage_invalidCoverageId() public {
         // Try to slash coverage with invalid ID (no coverage purchased yet)
         vm.expectRevert(abi.encodeWithSelector(ICoverageAgent.InvalidCoverage.selector, 0));
-        coverageAgent.slashCoverage(0, type(uint256).max);
+        coverageAgent.slashCoverage(0, type(uint256).max, block.timestamp);
     }
 
     function test_RevertWhen_slashCoverage_coverageIdOutOfBounds() public {
@@ -808,7 +808,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
 
         // Try to slash coverage with out-of-bounds ID
         vm.expectRevert(abi.encodeWithSelector(ICoverageAgent.InvalidCoverage.selector, 1));
-        coverageAgent.slashCoverage(1, type(uint256).max);
+        coverageAgent.slashCoverage(1, type(uint256).max, block.timestamp);
     }
 
     function test_slashCoverage_multipleCoverages() public {
@@ -868,7 +868,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
 
         // Slash only the first coverage (use type(uint256).max to slash full amount)
         (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed) =
-            coverageAgent.slashCoverage(coverageId1, type(uint256).max);
+            coverageAgent.slashCoverage(coverageId1, type(uint256).max, block.timestamp);
 
         // Verify first coverage was slashed
         assertEq(slashStatuses.length, 1);
@@ -934,7 +934,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
 
         // Slash only 1200e6 (should fully slash first claim of 1000e6 and partially slash second claim for 200e6)
         (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed) =
-            coverageAgent.slashCoverage(coverageId, 1200e6);
+            coverageAgent.slashCoverage(coverageId, 1200e6, block.timestamp);
 
         // Verify total slashed matches requested amount
         assertEq(totalSlashed, 1200e6);
@@ -994,7 +994,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
 
         // Slash exact amount of the claim
         (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed) =
-            coverageAgent.slashCoverage(coverageId, 1000e6);
+            coverageAgent.slashCoverage(coverageId, 1000e6, block.timestamp);
 
         // Verify total slashed matches
         assertEq(totalSlashed, 1000e6);
@@ -1037,7 +1037,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
 
         // Slash more than available (should only slash what's available)
         (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed) =
-            coverageAgent.slashCoverage(coverageId, 5000e6);
+            coverageAgent.slashCoverage(coverageId, 5000e6, block.timestamp);
 
         // Verify total slashed is capped at available coverage
         assertEq(totalSlashed, 1000e6);
@@ -1079,7 +1079,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash zero amount (should do nothing)
-        (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed) = coverageAgent.slashCoverage(coverageId, 0);
+        (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed) = coverageAgent.slashCoverage(coverageId, 0, block.timestamp);
 
         // Verify nothing was slashed
         assertEq(totalSlashed, 0);
@@ -1144,7 +1144,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
 
         // Slash the coverage - should go to PendingSlash, not Slashed (coordinator is set)
         (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed) =
-            coverageAgent.slashCoverage(coverageId, type(uint256).max);
+            coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         // Verify slash returned PendingSlash status
         assertEq(slashStatuses.length, 1);
@@ -1315,7 +1315,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash the coverage
-        coverageAgent.slashCoverage(coverageId, type(uint256).max);
+        coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         // Check repayments owing
         (uint256[] memory amounts, uint256 totalOwing) = coverageAgent.repaymentsOwing(coverageId);
@@ -1375,7 +1375,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash the coverage
-        coverageAgent.slashCoverage(coverageId, type(uint256).max);
+        coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         // Check repayments owing
         (uint256[] memory amounts, uint256 totalOwing) = coverageAgent.repaymentsOwing(coverageId);
@@ -1488,7 +1488,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash partially (only 1200e6, which slashes first claim fully and second claim partially)
-        coverageAgent.slashCoverage(coverageId, 1200e6);
+        coverageAgent.slashCoverage(coverageId, 1200e6, block.timestamp);
 
         // Check repayments owing
         (uint256[] memory amounts, uint256 totalOwing) = coverageAgent.repaymentsOwing(coverageId);
@@ -1553,7 +1553,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash the coverage
-        coverageAgent.slashCoverage(coverageId, type(uint256).max);
+        coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         // Check repayments owing
         (uint256[] memory amounts, uint256 totalOwing) = coverageAgent.repaymentsOwing(coverageId);
@@ -1666,7 +1666,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash 1650e6 (full first claim, full second claim, partial third claim)
-        coverageAgent.slashCoverage(coverageId, 1650e6);
+        coverageAgent.slashCoverage(coverageId, 1650e6, block.timestamp);
 
         // Check repayments owing
         (uint256[] memory amounts, uint256 totalOwing) = coverageAgent.repaymentsOwing(coverageId);
@@ -1748,7 +1748,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash the coverage
-        coverageAgent.slashCoverage(coverageId, type(uint256).max);
+        coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         // Verify repayments owing
         (, uint256 totalOwingBefore) = coverageAgent.repaymentsOwing(coverageId);
@@ -1806,7 +1806,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash the coverage
-        coverageAgent.slashCoverage(coverageId, type(uint256).max);
+        coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         // Repay half the amount
         deal(USDC, coordinator, 500e6);
@@ -1863,7 +1863,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash the coverage
-        coverageAgent.slashCoverage(coverageId, type(uint256).max);
+        coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         // Total owing: 1000e6 (600e6 + 400e6)
         // Repay 500e6 - should distribute proportionally:
@@ -1932,7 +1932,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash the coverage
-        coverageAgent.slashCoverage(coverageId, type(uint256).max);
+        coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         // Total owing: 1000e6
         // Repay 100e6 - integer division:
@@ -2014,7 +2014,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash the coverage
-        coverageAgent.slashCoverage(coverageId, type(uint256).max);
+        coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         // Total owing: 2331e6
         // Repay 100e6:
@@ -2094,7 +2094,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash the coverage
-        coverageAgent.slashCoverage(coverageId, type(uint256).max);
+        coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         // Repay 500e6 proportionally across providers
         deal(USDC, coordinator, 500e6);
@@ -2159,7 +2159,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash 550e6 - slashes first claim fully (500e6) and second claim partially (50e6)
-        coverageAgent.slashCoverage(coverageId, 550e6);
+        coverageAgent.slashCoverage(coverageId, 550e6, block.timestamp);
 
         // Check slashed amounts
         (uint256[] memory amountsBefore,) = coverageAgent.repaymentsOwing(coverageId);
@@ -2220,7 +2220,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash the coverage
-        coverageAgent.slashCoverage(coverageId, type(uint256).max);
+        coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         // Try to repay more than owed (2000e6 when only 1000e6 owed)
         // repayAmount = 1000e6 * 2000e6 / 1000e6 = 2000e6
@@ -2293,7 +2293,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash the coverage
-        coverageAgent.slashCoverage(coverageId, type(uint256).max);
+        coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         // Try to repay as non-coordinator
         deal(USDC, nonHandler, 1000e6);
@@ -2339,7 +2339,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash the coverage
-        coverageAgent.slashCoverage(coverageId, type(uint256).max);
+        coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         // Repay fully and expect event
         deal(USDC, coordinator, 1000e6);
@@ -2386,7 +2386,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash the coverage
-        coverageAgent.slashCoverage(coverageId, type(uint256).max);
+        coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         // Repay partially - should NOT emit CoverageRepaid event
         deal(USDC, coordinator, 500e6);
@@ -2454,7 +2454,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash the coverage
-        coverageAgent.slashCoverage(coverageId, type(uint256).max);
+        coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         // Total owing: 2997e6 (2997000000)
         // Repay 100e6 (100000000):
@@ -2540,7 +2540,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash the coverage
-        coverageAgent.slashCoverage(coverageId, type(uint256).max);
+        coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         // Repay EXACT total owing - this should work perfectly with no remainder
         (, uint256 totalOwing) = coverageAgent.repaymentsOwing(coverageId);
@@ -2601,7 +2601,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash the coverage - total slashed: 50 wei
-        coverageAgent.slashCoverage(coverageId, type(uint256).max);
+        coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         (, uint256 totalOwing) = coverageAgent.repaymentsOwing(coverageId);
         assertEq(totalOwing, 50);
@@ -2692,7 +2692,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash the coverage - total: 3000e6
-        coverageAgent.slashCoverage(coverageId, type(uint256).max);
+        coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         // Make several partial repayments that create rounding remainders
         // Each repayment will round down, accumulating dust
@@ -2801,7 +2801,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash all - total slashed: 10 wei
-        coverageAgent.slashCoverage(coverageId, type(uint256).max);
+        coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         (, uint256 totalOwing) = coverageAgent.repaymentsOwing(coverageId);
         assertEq(totalOwing, 10);
@@ -2875,7 +2875,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash the coverage - total: 7000e6
-        coverageAgent.slashCoverage(coverageId, type(uint256).max);
+        coverageAgent.slashCoverage(coverageId, type(uint256).max, block.timestamp);
 
         // Make 10 partial repayments of 100e6 each
         // Each repayment will have rounding, accumulating dust

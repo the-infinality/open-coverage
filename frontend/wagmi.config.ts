@@ -15,6 +15,7 @@ export default defineConfig({
                 "IEigenOperatorProxy.sol/IEigenOperatorProxy.json",
                 "IDiamondOwner.sol/IDiamondOwner.json",
                 "IExampleCoverageAgent.sol/IExampleCoverageAgent.json",
+                "ISlashCoordinator.sol/ISlashCoordinator.json",
                 "IERC165.sol/IERC165.json",
                 "IERC173.sol/IERC173.json",
             ],

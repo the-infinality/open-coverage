@@ -197,9 +197,10 @@ contract ExampleCoverageAgent is IExampleCoverageAgent, ERC165 {
     /// @dev Loops through claims in order, slashing each until the total slashed reaches the specified amount.
     /// @param coverageId The id of the coverage purchase to slash.
     /// @param amount The maximum amount to slash across all claims in this coverage.
+    /// @param deadline The deadline timestamp passed to slashClaims (e.g. block.timestamp + buffer).
     /// @return slashStatuses The status of each claim after slashing (may be unchanged if not slashed).
     /// @return totalSlashed The total amount actually slashed across all claims.
-    function slashCoverage(uint256 coverageId, uint256 amount)
+    function slashCoverage(uint256 coverageId, uint256 amount, uint256 deadline)
         external
         onlyCoordinator
         returns (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed)
@@ -211,30 +212,12 @@ contract ExampleCoverageAgent is IExampleCoverageAgent, ERC165 {
         uint256 remainingAmount = amount;
 
         for (uint256 i = 0; i < coverageData.claims.length && remainingAmount > 0; i++) {
-            ICoverageProvider provider = ICoverageProvider(coverageData.claims[i].coverageProvider);
-            uint256 claimId = coverageData.claims[i].claimId;
-
-            CoverageClaim memory claimData = provider.claim(claimId);
-
-            // Calculate remaining slashable amount for this claim (accounting for previous slashes)
-            uint256 alreadySlashed = provider.claimTotalSlashAmount(claimId);
-            uint256 slashableAmount = claimData.amount > alreadySlashed ? claimData.amount - alreadySlashed : 0;
-
-            if (slashableAmount == 0) {
+            (uint256 slashAmount, CoverageClaimStatus status) =
+                _slashClaimInLoop(coverageData.claims[i], remainingAmount, deadline);
+            if (slashAmount == 0) {
                 continue;
             }
-
-            // Determine how much to slash from this claim (minimum of remaining and slashable)
-            uint256 slashAmount = slashableAmount < remainingAmount ? slashableAmount : remainingAmount;
-
-            uint256[] memory claimIds = new uint256[](1);
-            uint256[] memory amounts = new uint256[](1);
-            claimIds[0] = claimId;
-            amounts[0] = slashAmount;
-
-            CoverageClaimStatus[] memory statuses = provider.slashClaims(claimIds, amounts, block.timestamp);
-            slashStatuses[i] = statuses[0];
-
+            slashStatuses[i] = status;
             totalSlashed += slashAmount;
             remainingAmount -= slashAmount;
         }
@@ -242,6 +225,32 @@ contract ExampleCoverageAgent is IExampleCoverageAgent, ERC165 {
         emit CoverageSlashed(coverageId);
 
         return (slashStatuses, totalSlashed);
+    }
+
+    function _slashClaimInLoop(Claim storage claimData, uint256 remainingAmount, uint256 deadline)
+        internal
+        returns (uint256 slashAmount, CoverageClaimStatus status)
+    {
+        ICoverageProvider provider = ICoverageProvider(claimData.coverageProvider);
+        uint256 claimId = claimData.claimId;
+
+        CoverageClaim memory claim = provider.claim(claimId);
+        uint256 alreadySlashed = provider.claimTotalSlashAmount(claimId);
+        uint256 slashableAmount = claim.amount > alreadySlashed ? claim.amount - alreadySlashed : 0;
+
+        if (slashableAmount == 0) {
+            return (0, CoverageClaimStatus.Issued);
+        }
+
+        slashAmount = slashableAmount < remainingAmount ? slashableAmount : remainingAmount;
+
+        uint256[] memory claimIds = new uint256[](1);
+        uint256[] memory amounts = new uint256[](1);
+        claimIds[0] = claimId;
+        amounts[0] = slashAmount;
+
+        CoverageClaimStatus[] memory statuses = provider.slashClaims(claimIds, amounts, deadline);
+        return (slashAmount, statuses[0]);
     }
 
     /// @inheritdoc IExampleCoverageAgent

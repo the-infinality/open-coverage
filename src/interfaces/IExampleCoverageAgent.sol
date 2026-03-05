@@ -41,9 +41,10 @@ interface IExampleCoverageAgent is ICoverageAgent {
     /// @dev Loops through claims in order, slashing each until the total slashed reaches the specified amount.
     /// @param coverageId The id of the coverage purchase to slash.
     /// @param amount The maximum amount to slash across all claims in this coverage.
+    /// @param deadline The deadline timestamp passed to slashClaims (e.g. block.timestamp + buffer).
     /// @return slashStatuses The status of each claim after slashing (may be unchanged if not slashed).
     /// @return totalSlashed The total amount actually slashed across all claims.
-    function slashCoverage(uint256 coverageId, uint256 amount)
+    function slashCoverage(uint256 coverageId, uint256 amount, uint256 deadline)
         external
         returns (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed);
 
