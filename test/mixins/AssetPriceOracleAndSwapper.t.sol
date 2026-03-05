@@ -2,11 +2,11 @@
 pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {TestDeployer} from "test/utils/TestDeployer.sol";
+import {TestDeployer} from "../utils/TestDeployer.sol";
 import {MockAssetPriceOracleAndSwapper} from "../utils/MockAssetPriceOracleAndSwapper.sol";
 import {IAssetPriceOracleAndSwapper} from "../../src/interfaces/IAssetPriceOracleAndSwapper.sol";
 import {UniswapHelper, UniswapAddressbook} from "../../utils/UniswapHelper.sol";
-import {MockPriceOracle} from "test/utils/MockPriceOracle.sol";
+import {MockPriceOracle} from "../utils/MockPriceOracle.sol";
 import {ISwapperEngine} from "../../src/interfaces/ISwapperEngine.sol";
 import {UniswapV3SwapperEngine} from "../../src/swapper-engines/UniswapV3SwapperEngine.sol";
 import {PriceStrategy, AssetPair} from "../../src/interfaces/IAssetPriceOracleAndSwapper.sol";
@@ -17,11 +17,12 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
     ISwapperEngine public uniswapV3SwapperEngine;
 
     /// ===== Constants =====
+    bytes USDC_USDT_V3_POOL_INFO;
 
     function setUp() public override {
         super.setUp();
 
-        bytes memory USDC_USDT_V3_POOL_INFO = abi.encodePacked(USDC, uint24(500), USDT);
+        USDC_USDT_V3_POOL_INFO = abi.encodePacked(USDC, uint24(500), USDT);
 
         assetPriceOracleAndSwapper = new MockAssetPriceOracleAndSwapper(address(this));
 
@@ -89,7 +90,6 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
 
     function test_RevertWhen_register_not_owner() public {
         address nonOwner = makeAddr("nonOwner");
-        bytes memory USDC_USDT_V3_POOL_INFO = abi.encodePacked(USDC, uint24(500), USDT);
 
         vm.prank(nonOwner);
         vm.expectRevert(MockAssetPriceOracleAndSwapper.NotOwner.selector);
@@ -130,8 +130,6 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
     }
 
     function test_RevertWhen_register_PriceOracleRequired() public {
-        bytes memory USDC_USDT_V3_POOL_INFO = abi.encodePacked(USDC, uint24(500), USDT);
-
         vm.expectRevert(IAssetPriceOracleAndSwapper.PriceOracleRequired.selector);
         assetPriceOracleAndSwapper.register(
             AssetPair({
@@ -147,8 +145,6 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
     }
 
     function test_RevertWhen_register_InvalidSwapperAccuracy_zeroWhenRequired() public {
-        bytes memory USDC_USDT_V3_POOL_INFO = abi.encodePacked(USDC, uint24(500), USDT);
-
         AssetPair memory pair = AssetPair({
             assetA: USDC,
             assetB: USDT,
@@ -251,7 +247,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         deal(USDT, address(assetPriceOracleAndSwapper), amountIn);
 
         vm.expectRevert(IAssetPriceOracleAndSwapper.SwapFailed.selector);
-        assetPriceOracleAndSwapper.swapForInput(amountIn, USDC, USDT);
+        assetPriceOracleAndSwapper.swapForInput(amountIn, USDC, USDT, block.timestamp);
     }
 
     function test_swapForOutput() public {
@@ -260,7 +256,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         deal(USDT, address(assetPriceOracleAndSwapper), amountOut * 2);
 
         // Swap from USDT (swap) to get amountOut of USDC (base)
-        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT);
+        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT, block.timestamp);
 
         assertEq(IERC20(USDC).balanceOf(address(assetPriceOracleAndSwapper)), amountOut);
     }
@@ -271,7 +267,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         deal(USDT, address(assetPriceOracleAndSwapper), amountIn * 2);
 
         // Swap from USDT (swap) to get amountOut of USDC (base)
-        assetPriceOracleAndSwapper.swapForInput(amountIn, USDC, USDT);
+        assetPriceOracleAndSwapper.swapForInput(amountIn, USDC, USDT, block.timestamp);
     }
 
     function test_RevertWhen_swapForOutput_slippageTooLow() public {
@@ -282,7 +278,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         deal(USDT, address(assetPriceOracleAndSwapper), amountOut * 2);
 
         vm.expectRevert(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.SwapFailed.selector));
-        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT);
+        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT, block.timestamp);
     }
 
     function test_RevertWhen_swapForOutput_slippageTooHigh() public {
@@ -296,12 +292,42 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         // Get the current slippage value
         uint16 slippage = assetPriceOracleAndSwapper.swapSlippage();
 
-        // Get the base quote from swapper using the registered asset pair's pool info
-        AssetPair memory pair = assetPriceOracleAndSwapper.assetPair(USDC, USDT);
-        uint256 baseQuote = uniswapV3SwapperEngine.getQuote(pair.poolInfo, amountOut, USDC, USDT);
+        // Get the base quote from swapper from oracle
+        uint256 baseQuote = mockPriceOracle.getQuote(amountOut, USDC, USDT);
 
         // Get quote with slippage
-        uint256 maxAmountIn = assetPriceOracleAndSwapper.swapForOutputQuote(amountOut, USDC, USDT);
+        (uint256 maxAmountIn,) = assetPriceOracleAndSwapper.swapForOutputQuote(amountOut, USDC, USDT);
+
+        // Verify slippage is added: maxAmountIn = baseQuote + (slippage * baseQuote) / 10000
+        uint256 expectedMaxAmountIn = baseQuote + (uint256(slippage) * baseQuote) / 10000;
+        assertEq(maxAmountIn, expectedMaxAmountIn);
+        assertGt(maxAmountIn, baseQuote);
+    }
+
+    function test_swapForOutputQuote_SwapperOnly() public {
+        // Re-register as swapper only
+        assetPriceOracleAndSwapper.register(
+            AssetPair({
+                assetA: USDC,
+                assetB: USDT,
+                swapEngine: address(uniswapV3SwapperEngine),
+                poolInfo: USDC_USDT_V3_POOL_INFO,
+                priceStrategy: PriceStrategy.SwapperOnly,
+                swapperAccuracy: 10,
+                priceOracle: address(mockPriceOracle)
+            })
+        );
+
+        uint128 amountOut = 1000e6;
+
+        // Get the current slippage value
+        uint16 slippage = assetPriceOracleAndSwapper.swapSlippage();
+
+        // swapForOutputQuote(amountOut, USDC, USDT) = max USDT to spend for amountOut USDC → getQuote(amountOut, USDT, USDC)
+        (uint256 baseQuote,) = assetPriceOracleAndSwapper.getQuote(amountOut, USDT, USDC);
+
+        // Get quote with slippage
+        (uint256 maxAmountIn,) = assetPriceOracleAndSwapper.swapForOutputQuote(amountOut, USDC, USDT);
 
         // Verify slippage is added: maxAmountIn = baseQuote + (slippage * baseQuote) / 10000
         uint256 expectedMaxAmountIn = baseQuote + (uint256(slippage) * baseQuote) / 10000;
@@ -318,12 +344,11 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
 
         uint128 amountOut = 1000e6;
 
-        // Get the base quote from swapper using the registered asset pair's pool info
-        AssetPair memory pair = assetPriceOracleAndSwapper.assetPair(USDC, USDT);
-        uint256 baseQuote = uniswapV3SwapperEngine.getQuote(pair.poolInfo, amountOut, USDC, USDT);
+        // Get the base quote from swapper from oracle
+        uint256 baseQuote = mockPriceOracle.getQuote(amountOut, USDC, USDT);
 
         // Get quote with slippage
-        uint256 maxAmountIn = assetPriceOracleAndSwapper.swapForOutputQuote(amountOut, USDC, USDT);
+        (uint256 maxAmountIn,) = assetPriceOracleAndSwapper.swapForOutputQuote(amountOut, USDC, USDT);
 
         // Verify slippage is added: maxAmountIn = baseQuote + (slippage * baseQuote) / 10000
         uint256 expectedMaxAmountIn = baseQuote + (uint256(slippage) * baseQuote) / 10000;
@@ -331,7 +356,39 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         assertGt(maxAmountIn, baseQuote);
     }
 
+    /// @dev By default we test for the oracle only quote stategy
     function test_swapForInputQuote() public view {
+        uint128 amountIn = 1000e6;
+
+        // Get the current slippage value
+        uint16 slippage = assetPriceOracleAndSwapper.swapSlippage();
+
+        // Get the base quote from oracle
+        uint256 baseQuote = mockPriceOracle.getQuote(amountIn, USDC, USDT);
+
+        // Get quote with slippage
+        (uint256 minAmountOut,) = assetPriceOracleAndSwapper.swapForInputQuote(amountIn, USDC, USDT);
+
+        // Verify slippage is subtracted: minAmountOut = baseQuote - (slippage * baseQuote) / 10000
+        uint256 expectedMinAmountOut = baseQuote - (uint256(slippage) * baseQuote) / 10000;
+        assertEq(minAmountOut, expectedMinAmountOut);
+        assertLe(minAmountOut, baseQuote);
+    }
+
+    function test_swapForInputQuote_SwapperOnly() public {
+        // Re-register as swapper only
+        assetPriceOracleAndSwapper.register(
+            AssetPair({
+                assetA: USDC,
+                assetB: USDT,
+                swapEngine: address(uniswapV3SwapperEngine),
+                poolInfo: USDC_USDT_V3_POOL_INFO,
+                priceStrategy: PriceStrategy.SwapperOnly,
+                swapperAccuracy: 10,
+                priceOracle: address(mockPriceOracle)
+            })
+        );
+
         uint128 amountIn = 1000e6;
 
         // Get the current slippage value
@@ -342,7 +399,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         uint256 baseQuote = uniswapV3SwapperEngine.getQuote(pair.poolInfo, amountIn, USDC, USDT);
 
         // Get quote with slippage
-        uint256 minAmountOut = assetPriceOracleAndSwapper.swapForInputQuote(amountIn, USDC, USDT);
+        (uint256 minAmountOut,) = assetPriceOracleAndSwapper.swapForInputQuote(amountIn, USDC, USDT);
 
         // Verify slippage is subtracted: minAmountOut = baseQuote - (slippage * baseQuote) / 10000
         uint256 expectedMinAmountOut = baseQuote - (uint256(slippage) * baseQuote) / 10000;
@@ -359,12 +416,11 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
 
         uint128 amountIn = 1000e6;
 
-        // Get the base quote from swapper using the registered asset pair's pool info
-        AssetPair memory pair = assetPriceOracleAndSwapper.assetPair(USDC, USDT);
-        uint256 baseQuote = uniswapV3SwapperEngine.getQuote(pair.poolInfo, amountIn, USDC, USDT);
+        // Get the base quote from oracle
+        uint256 baseQuote = mockPriceOracle.getQuote(amountIn, USDC, USDT);
 
         // Get quote with slippage
-        uint256 minAmountOut = assetPriceOracleAndSwapper.swapForInputQuote(amountIn, USDC, USDT);
+        (uint256 minAmountOut,) = assetPriceOracleAndSwapper.swapForInputQuote(amountIn, USDC, USDT);
 
         // Verify slippage is subtracted: minAmountOut = baseQuote - (slippage * baseQuote) / 10000
         uint256 expectedMinAmountOut = baseQuote - (uint256(slippage) * baseQuote) / 10000;
@@ -378,12 +434,11 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         // Get the current slippage value
         uint16 slippage = assetPriceOracleAndSwapper.swapSlippage();
 
-        // Get the base quote from swapper using the registered asset pair's pool info
-        AssetPair memory pair = assetPriceOracleAndSwapper.assetPair(rETH, USDC);
-        uint256 baseQuote = uniswapV3SwapperEngine.getQuote(pair.poolInfo, amountOut, rETH, USDC);
+        // swapForOutputQuote(amountOut, rETH, USDC) = max USDC to spend for amountOut rETH → getQuote(amountOut, USDC, rETH)
+        (uint256 baseQuote,) = assetPriceOracleAndSwapper.getQuote(amountOut, USDC, rETH);
 
         // Get quote with slippage
-        uint256 maxAmountIn = assetPriceOracleAndSwapper.swapForOutputQuote(amountOut, rETH, USDC);
+        (uint256 maxAmountIn,) = assetPriceOracleAndSwapper.swapForOutputQuote(amountOut, rETH, USDC);
 
         // Verify slippage is added: maxAmountIn = baseQuote + (slippage * baseQuote) / 10000
         uint256 expectedMaxAmountIn = baseQuote + (uint256(slippage) * baseQuote) / 10000;
@@ -392,17 +447,16 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
     }
 
     function test_swapForOutputQuote_multihop_rETH_to_USDC() public view {
-        uint128 amountOut = 10e18; // 10 rETH
+        uint128 amountOut = 10e18; // 10e18 USDC (output); max rETH (input) to spend
 
         // Get the current slippage value
         uint16 slippage = assetPriceOracleAndSwapper.swapSlippage();
 
-        // Get the base quote from swapper using the registered asset pair's pool info
-        AssetPair memory pair = assetPriceOracleAndSwapper.assetPair(rETH, USDC);
-        uint256 baseQuote = uniswapV3SwapperEngine.getQuote(pair.poolInfo, amountOut, USDC, rETH);
+        // swapForOutputQuote(amountOut, USDC, rETH) = max rETH to spend for amountOut USDC → getQuote(amountOut, rETH, USDC)
+        (uint256 baseQuote,) = assetPriceOracleAndSwapper.getQuote(amountOut, rETH, USDC);
 
         // Get quote with slippage
-        uint256 maxAmountIn = assetPriceOracleAndSwapper.swapForOutputQuote(amountOut, USDC, rETH);
+        (uint256 maxAmountIn,) = assetPriceOracleAndSwapper.swapForOutputQuote(amountOut, USDC, rETH);
 
         // Verify slippage is added: maxAmountIn = baseQuote + (slippage * baseQuote) / 10000
         uint256 expectedMaxAmountIn = baseQuote + (uint256(slippage) * baseQuote) / 10000;
@@ -421,7 +475,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         uint16 slippage = assetPriceOracleAndSwapper.swapSlippage();
 
         // Get quote with slippage
-        uint256 minAmountOut = assetPriceOracleAndSwapper.swapForInputQuote(amountIn, USDC, rETH);
+        (uint256 minAmountOut,) = assetPriceOracleAndSwapper.swapForInputQuote(amountIn, USDC, rETH);
 
         // Verify slippage is subtracted: minAmountOut = baseQuote - (slippage * baseQuote) / 10000
         uint256 expectedMinAmountOut = baseQuote - (uint256(slippage) * baseQuote) / 10000;
@@ -449,7 +503,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         // V3 multi-hop path: rETH -> WETH (fee: 100) -> USDC (fee: 500)
         // For EXACT_OUT, path format: output -> fee -> intermediate -> fee -> input
         // Swap from USDC (swap) to get amountOut of rETH (base)
-        assetPriceOracleAndSwapper.swapForOutput(amountOut, rETH, USDC);
+        assetPriceOracleAndSwapper.swapForOutput(amountOut, rETH, USDC, block.timestamp);
 
         assertEq(IERC20(rETH).balanceOf(address(assetPriceOracleAndSwapper)), amountOut);
     }
@@ -459,7 +513,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         deal(USDT, address(assetPriceOracleAndSwapper), amountOut * 2);
 
         vm.expectRevert(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.AssetPairNotRegistered.selector));
-        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, address(0));
+        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, address(0), block.timestamp);
     }
 
     function test_getQuote_oracle_only() public view {
@@ -576,5 +630,98 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         uint256 amountIn = 1000e6;
         vm.expectRevert(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.AssetPairNotRegistered.selector));
         assetPriceOracleAndSwapper.getQuote(amountIn, USDC, address(0));
+    }
+
+    // ========== maxDeadlineOffset view and setMaxDeadlineOffset ==========
+
+    function test_maxDeadlineOffset_returnsDefaultZero() public view {
+        assertEq(assetPriceOracleAndSwapper.maxDeadlineOffset(), 0);
+    }
+
+    function test_maxDeadlineOffset_returnsSetValue() public {
+        uint256 newMax = 3600;
+        assetPriceOracleAndSwapper.setMaxDeadlineOffset(newMax);
+        assertEq(assetPriceOracleAndSwapper.maxDeadlineOffset(), newMax);
+    }
+
+    function test_setMaxDeadlineOffset_updatesValue() public {
+        assetPriceOracleAndSwapper.setMaxDeadlineOffset(100);
+        assertEq(assetPriceOracleAndSwapper.maxDeadlineOffset(), 100);
+
+        assetPriceOracleAndSwapper.setMaxDeadlineOffset(type(uint256).max);
+        assertEq(assetPriceOracleAndSwapper.maxDeadlineOffset(), type(uint256).max);
+    }
+
+    function test_RevertWhen_setMaxDeadlineOffset_not_owner() public {
+        address nonOwner = makeAddr("nonOwner");
+        vm.prank(nonOwner);
+        vm.expectRevert(MockAssetPriceOracleAndSwapper.NotOwner.selector);
+        assetPriceOracleAndSwapper.setMaxDeadlineOffset(3600);
+    }
+
+    function test_RevertWhen_swapForOutput_exceedsMaxDeadline() public {
+        uint256 maxDuration = 100;
+        assetPriceOracleAndSwapper.setMaxDeadlineOffset(maxDuration);
+        // Allowed deadline = block.timestamp + maxDuration; use one past that
+        uint256 allowedDeadline = block.timestamp + maxDuration;
+        uint256 deadlineOverMax = allowedDeadline + 1;
+
+        uint128 amountOut = 1000e6;
+        deal(USDT, address(assetPriceOracleAndSwapper), amountOut * 2);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAssetPriceOracleAndSwapper.ExceedsMaxDeadline.selector, allowedDeadline, deadlineOverMax
+            )
+        );
+        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT, deadlineOverMax);
+    }
+
+    function test_RevertWhen_swapForInput_exceedsMaxDeadline() public {
+        uint256 maxDuration = 100;
+        assetPriceOracleAndSwapper.setMaxDeadlineOffset(maxDuration);
+        uint256 allowedDeadline = block.timestamp + maxDuration;
+        uint256 deadlineOverMax = allowedDeadline + 1;
+
+        uint128 amountIn = 1000e6;
+        deal(USDT, address(assetPriceOracleAndSwapper), amountIn * 2);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAssetPriceOracleAndSwapper.ExceedsMaxDeadline.selector, allowedDeadline, deadlineOverMax
+            )
+        );
+        assetPriceOracleAndSwapper.swapForInput(amountIn, USDC, USDT, deadlineOverMax);
+    }
+
+    function test_swapForOutput_succeedsWhenDeadlineWithinMax() public {
+        // maxDeadlineOffset is duration: allowed absolute deadline = block.timestamp + 3600
+        assetPriceOracleAndSwapper.setMaxDeadlineOffset(3600);
+
+        uint128 amountOut = 1000e6;
+        deal(USDT, address(assetPriceOracleAndSwapper), amountOut * 2);
+
+        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT, block.timestamp);
+        assertEq(IERC20(USDC).balanceOf(address(assetPriceOracleAndSwapper)), amountOut);
+    }
+
+    function test_swapForInput_succeedsWhenDeadlineWithinMax() public {
+        assetPriceOracleAndSwapper.setMaxDeadlineOffset(3600);
+
+        uint128 amountIn = 1000e6;
+        deal(USDT, address(assetPriceOracleAndSwapper), amountIn * 2);
+
+        assetPriceOracleAndSwapper.swapForInput(amountIn, USDC, USDT, block.timestamp);
+    }
+
+    function test_swapForOutput_succeedsWhenDeadlineEqualsMaxDeadline() public {
+        // With offset 0, allowed deadline = block.timestamp + 0 = block.timestamp
+        assetPriceOracleAndSwapper.setMaxDeadlineOffset(0);
+
+        uint128 amountOut = 1000e6;
+        deal(USDT, address(assetPriceOracleAndSwapper), amountOut * 2);
+
+        assetPriceOracleAndSwapper.swapForOutput(amountOut, USDC, USDT, block.timestamp);
+        assertEq(IERC20(USDC).balanceOf(address(assetPriceOracleAndSwapper)), amountOut);
     }
 }

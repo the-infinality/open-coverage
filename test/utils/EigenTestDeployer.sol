@@ -245,7 +245,7 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
             vm.warp(block.timestamp + timeOffset);
         }
         vm.startPrank(address(coverageAgent));
-        statuses = eigenCoverageProvider.slashClaims(claimIds, amounts);
+        statuses = eigenCoverageProvider.slashClaims(claimIds, amounts, block.timestamp);
         vm.stopPrank();
         return statuses;
     }

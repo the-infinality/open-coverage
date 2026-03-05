@@ -272,14 +272,14 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         bytes memory poolInfo = abi.encodePacked(USDC, uint24(500), USDT);
 
         vm.expectRevert(ISwapperEngine.OnlyDelegateCall.selector);
-        swapperEngine.swapForInput(poolInfo, 1000e6, 900e6, USDC, USDT);
+        swapperEngine.swapForInput(poolInfo, 1000e6, 900e6, USDC, USDT, block.timestamp);
     }
 
     function test_RevertWhen_swapForOutput_calledDirectly() public {
         bytes memory poolInfo = abi.encodePacked(USDT, uint24(500), USDC);
 
         vm.expectRevert(ISwapperEngine.OnlyDelegateCall.selector);
-        swapperEngine.swapForOutput(poolInfo, 1000e6, 1100e6, USDC, USDT);
+        swapperEngine.swapForOutput(poolInfo, 1000e6, 1100e6, USDC, USDT, block.timestamp);
     }
 
     // ============ getQuote() Tests ============ //
@@ -490,7 +490,13 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
         (bool success, bytes memory result) = address(proxy)
             .call(
                 abi.encodeWithSelector(
-                    UniswapV3SwapperEngine.swapForInput.selector, poolInfo, amountIn, amountOutMin, USDC, USDT
+                    UniswapV3SwapperEngine.swapForInput.selector,
+                    poolInfo,
+                    amountIn,
+                    amountOutMin,
+                    USDC,
+                    USDT,
+                    block.timestamp
                 )
             );
 
@@ -529,7 +535,8 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
                     amountIn,
                     amountOutMin,
                     USDC, // base = output
-                    USDT // swap = input
+                    USDT, // swap = input
+                    block.timestamp
                 )
             );
 
@@ -600,7 +607,8 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
                     amountOut,
                     amountInMax,
                     USDC, // base = output
-                    USDT // swap = input
+                    USDT, // swap = input
+                    block.timestamp
                 )
             );
 
@@ -638,7 +646,8 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
                     amountOut,
                     amountInMax,
                     USDC, // base = output
-                    USDT // swap = input
+                    USDT, // swap = input
+                    block.timestamp
                 )
             );
 
@@ -706,7 +715,8 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
                     amountIn,
                     0, // No minimum for test
                     rETH, // base = output
-                    USDC // swap = input
+                    USDC, // swap = input
+                    block.timestamp
                 )
             );
 
@@ -750,7 +760,8 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
                     amountOut,
                     type(uint256).max, // Allow any input for test
                     rETH, // base = output
-                    USDC // swap = input
+                    USDC, // swap = input
+                    block.timestamp
                 )
             );
 
@@ -764,7 +775,11 @@ contract UniswapV3SwapperEngineTest is TestDeployer, UniswapHelper {
 
         // Execute swap via delegatecall: swap USDC (swap) -> get amountOut of rETH (base)
         (bool success2, bytes memory qoute) = address(proxy)
-            .call(abi.encodeWithSelector(UniswapV3SwapperEngine.getQuote.selector, poolInfo, amountOut, USDC, rETH));
+            .call(
+                abi.encodeWithSelector(
+                    UniswapV3SwapperEngine.getQuote.selector, poolInfo, amountOut, USDC, rETH, block.timestamp
+                )
+            );
 
         assertTrue(success2, "Quote should succeed");
 

@@ -49,7 +49,7 @@ library AssetPriceOracleAndSwapperFacetDeployer {
         pure
         returns (bytes4[] memory selectors)
     {
-        selectors = new bytes4[](9);
+        selectors = new bytes4[](11);
         selectors[0] = IAssetPriceOracleAndSwapper.register.selector;
         selectors[1] = IAssetPriceOracleAndSwapper.swapForOutput.selector;
         selectors[2] = IAssetPriceOracleAndSwapper.swapForInput.selector;
@@ -59,6 +59,8 @@ library AssetPriceOracleAndSwapperFacetDeployer {
         selectors[6] = IAssetPriceOracleAndSwapper.getQuote.selector;
         selectors[7] = IAssetPriceOracleAndSwapper.setSwapSlippage.selector;
         selectors[8] = IAssetPriceOracleAndSwapper.swapSlippage.selector;
+        selectors[9] = IAssetPriceOracleAndSwapper.setMaxDeadlineOffset.selector;
+        selectors[10] = IAssetPriceOracleAndSwapper.maxDeadlineOffset.selector;
     }
 }
 

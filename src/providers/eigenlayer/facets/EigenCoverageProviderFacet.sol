@@ -122,7 +122,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             revert NotCoverageAgent(msg.sender, positionData.coverageAgent);
         }
 
-        _validatePosition(positionData, amount, duration, reward);
+        _validateClaimAgainstPosition(positionData, amount, duration, reward);
 
         // Capture rewards funds from coverage agent
         SafeERC20.safeTransferFrom(
@@ -175,7 +175,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             revert ReservationNotAllowed(positionId);
         }
 
-        _validatePosition(positionData, amount, duration, reward);
+        _validateClaimAgainstPosition(positionData, amount, duration, reward);
 
         // Reserve coverage in the coverage map (without transferring rewards yet)
         address operator = address(uint160(uint256(positionData.operatorId)));
@@ -409,7 +409,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     }
 
     /// @inheritdoc ICoverageProvider
-    function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts)
+    function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts, uint256 deadline)
         external
         nonReentrant
         returns (CoverageClaimStatus[] memory slashStatuses)
@@ -441,7 +441,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             if (_position.slashCoordinator == address(0)) {
                 // If no slash coordinator is set, the coverage provider will instantly slash the coverage position.
                 slashStatuses[i] = CoverageClaimStatus.Slashed;
-                _initiateSlash(claimIds[i], amounts[i]);
+                _initiateSlash(claimIds[i], amounts[i], deadline);
             } else {
                 slashStatuses[i] = CoverageClaimStatus.PendingSlash;
                 _claim.status = CoverageClaimStatus.PendingSlash;
@@ -449,13 +449,13 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
 
                 emit ClaimSlashPending(claimIds[i], _position.slashCoordinator);
 
-                _pendingSlashCompletion(claimIds[i]);
+                _pendingSlashCompletion(claimIds[i], deadline);
             }
         }
     }
 
     /// @inheritdoc ICoverageProvider
-    function completeSlash(uint256 claimId) external {
+    function completeSlash(uint256 claimId, uint256 deadline) external {
         CoverageClaim storage _claim = claims[claimId];
         if (_claim.status != CoverageClaimStatus.PendingSlash) revert InvalidClaim(claimId, _claim.status);
 
@@ -465,7 +465,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             SlashFailed(claimId)
         );
 
-        _pendingSlashCompletion(claimId);
+        _pendingSlashCompletion(claimId, deadline);
     }
 
     /// @inheritdoc ICoverageProvider
@@ -667,16 +667,26 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     /// ============ Internal functions ============ //
 
     /// @notice Validates the claim parameters meet the position requirements
-    function _validatePosition(CoveragePosition memory positionData, uint256 amount, uint256 duration, uint256 reward)
-        private
-        view
-    {
+    function _validateClaimAgainstPosition(
+        CoveragePosition memory positionData,
+        uint256 amount,
+        uint256 duration,
+        uint256 reward
+    ) private view {
+        require(duration > 0, ZeroDuration());
+
         uint256 minimumReward = (amount * positionData.minRate * duration) / (10000 * 365 days);
-        if (minimumReward > reward) revert InsufficientReward(minimumReward, reward);
+        require(minimumReward <= reward, InsufficientReward(minimumReward, reward));
+
+        require(
+            _strategyWhitelist.contains(assetToStrategy[positionData.asset]),
+            IEigenOperatorProxy.StrategyNotWhitelisted(assetToStrategy[positionData.asset])
+        );
 
         if (positionData.maxDuration > 0 && duration > positionData.maxDuration) {
             revert DurationExceedsMax(positionData.maxDuration, duration);
         }
+
         require(
             duration + block.timestamp <= positionData.expiryTimestamp,
             DurationExceedsExpiry(positionData.expiryTimestamp, duration + block.timestamp)
@@ -792,7 +802,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         ICoverageAgent(coverageAgent).onRegisterPosition(positionId);
     }
 
-    function _initiateSlash(uint256 claimId, uint256 amount) private {
+    function _initiateSlash(uint256 claimId, uint256 amount, uint256 deadline) private {
         CoverageClaim storage _claim = claims[claimId];
         CoveragePosition storage _position = positions[_claim.positionId];
 
@@ -801,6 +811,8 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
 
         address operator = address(uint160(uint256(_position.operatorId)));
         address strategy = assetToStrategy[_position.asset];
+
+        address coverageAsset = address(ICoverageAgent(_position.coverageAgent).asset());
 
         // Get balance of strategy asset in this address
         address strategyAsset = address(IStrategy(strategy).underlyingToken());
@@ -816,15 +828,24 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             -int256(amount)
         );
 
+        (uint256 totalStrategyAssetValueToSlash, bool verified) =
+            IAssetPriceOracleAndSwapper(address(this)).swapForOutputQuote(amount, coverageAsset, strategyAsset);
+
+        if (!verified) {
+            revert IEigenServiceManager.UnverifiedQuote(
+                totalStrategyAssetValueToSlash, amount, strategyAsset, coverageAsset
+            );
+        }
+
         // Slash the operator through EigenLayer and claim redistributed tokens
-        IEigenServiceManager(address(this)).slashOperator(operator, strategy, _position.coverageAgent, amount);
+        IEigenServiceManager(address(this))
+            .slashOperator(operator, strategy, _position.coverageAgent, totalStrategyAssetValueToSlash);
 
         // Swap the slashed strategy asset to the coverage agent's asset
-        IAssetPriceOracleAndSwapper(address(this))
-            .swapForOutput(amount, ICoverageAgent(_position.coverageAgent).asset(), _position.asset);
+        IAssetPriceOracleAndSwapper(address(this)).swapForOutput(amount, coverageAsset, strategyAsset, deadline);
 
         // Transfer swapped tokens to coverage agent
-        SafeERC20.safeTransfer(IERC20(ICoverageAgent(_position.coverageAgent).asset()), _position.coverageAgent, amount);
+        SafeERC20.safeTransfer(IERC20(coverageAsset), _position.coverageAgent, amount);
 
         ICoverageAgent(_position.coverageAgent).onSlashCompleted(claimId, amount);
         emit ClaimSlashed(claimId, amount);
@@ -858,7 +879,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         }
     }
 
-    function _pendingSlashCompletion(uint256 claimId) private {
+    function _pendingSlashCompletion(uint256 claimId, uint256 deadline) private {
         CoverageClaim storage _claim = claims[claimId];
         SlashCoordinationStatus slashStatus =
             ISlashCoordinator(positions[_claim.positionId].slashCoordinator).status(address(this), claimId);
@@ -879,7 +900,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         if (slashStatus == SlashCoordinationStatus.Passed) {
             uint256 pendingAmount = pendingClaimSlashAmounts[claimId];
             pendingClaimSlashAmounts[claimId] = 0;
-            _initiateSlash(claimId, pendingAmount);
+            _initiateSlash(claimId, pendingAmount, deadline);
         }
     }
 

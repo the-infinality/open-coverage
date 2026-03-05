@@ -21,10 +21,16 @@ interface ISwapperEngine {
     /// @param amountOutMin The minimum amount of `base` tokens to receive
     /// @param base The asset to receive (output)
     /// @param swap The asset to spend (input)
+    /// @param deadline The deadline for the swap
     /// @return amountOut The actual amount of `base` tokens received
-    function swapForInput(bytes memory poolInfo, uint256 amountIn, uint256 amountOutMin, address base, address swap)
-        external
-        returns (uint256 amountOut);
+    function swapForInput(
+        bytes memory poolInfo,
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address base,
+        address swap,
+        uint256 deadline
+    ) external returns (uint256 amountOut);
 
     /// @notice Swaps to an exact amount of output tokens
     /// @dev The swapper engine must revert with OnlyDelegateCall() if the contract is called directly instead of via delegatecall
@@ -33,10 +39,16 @@ interface ISwapperEngine {
     /// @param amountInMax The maximum amount of `swap` tokens to spend
     /// @param base The asset to receive (output)
     /// @param swap The asset to spend (input)
+    /// @param deadline The deadline for the swap
     /// @return amountIn The actual amount of `swap` tokens spent
-    function swapForOutput(bytes memory poolInfo, uint256 amountOut, uint256 amountInMax, address base, address swap)
-        external
-        returns (uint256 amountIn);
+    function swapForOutput(
+        bytes memory poolInfo,
+        uint256 amountOut,
+        uint256 amountInMax,
+        address base,
+        address swap,
+        uint256 deadline
+    ) external returns (uint256 amountIn);
 
     /// @notice Quotes the amount of `base` that is equivalent to `amountIn` of `quote`.
     /// @param poolInfo The pool information to use for the quote

@@ -120,6 +120,8 @@ interface ICoverageProvider {
     error InvalidCoverageAsset(address requiredAsset, address providedAsset);
     /// @notice The requested duration exceeds the position's maximum.
     error DurationExceedsMax(uint256 maxDuration, uint256 duration);
+    /// @notice The provided duration is zero.
+    error ZeroDuration();
     /// @notice The claim would complete after the position expires.
     error DurationExceedsExpiry(uint256 expiryTimestamp, uint256 completionTimestamp);
     /// @notice The claim is in an invalid state for the requested operation.
@@ -206,17 +208,20 @@ interface ICoverageProvider {
     function closeClaim(uint256 claimId) external;
 
     /// @notice Slash on coverage claims.
-    /// @dev Can only be called by a coverage agent. Should take a slash coordinator into account if set.
+    /// @dev Can only be called by a coverage agent. Should take a slash coordinator into account if set. The deadline does not affect the slash
+    ///coordinator process if it does not occur in the same transaction.
     /// @param claimIds The ids of the coverage claims to slash.
     /// @param amounts The amounts of the slashes.
-    function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts)
+    /// @param deadline The deadline for the slashing process.
+    function slashClaims(uint256[] calldata claimIds, uint256[] calldata amounts, uint256 deadline)
         external
         returns (CoverageClaimStatus[] memory slashStatuses);
 
     /// @notice Complete the slashing process for a coverage claim.
     /// @dev Can only be called by the slash coordinator that initiated the slashing process.
     /// @param claimId The id of the coverage claim to complete the slashing process for.
-    function completeSlash(uint256 claimId) external;
+    /// @param deadline The deadline for the slashing process.
+    function completeSlash(uint256 claimId, uint256 deadline) external;
 
     /// @notice Repay a claim that has been slashed
     /// @dev Can only be called by the coverage agent that issued the claim.

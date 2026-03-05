@@ -167,7 +167,7 @@ contract EigenPermissionsTest is EigenTestDeployer {
         vm.expectRevert(
             abi.encodeWithSelector(ICoverageProvider.NotCoverageAgent.selector, attacker, address(coverageAgent))
         );
-        eigenCoverageProvider.slashClaims(claimIds, amounts);
+        eigenCoverageProvider.slashClaims(claimIds, amounts, block.timestamp);
         vm.stopPrank();
     }
 

@@ -519,6 +519,32 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.stopPrank();
     }
 
+    /// @notice Test that issueClaim reverts with ZeroDuration when duration is zero
+    function test_RevertWhen_issueClaim_zeroDuration() public {
+        _setupwithAllocations();
+
+        _stakeAndDelegateToOperator(10e18);
+
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(uint256(uint160(address(operator))))
+        });
+        uint256 positionId = eigenCoverageProvider.createPosition(data, "");
+
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+        vm.expectRevert(ICoverageProvider.ZeroDuration.selector);
+        eigenCoverageProvider.issueClaim(positionId, 1000e6, 0, 10e6);
+        vm.stopPrank();
+    }
+
     function test_positionMaxAmount() public {
         _setupwithAllocations();
 
@@ -864,13 +890,56 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         assertGe(finalBalance, expectedMinBalance);
     }
 
+    /// @notice Test slashing when strategy share price is mocked to 1 share = 1.1 underlying (10% premium).
+    /// @dev Mocks IStrategy.sharesToUnderlyingView and underlyingToSharesView so that 1 share = 1.1 underlying;
+    ///      then runs slashOperator and verifies wadToSlash is computed using the mocked ratio.
+    function test_slashClaims_strategySharePricePremium() public {
+        uint256 positionId = _setupSlashingPosition(1000e18);
+        _createAndApproveClaim(positionId, 1000e6, 10e6);
+
+        address strategy = address(_getTestStrategy());
+
+        OperatorSet memory operatorSet = OperatorSet({
+            avs: address(eigenCoverageDiamond), id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
+        });
+        address[] memory operators = new address[](1);
+        operators[0] = address(operator);
+        IStrategy[] memory strategies = new IStrategy[](1);
+        strategies[0] = IStrategy(strategy);
+        uint256 sharesAllocated = IAllocationManager(eigenServiceManager.eigenAddresses().allocationManager)
+            .getAllocatedStake(operatorSet, operators, strategies)[0][0];
+
+        // Mock strategy: 1 share = 1.1 underlying → sharesToUnderlyingView(s) = s * 11/10, underlyingToSharesView(u) = u * 10/11
+        vm.mockCall(
+            strategy,
+            abi.encodeWithSelector(IStrategy.sharesToUnderlyingView.selector, sharesAllocated),
+            abi.encode((sharesAllocated * 11) / 10)
+        );
+
+        // Strategy amount to slash (underlying). Keep below allocated so wadToSlash <= WAD and we only need underlyingToSharesView mock.
+        uint256 strategyAmountToSlash = 100e18;
+        vm.mockCall(
+            strategy,
+            abi.encodeWithSelector(IStrategy.underlyingToSharesView.selector, strategyAmountToSlash),
+            abi.encode((strategyAmountToSlash * 10) / 11)
+        );
+
+        // With 1.1x premium: 100e18 underlying = 100e18*10/11 shares. wadToSlash = (that * WAD) / sharesAllocated < WAD.
+        vm.prank(address(eigenCoverageDiamond));
+        uint256 tokensReceived = eigenServiceManager.slashOperator(
+            address(operator), strategy, address(coverageAgent), strategyAmountToSlash
+        );
+
+        // Slash should succeed; tokensReceived is the strategy underlying claimed from EigenLayer
+        assertGt(tokensReceived, 0, "Slash with premium share price should receive tokens");
+    }
+
     /// @notice Test that slash reverts with InsufficientSlashableCoverageAvailable(0) when wadToSlash > WAD and totalAllocatedStakeValue > amount (rounding edge case)
-    /// @dev Mocks the swapper engine so swapForOutputQuote returns more than totalAllocatedStake (wadToSlash > WAD) and getQuote returns > amount (rounding branch).
+    /// @dev slashOperator now takes strategy underlying amount. _calculateWadToSlash uses getQuote(underlyingValue, coverageAsset, strategyAsset).
     function test_RevertWhen_slash_InsufficientSlashableCoverageAvailable_rounding() public {
         uint256 positionId = _setupSlashingPosition(1000e18);
         _createAndApproveClaim(positionId, 1000e6, 10e6);
 
-        uint256 slashAmount = 1000e6;
         address strategy = address(_getTestStrategy());
         address strategyAsset = address(IStrategy(strategy).underlyingToken());
         address coverageAsset = coverageAgent.asset();
@@ -883,77 +952,68 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         operators[0] = address(operator);
         IStrategy[] memory strategies = new IStrategy[](1);
         strategies[0] = IStrategy(strategy);
-        uint256 totalAllocatedStake = IAllocationManager(eigenServiceManager.eigenAddresses().allocationManager)
+        uint256 sharesAllocated = IAllocationManager(eigenServiceManager.eigenAddresses().allocationManager)
             .getAllocatedStake(operatorSet, operators, strategies)[0][0];
+        uint256 underlyingValue = IStrategy(strategy).sharesToUnderlyingView(sharesAllocated);
 
-        // Mock swapper.getQuote(poolInfo, slashAmount, strategyAsset, coverageAsset) so swapForOutputQuote returns > totalAllocatedStake → wadToSlash > WAD
+        // Pass strategy underlying amount that clearly exceeds allocated so wadToSlash > WAD (avoids rounding down in shares)
+        uint256 strategyAmountToSlash = underlyingValue + 1e18;
+
+        // Mock getQuote(underlyingValue, coverageAsset, strategyAsset) so totalAllocatedStakeValue > amount → rounding branch
         vm.mockCall(
             address(uniswapV3SwapperEngine),
             abi.encodeWithSelector(
-                ISwapperEngine.getQuote.selector, poolInfo, slashAmount, strategyAsset, coverageAsset
+                ISwapperEngine.getQuote.selector, poolInfo, underlyingValue, coverageAsset, strategyAsset
             ),
-            abi.encode(totalAllocatedStake + 1)
-        );
-        // Mock swapper.getQuote(poolInfo, totalAllocatedStake, coverageAsset, strategyAsset) so getQuote returns > amount → rounding branch
-        vm.mockCall(
-            address(uniswapV3SwapperEngine),
-            abi.encodeWithSelector(
-                ISwapperEngine.getQuote.selector, poolInfo, totalAllocatedStake, coverageAsset, strategyAsset
-            ),
-            abi.encode(slashAmount + 1)
+            abi.encode(strategyAmountToSlash + 1)
         );
 
         vm.prank(address(eigenCoverageDiamond));
-        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.InsufficientSlashableCoverageAvailable.selector, 0));
-        eigenServiceManager.slashOperator(address(operator), strategy, address(coverageAgent), slashAmount);
+        vm.expectRevert(
+            abi.encodeWithSelector(ICoverageProvider.InsufficientSlashableCoverageAvailable.selector, uint256(0))
+        );
+        eigenServiceManager.slashOperator(address(operator), strategy, address(coverageAgent), strategyAmountToSlash);
     }
 
     /// @notice Test that slash reverts with InsufficientSlashableCoverageAvailable(deficit) when wadToSlash > WAD and totalAllocatedStakeValue <= amount
-    /// @dev Mocks the swapper engine so swapForOutputQuote returns > totalAllocatedStake and getQuote returns < amount (deficit branch).
+    /// @dev slashOperator now takes strategy underlying amount. _calculateWadToSlash uses getQuote(underlyingValue, coverageAsset, strategyAsset).
     function test_RevertWhen_slash_InsufficientSlashableCoverageAvailable_deficit() public {
         uint256 positionId = _setupSlashingPosition(1000e18);
         _createAndApproveClaim(positionId, 1000e6, 10e6);
 
-        uint256 slashAmount = 1000e6;
         address strategy = address(_getTestStrategy());
         address strategyAsset = address(IStrategy(strategy).underlyingToken());
         address coverageAsset = coverageAgent.asset();
         bytes memory poolInfo = abi.encodePacked(rETH, uint24(100), WETH, uint24(500), USDC);
 
-        OperatorSet memory operatorSet = OperatorSet({
-            avs: address(eigenCoverageDiamond), id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
-        });
-        address[] memory operators = new address[](1);
-        operators[0] = address(operator);
-        IStrategy[] memory strategies = new IStrategy[](1);
-        strategies[0] = IStrategy(strategy);
-        uint256 totalAllocatedStake = IAllocationManager(eigenServiceManager.eigenAddresses().allocationManager)
-            .getAllocatedStake(operatorSet, operators, strategies)[0][0];
+        uint256 underlyingValue;
+        uint256 strategyAmountToSlash;
+        {
+            OperatorSet memory operatorSet = OperatorSet({
+                avs: address(eigenCoverageDiamond), id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
+            });
+            address[] memory operators = new address[](1);
+            operators[0] = address(operator);
+            IStrategy[] memory strategies = new IStrategy[](1);
+            strategies[0] = IStrategy(strategy);
+            uint256 sharesAllocated = IAllocationManager(eigenServiceManager.eigenAddresses().allocationManager)
+                .getAllocatedStake(operatorSet, operators, strategies)[0][0];
+            underlyingValue = IStrategy(strategy).sharesToUnderlyingView(sharesAllocated);
+            strategyAmountToSlash = underlyingValue + 1e6;
+        }
 
-        // Mock swapper.getQuote so swapForOutputQuote returns > totalAllocatedStake → wadToSlash > WAD
+        // Mock getQuote(underlyingValue, coverageAsset, strategyAsset) so totalAllocatedStakeValue < amount → deficit branch (expectedDeficit = 1e6)
         vm.mockCall(
             address(uniswapV3SwapperEngine),
             abi.encodeWithSelector(
-                ISwapperEngine.getQuote.selector, poolInfo, slashAmount, strategyAsset, coverageAsset
+                ISwapperEngine.getQuote.selector, poolInfo, underlyingValue, coverageAsset, strategyAsset
             ),
-            abi.encode(totalAllocatedStake + 1)
-        );
-        // Mock swapper.getQuote so getQuote returns totalAllocatedStakeValue < amount → deficit branch
-        uint256 totalAllocatedStakeValue = slashAmount - 1e6;
-        vm.mockCall(
-            address(uniswapV3SwapperEngine),
-            abi.encodeWithSelector(
-                ISwapperEngine.getQuote.selector, poolInfo, totalAllocatedStake, coverageAsset, strategyAsset
-            ),
-            abi.encode(totalAllocatedStakeValue)
+            abi.encode(strategyAmountToSlash - 1e6)
         );
 
         vm.prank(address(eigenCoverageDiamond));
-        uint256 expectedDeficit = slashAmount - totalAllocatedStakeValue;
-        vm.expectRevert(
-            abi.encodeWithSelector(ICoverageProvider.InsufficientSlashableCoverageAvailable.selector, expectedDeficit)
-        );
-        eigenServiceManager.slashOperator(address(operator), strategy, address(coverageAgent), slashAmount);
+        vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.InsufficientSlashableCoverageAvailable.selector, 1e6));
+        eigenServiceManager.slashOperator(address(operator), strategy, address(coverageAgent), strategyAmountToSlash);
     }
 
     /// @notice Test EigenServiceManagerFacet L327: slashOperator reverts UnverifiedQuote when getQuote returns verified=false
@@ -970,7 +1030,8 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         address coverageAsset = coverageAgent.asset();
         bytes memory poolInfo = abi.encodePacked(rETH, uint24(100), WETH, uint24(500), USDC);
 
-        uint256 totalAllocatedStake;
+        uint256 sharesAllocated;
+        uint256 underlyingValue;
         {
             OperatorSet memory operatorSet = OperatorSet({
                 avs: address(eigenCoverageDiamond), id: eigenServiceManager.getOperatorSetId(address(coverageAgent))
@@ -979,8 +1040,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
             operators[0] = address(operator);
             IStrategy[] memory strategies = new IStrategy[](1);
             strategies[0] = IStrategy(strategy);
-            totalAllocatedStake = IAllocationManager(eigenServiceManager.eigenAddresses().allocationManager)
+            sharesAllocated = IAllocationManager(eigenServiceManager.eigenAddresses().allocationManager)
                 .getAllocatedStake(operatorSet, operators, strategies)[0][0];
+            underlyingValue = IStrategy(strategy).sharesToUnderlyingView(sharesAllocated);
         }
 
         MockPriceOracleZero oracleZero = new MockPriceOracleZero();
@@ -1011,27 +1073,34 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
             vm.stopPrank();
         }
 
-        // Mock swapper so swapForOutputQuote returns > totalAllocatedStake → wadToSlash > WAD
+        // Facet: swapForOutputQuote(slashAmount, coverageAsset, strategyAsset) → getQuote(slashAmount, strategyAsset, coverageAsset). Return strategy amount so slashOperator gets wadToSlash > WAD.
+        uint256 strategyAmountFromQuote = underlyingValue + 1;
         vm.mockCall(
             address(uniswapV3SwapperEngine),
             abi.encodeWithSelector(
                 ISwapperEngine.getQuote.selector, poolInfo, slashAmount, strategyAsset, coverageAsset
             ),
-            abi.encode(totalAllocatedStake + 1)
+            abi.encode(strategyAmountFromQuote)
         );
-        // Mock swapper so getQuote( totalAllocatedStake, coverageAsset, strategyAsset ) returns 1e18; oracle returns 0 → verified=false
+        // slashOperator _calculateWadToSlash: getQuote(underlyingValue, coverageAsset, strategyAsset) returns 1e18; oracle 0 → verified=false
         vm.mockCall(
             address(uniswapV3SwapperEngine),
             abi.encodeWithSelector(
-                ISwapperEngine.getQuote.selector, poolInfo, totalAllocatedStake, coverageAsset, strategyAsset
+                ISwapperEngine.getQuote.selector, poolInfo, underlyingValue, coverageAsset, strategyAsset
             ),
             abi.encode(1e18)
         );
 
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, slashAmount);
+        // Facet reverts in _initiateSlash when swapForOutputQuote returns verified=false: UnverifiedQuote(totalStrategyAssetValueToSlash, amount, strategyAsset, coverageAsset). totalStrategyAssetValueToSlash = quote + slippage (default 1%).
+        uint256 expectedStrategyAmountWithSlippage = (strategyAmountFromQuote * (10000 + 100)) / 10000; // 1% slippage
         vm.expectRevert(
             abi.encodeWithSelector(
-                IEigenServiceManager.UnverifiedQuote.selector, 1e18, slashAmount, coverageAsset, strategyAsset
+                IEigenServiceManager.UnverifiedQuote.selector,
+                expectedStrategyAmountWithSlippage,
+                slashAmount,
+                strategyAsset,
+                coverageAsset
             )
         );
         _executeSlash(claimIds, amounts);
@@ -1074,7 +1143,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.expectEmit(true, false, false, false);
         emit ICoverageProvider.ClaimSlashed(claimId, 1000e6);
 
-        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts);
+        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts, block.timestamp);
         vm.stopPrank();
 
         assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.Slashed));
@@ -1288,7 +1357,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         emit ICoverageProvider.ClaimSlashPending(claimId, address(coordinator));
 
         vm.startPrank(address(coverageAgent));
-        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts);
+        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts, block.timestamp);
         vm.stopPrank();
 
         assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.PendingSlash));
@@ -1302,7 +1371,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.expectEmit(true, false, false, true);
         emit ICoverageProvider.ClaimSlashed(claimId, 1000e6);
 
-        eigenCoverageProvider.completeSlash(claimId);
+        eigenCoverageProvider.completeSlash(claimId, block.timestamp);
 
         assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
         assertEq(eigenCoverageProvider.claim(claimId).amount, 0, "Claim amount should be 0 after full slash");
@@ -1326,7 +1395,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
             vm.expectEmit(true, false, false, true);
             emit ICoverageProvider.ClaimSlashPending(claimId, address(coordinator));
             vm.startPrank(address(coverageAgent));
-            eigenCoverageProvider.slashClaims(claimIds1, amounts1);
+            eigenCoverageProvider.slashClaims(claimIds1, amounts1, block.timestamp);
             vm.stopPrank();
 
             assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.PendingSlash));
@@ -1350,7 +1419,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
             vm.expectEmit(true, false, false, true);
             emit ICoverageProvider.ClaimSlashPending(claimId, address(coordinator));
             vm.startPrank(address(coverageAgent));
-            eigenCoverageProvider.slashClaims(claimIds2, amounts2);
+            eigenCoverageProvider.slashClaims(claimIds2, amounts2, block.timestamp);
             vm.stopPrank();
 
             assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.PendingSlash));
@@ -1364,7 +1433,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         // Complete slashing once coordinator passes; accounting should now reflect total pending slash amount.
         coordinator.setStatus(claimId, SlashCoordinationStatus.Passed);
-        eigenCoverageProvider.completeSlash(claimId);
+        eigenCoverageProvider.completeSlash(claimId, block.timestamp);
 
         CoverageClaim memory claimAfterComplete = eigenCoverageProvider.claim(claimId);
         assertEq(uint8(claimAfterComplete.status), uint8(CoverageClaimStatus.Slashed));
@@ -1390,7 +1459,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.expectRevert(
             abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId, CoverageClaimStatus.Issued)
         );
-        eigenCoverageProvider.completeSlash(claimId);
+        eigenCoverageProvider.completeSlash(claimId, block.timestamp);
     }
 
     /// @notice Test completeSlash with coordinator status not completed should revert
@@ -1409,7 +1478,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         // Try to complete slash
         vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.SlashFailed.selector, claimId));
-        eigenCoverageProvider.completeSlash(claimId);
+        eigenCoverageProvider.completeSlash(claimId, block.timestamp);
     }
 
     /// @notice Test that slashing updates claim status correctly
@@ -1439,12 +1508,12 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         // First slash with coordinator
         vm.warp(block.timestamp + 15 days);
         vm.startPrank(address(coverageAgent));
-        eigenCoverageProvider.slashClaims(claimIds, amounts);
+        eigenCoverageProvider.slashClaims(claimIds, amounts, block.timestamp);
         vm.stopPrank();
 
         // Complete the slash through coordinator
         coordinator.setStatus(claimId, SlashCoordinationStatus.Passed);
-        eigenCoverageProvider.completeSlash(claimId);
+        eigenCoverageProvider.completeSlash(claimId, block.timestamp);
 
         // Verify claim is slashed
         assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
@@ -1453,7 +1522,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.expectRevert(
             abi.encodeWithSelector(ICoverageProvider.InvalidClaim.selector, claimId, CoverageClaimStatus.Slashed)
         );
-        eigenCoverageProvider.completeSlash(claimId);
+        eigenCoverageProvider.completeSlash(claimId, block.timestamp);
     }
 
     /// @notice Test completeSlash when coordinator returns Failed on a fresh (never-slashed) claim
@@ -1469,7 +1538,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         vm.warp(block.timestamp + 15 days);
         vm.startPrank(address(coverageAgent));
-        eigenCoverageProvider.slashClaims(claimIds, amounts);
+        eigenCoverageProvider.slashClaims(claimIds, amounts, block.timestamp);
         vm.stopPrank();
 
         assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.PendingSlash));
@@ -1477,7 +1546,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         // Coordinator rejects the slash
         coordinator.setStatus(claimId, SlashCoordinationStatus.Failed);
-        eigenCoverageProvider.completeSlash(claimId);
+        eigenCoverageProvider.completeSlash(claimId, block.timestamp);
 
         // Status should revert to Issued
         assertEq(
@@ -1517,13 +1586,13 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         vm.warp(block.timestamp + 15 days);
         vm.startPrank(address(coverageAgent));
-        eigenCoverageProvider.slashClaims(claimIds1, amounts1);
+        eigenCoverageProvider.slashClaims(claimIds1, amounts1, block.timestamp);
         vm.stopPrank();
 
         assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.PendingSlash));
 
         coordinator.setStatus(claimId, SlashCoordinationStatus.Passed);
-        eigenCoverageProvider.completeSlash(claimId);
+        eigenCoverageProvider.completeSlash(claimId, block.timestamp);
 
         assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.Slashed));
         uint256 amountAfterFirstSlash = eigenCoverageProvider.claim(claimId).amount;
@@ -1539,7 +1608,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         (uint256[] memory claimIds2, uint256[] memory amounts2) = _prepareSingleSlash(claimId, secondSlashAmount);
 
         vm.startPrank(address(coverageAgent));
-        eigenCoverageProvider.slashClaims(claimIds2, amounts2);
+        eigenCoverageProvider.slashClaims(claimIds2, amounts2, block.timestamp);
         vm.stopPrank();
 
         assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.PendingSlash));
@@ -1551,7 +1620,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         // Coordinator rejects the second slash
         coordinator.setStatus(claimId, SlashCoordinationStatus.Failed);
-        eigenCoverageProvider.completeSlash(claimId);
+        eigenCoverageProvider.completeSlash(claimId, block.timestamp);
 
         // Status should stay Slashed (was previously partially slashed)
         assertEq(
@@ -1590,7 +1659,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         );
 
         vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.SlashFailed.selector, claimId));
-        eigenCoverageProvider.completeSlash(claimId);
+        eigenCoverageProvider.completeSlash(claimId, block.timestamp);
 
         // Verify nothing changed
         assertEq(
@@ -1611,7 +1680,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         vm.warp(block.timestamp + 15 days);
         vm.startPrank(address(coverageAgent));
-        eigenCoverageProvider.slashClaims(claimIds, amounts);
+        eigenCoverageProvider.slashClaims(claimIds, amounts, block.timestamp);
         vm.stopPrank();
 
         assertEq(uint8(eigenCoverageProvider.claim(claimId).status), uint8(CoverageClaimStatus.PendingSlash));
@@ -1621,7 +1690,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.expectEmit(true, false, false, true);
         emit ICoverageProvider.ClaimSlashed(claimId, slashAmount);
 
-        eigenCoverageProvider.completeSlash(claimId);
+        eigenCoverageProvider.completeSlash(claimId, block.timestamp);
 
         assertEq(
             uint8(eigenCoverageProvider.claim(claimId).status),
@@ -1658,7 +1727,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         );
 
         vm.startPrank(address(coverageAgent));
-        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts);
+        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts, block.timestamp);
         vm.stopPrank();
 
         assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.PendingSlash));
@@ -1687,7 +1756,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         );
 
         vm.startPrank(address(coverageAgent));
-        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts);
+        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts, block.timestamp);
         vm.stopPrank();
 
         assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.PendingSlash));
@@ -1725,7 +1794,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         );
 
         vm.startPrank(address(coverageAgent));
-        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts);
+        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts, block.timestamp);
         vm.stopPrank();
 
         assertEq(uint8(statuses[0]), uint8(CoverageClaimStatus.PendingSlash));
@@ -1781,6 +1850,51 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         vm.startPrank(address(coverageAgent));
         vm.expectRevert(abi.encodeWithSelector(ICoverageProvider.ReservationNotAllowed.selector, positionId));
+        eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+    }
+
+    /// @notice Test that reserveClaim reverts with ZeroDuration when duration is zero
+    function test_RevertWhen_reserveClaim_zeroDuration() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        vm.expectRevert(ICoverageProvider.ZeroDuration.selector);
+        eigenCoverageProvider.reserveClaim(positionId, 1000e6, 0, 10e6);
+        vm.stopPrank();
+    }
+
+    /// @notice Test that issueClaim fails when strategy is no longer whitelisted after position creation
+    function test_RevertWhen_issueClaim_strategyNotWhitelisted() public {
+        // Setup position while strategy is whitelisted
+        uint256 positionId = _setupSlashingPosition(10e18);
+
+        // Remove the strategy from the whitelist
+        address strategy = address(_getTestStrategy());
+        eigenServiceManager.setStrategyWhitelist(strategy, false);
+        assertFalse(eigenServiceManager.isStrategyWhitelisted(strategy));
+
+        // Attempt to issue a claim - should fail because strategy is no longer whitelisted
+        vm.startPrank(address(coverageAgent));
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+        vm.expectRevert(abi.encodeWithSelector(IEigenOperatorProxy.StrategyNotWhitelisted.selector, strategy));
+        eigenCoverageProvider.issueClaim(positionId, 1000e6, 30 days, 10e6);
+        vm.stopPrank();
+    }
+
+    /// @notice Test that reserveClaim fails when strategy is no longer whitelisted after position creation
+    function test_RevertWhen_reserveClaim_strategyNotWhitelisted() public {
+        // Setup position with reservation enabled while strategy is whitelisted
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        // Remove the strategy from the whitelist
+        address strategy = address(_getTestStrategy());
+        eigenServiceManager.setStrategyWhitelist(strategy, false);
+        assertFalse(eigenServiceManager.isStrategyWhitelisted(strategy));
+
+        // Attempt to reserve a claim - should fail because strategy is no longer whitelisted
+        vm.startPrank(address(coverageAgent));
+        vm.expectRevert(abi.encodeWithSelector(IEigenOperatorProxy.StrategyNotWhitelisted.selector, strategy));
         eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
         vm.stopPrank();
     }
@@ -2671,7 +2785,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         (uint256[] memory claimIds, uint256[] memory amounts) = _prepareSingleSlash(claimId, slashAmount);
 
         vm.startPrank(address(coverageAgent));
-        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts);
+        CoverageClaimStatus[] memory statuses = eigenCoverageProvider.slashClaims(claimIds, amounts, block.timestamp);
         vm.stopPrank();
 
         // Verify status is PendingSlash
@@ -2682,7 +2796,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         // Complete the slash via coordinator
         mockCoordinator.setStatus(claimId, SlashCoordinationStatus.Passed);
-        eigenCoverageProvider.completeSlash(claimId);
+        eigenCoverageProvider.completeSlash(claimId, block.timestamp);
 
         // Verify slash amount remains the same after completion
         assertEq(eigenCoverageProvider.claimTotalSlashAmount(claimId), slashAmount);

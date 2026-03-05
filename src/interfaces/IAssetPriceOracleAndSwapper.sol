@@ -45,6 +45,7 @@ interface IAssetPriceOracleAndSwapper {
     error InvalidAssetPair();
     error InvalidSwapperAccuracy();
     error InvalidSwapSlippage();
+    error ExceedsMaxDeadline(uint256 maxDeadline, uint256 givenDeadline);
 
     /// @notice Registers a price adaptor for an asset pair
     /// @param _assetPair The asset pair configuration
@@ -54,17 +55,21 @@ interface IAssetPriceOracleAndSwapper {
     /// @param amountOut The exact amount of `assetA` tokens to receive
     /// @param assetA The asset to receive (output/base)
     /// @param assetB The asset to spend (input/swap)
-    function swapForOutput(uint256 amountOut, address assetA, address assetB) external;
+    function swapForOutput(uint256 amountOut, address assetA, address assetB, uint256 deadline) external;
 
     /// @notice Swaps an exact amount of input tokens
     /// @param amountIn The exact amount of `assetB` tokens to spend
     /// @param assetA The asset to receive (output/base)
     /// @param assetB The asset to spend (input/swap)
-    function swapForInput(uint256 amountIn, address assetA, address assetB) external;
+    function swapForInput(uint256 amountIn, address assetA, address assetB, uint256 deadline) external;
 
     /// @notice Sets the swap slippage
     /// @param swapSlippage_ The swap slippage in basis points i.e. 1 = 0.01%
     function setSwapSlippage(uint16 swapSlippage_) external;
+
+    /// @notice Sets the maximum deadline offset for a swap (duration in seconds from block.timestamp)
+    /// @param maxDeadlineOffset_ The maximum deadline offset for a swap
+    function setMaxDeadlineOffset(uint256 maxDeadlineOffset_) external;
 
     /// @notice Gets the asset pair configuration for two assets
     /// @param assetA The first asset
@@ -75,6 +80,10 @@ interface IAssetPriceOracleAndSwapper {
     /// @notice Gets the swap slippage
     /// @return The swap slippage
     function swapSlippage() external view returns (uint16);
+
+    /// @notice Gets the maximum deadline offset for a swap (duration in seconds from block.timestamp)
+    /// @return The maximum deadline offset for a swap
+    function maxDeadlineOffset() external view returns (uint256);
 
     /// @notice Gets a price quote for an asset pair
     /// @param amountIn The amount of `assetB` to get value for `assetA`
@@ -92,18 +101,20 @@ interface IAssetPriceOracleAndSwapper {
     /// @param assetA The asset to receive (output/base)
     /// @param assetB The asset to spend (input/swap)
     /// @return maxAmountIn The maximum amount of `assetB` tokens that can be spent
+    /// @return verified Whether the quote has been verified based on the price strategy
     function swapForOutputQuote(uint256 amountOut, address assetA, address assetB)
         external
         view
-        returns (uint256 maxAmountIn);
+        returns (uint256 maxAmountIn, bool verified);
 
     /// @notice Gets the minimum amount of `assetA` tokens that can be received for `amountIn` of `assetB`
     /// @param amountIn The exact amount of `assetB` tokens to spend
     /// @param assetA The asset to receive (output/base)
     /// @param assetB The asset to spend (input/swap)
     /// @return minAmountOut The minimum amount of `assetA` tokens that can be received
+    /// @return verified Whether the quote has been verified based on the price strategy
     function swapForInputQuote(uint256 amountIn, address assetA, address assetB)
         external
         view
-        returns (uint256 minAmountOut);
+        returns (uint256 minAmountOut, bool verified);
 }

@@ -15,6 +15,6 @@
     "DiamondLoupeFacet": "0x67143d08753a4BecEB218db6035f993CdCD30e0B",
     "OwnershipFacet": "0x85ABCaCA65c1596e838c54C4a19d6d75AFe01B34",
     "AssetPriceOracleAndSwapperFacet": "0x2252d7CeC824006ca99fe468d133e106289D3d47",
-    "UniswapV3SwapperEngine": "0x37b8f1d33f63242f365dafa353473bdffa85c31b"
+    "UniswapV3SwapperEngine": "0x45339E786e7E661DF585a6Cb8c26C91fa1ec52a6"
   }
 }
