@@ -200,9 +200,7 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
 
     // Coverage agent has no operator set on this provider (operatorSetId === 0) → must register from coverage agent page
     const agentNotRegisteredToProvider =
-        !!coverageAgentId &&
-        operatorSetId !== undefined &&
-        Number(operatorSetId) === 0
+        !!coverageAgentId && operatorSetId !== undefined && Number(operatorSetId) === 0
 
     // Get current rewards split from chain for the selected coverage agent
     const operatorSetForSplit =
@@ -1002,10 +1000,10 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
 
                             <Separator />
 
-                            <div className="space-y-4 border p-4">
+                            <div className="space-y-4 border p-4 bg-muted/30">
                                 {/* Coverage Agent selection - used for register, allocate, and rewards split */}
                                 <div className="space-y-2">
-                                    <Label>Coverage Agent Setup</Label>
+                                    <h3>Coverage Agent Setup</h3>
                                     <CoverageAgentSelect
                                         selectedContractId={coverageAgentId}
                                         onSelectedContractIdChange={setCoverageAgentId}
