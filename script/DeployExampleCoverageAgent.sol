@@ -14,7 +14,7 @@ contract DeployExampleCoverageAgent is Script, ChainHelper {
         vm.startBroadcast();
 
         address coordinator = msg.sender;
-        address coverageAsset = vm.envOr("COVERAGE_ASSET", _getWETH());
+        address coverageAsset = vm.envOr("COVERAGE_ASSET", _getUSDC());
         string memory metadataUri = vm.prompt("Metadata URI");
 
         ExampleCoverageAgent exampleCoverageAgent = new ExampleCoverageAgent(coordinator, coverageAsset, metadataUri);

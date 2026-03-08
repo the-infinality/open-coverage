@@ -615,6 +615,7 @@ interface CoveragePositionData {
     refundable: number
     slashCoordinator: Address
     maxReservationTime: bigint
+    operatorId: `0x${string}`
 }
 
 /**
@@ -776,6 +777,14 @@ function PositionItem({
                             {Number(positionData.maxReservationTime) === 0
                                 ? "Not allowed"
                                 : `${formatUnits(BigInt(positionData.maxReservationTime), 0)} seconds`}
+                        </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground shrink-0">Operator ID</span>
+                        <span className="font-mono text-xs break-all text-right">
+                            {positionData.operatorId === "0x0000000000000000000000000000000000000000000000000000000000000000"
+                                ? "—"
+                                : positionData.operatorId}
                         </span>
                     </div>
                 </div>

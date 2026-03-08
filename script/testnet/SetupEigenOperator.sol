@@ -62,20 +62,18 @@ contract SetupEigenOperator is Script, EigenHelper, StdCheats {
             console.log("      Already registered as operator.");
         }
 
-        console.log("[3/9] Ensuring 0.2 WETH balance (wrap ETH on Anvil if needed)...");
-        if (block.chainid == 31337) {
-            uint256 wethBalance = IERC20(weth).balanceOf(operator);
-            if (wethBalance < STAKE_AMOUNT_WETH) {
-                require(
-                    address(operator).balance >= STAKE_AMOUNT_WETH,
-                    "SetupEigenOperator: not enough ETH balance to wrap 0.2 WETH"
-                );
-                // Wrap ETH so the operator has WETH on-chain (deal() only affects simulation; broadcast needs real balance).
-                IWETH(weth).deposit{value: STAKE_AMOUNT_WETH}();
-                console.log("      Wrapped 0.2 ETH to WETH. Balance:", IERC20(weth).balanceOf(operator));
-            } else {
-                console.log("      Sufficient WETH balance.");
-            }
+        console.log("[3/9] Ensuring 0.2 WETH balance (wrap ETH if needed)...");
+        uint256 wethBalance = IERC20(weth).balanceOf(operator);
+        if (wethBalance < STAKE_AMOUNT_WETH) {
+            require(
+                address(operator).balance >= STAKE_AMOUNT_WETH,
+                "SetupEigenOperator: not enough ETH balance to wrap 0.2 WETH"
+            );
+            // Wrap ETH so the operator has WETH on-chain (deal() only affects simulation; broadcast needs real balance).
+            IWETH(weth).deposit{value: STAKE_AMOUNT_WETH}();
+            console.log("      Wrapped 0.2 ETH to WETH. Balance:", IERC20(weth).balanceOf(operator));
+        } else {
+            console.log("      Sufficient WETH balance.");
         }
         require(IERC20(weth).balanceOf(operator) >= STAKE_AMOUNT_WETH, "SetupEigenOperator: need 0.2 WETH");
 
@@ -126,7 +124,7 @@ contract SetupEigenOperator is Script, EigenHelper, StdCheats {
         console.log("EigenCoverageDiamond:", eigenCoverageDiamond);
         console.log("Coverage agent:", coverageAgent);
         console.log("Operator set ID:", operatorSetId);
-        console.log("Position ID:", positionId);
+        // console.log("Position ID:", positionId);
         console.log("====================================\n");
     }
 

@@ -647,9 +647,6 @@ function ReadSection({
         },
     })
 
-    console.log("parsedAmount", parsedAmount)
-    console.log("input amount", amountInput)
-
     const handleRefresh = () => {
         refetchSlippage()
         if (assetA && assetB) {
@@ -1030,8 +1027,6 @@ function WriteSection({
             swapperAccuracy: Number(swapperAccuracy),
             priceOracle: (priceOracle || "0x0000000000000000000000000000000000000000") as Address,
         }
-
-        console.log("assetPair", assetPair)
 
         writeRegister(
             {

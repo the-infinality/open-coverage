@@ -16,3 +16,7 @@ lcov.info
 
 /report
 .DS_Store
+
+
+# Anvil
+anvil-state.json

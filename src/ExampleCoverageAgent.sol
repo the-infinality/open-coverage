@@ -9,13 +9,14 @@ import {ICoverageAgent, ClaimCoverageRequest, Coverage, Claim} from "./interface
 import {ICoverageProvider, CoverageClaim, CoverageClaimStatus} from "./interfaces/ICoverageProvider.sol";
 import {SafeERC20} from "@openzeppelin-v5/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IExampleCoverageAgent} from "./interfaces/IExampleCoverageAgent.sol";
+import {ICoverageAgent} from "./interfaces/ICoverageAgent.sol";
 import {ERC165} from "@openzeppelin-v5/contracts/utils/introspection/ERC165.sol";
 
 /// @notice An example implementation of a coverage agent.
 /// @dev This is a reference implementation that can be varied for each coordinator.
 /// Each pool acts as a target contract for the restaking networks to delegate to e.g. for Eigen this will be the strategy.
 /// Delegators are whitelisted by the operators to ensure they are trusted.
-contract ExampleCoverageAgent is IExampleCoverageAgent, ERC165 {
+contract ExampleCoverageAgent is ICoverageAgent, IExampleCoverageAgent, ERC165 {
     using EnumerableMap for EnumerableMap.AddressToUintMap;
 
     address private immutable _COORDINATOR;

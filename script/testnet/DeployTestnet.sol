@@ -132,8 +132,8 @@ contract DeployTestnet is DeployerHelperScript {
     function _getCoverageAsset() internal view returns (address) {
         address fromEnv = vm.envOr("COVERAGE_ASSET", address(0));
         if (fromEnv != address(0)) return fromEnv;
-        (, address weth) = _getUsdcAndWeth();
-        return weth;
+        (address usdc,) = _getUsdcAndWeth();
+        return usdc;
     }
 
     function _getUsdcAndWeth() internal view returns (address usdc, address weth) {
