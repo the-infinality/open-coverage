@@ -228,13 +228,18 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
         },
     })
 
-    // Sync slider to current on-chain rewards split when coverage agent selection changes
+    // Sync slider to current on-chain rewards split when coverage agent selection changes (only when operator is registered to agent)
     useEffect(() => {
-        if (currentRewardsSplitBps !== undefined && coverageAgentId) {
+        if (!coverageAgentId) return
+        if (!isRegisteredToSelectedAgent) {
+            setSplitRewardsPercent(0)
+            return
+        }
+        if (currentRewardsSplitBps !== undefined) {
             const percent = Math.round(Number(currentRewardsSplitBps) / 100)
             setSplitRewardsPercent(percent)
         }
-    }, [coverageAgentId, currentRewardsSplitBps])
+    }, [coverageAgentId, currentRewardsSplitBps, isRegisteredToSelectedAgent])
 
     // Load this operator's allocated strategies for the selected coverage agent's operator set
     const { data: allocatedStrategiesForSet } = useReadContract({
@@ -1258,11 +1263,18 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
                                         <div className="flex items-center justify-between">
                                             <Label>Rewards Split</Label>
                                             <span className="text-sm font-medium tabular-nums">
-                                                {splitRewardsPercent}%
+                                                {!isRegisteredToSelectedAgent
+                                                    ? 0
+                                                    : splitRewardsPercent}
+                                                %
                                             </span>
                                         </div>
                                         <Slider
-                                            value={[splitRewardsPercent]}
+                                            value={[
+                                                !isRegisteredToSelectedAgent
+                                                    ? 0
+                                                    : splitRewardsPercent,
+                                            ]}
                                             onValueChange={(value) =>
                                                 setSplitRewardsPercent(value[0] ?? 0)
                                             }
@@ -1271,6 +1283,7 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
                                             step={1}
                                             disabled={
                                                 agentNotRegisteredToProvider ||
+                                                !isRegisteredToSelectedAgent ||
                                                 isPendingSplitStandalone ||
                                                 isConfirmingSplitStandalone
                                             }
@@ -1285,6 +1298,7 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
                                         disabled={
                                             agentNotRegisteredToProvider ||
                                             !selectedCoverageAgent ||
+                                            !isRegisteredToSelectedAgent ||
                                             isPendingSplitStandalone ||
                                             isConfirmingSplitStandalone
                                         }

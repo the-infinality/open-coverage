@@ -84,19 +84,26 @@ export function ContractSelector({
                 </Select>
 
                 {selectedContract && (
-                    <div className="rounded-lg border p-4 bg-muted/50">
-                        <div className="flex items-center gap-2 flex-wrap">
+                    <div className="rounded-lg border p-4 bg-muted/50 space-y-2 text-sm">
+                        <div className="flex flex-col gap-0.5">
+                            <span className="text-muted-foreground text-xs">Name</span>
                             <span className="font-medium">{selectedContract.name}</span>
-                            <span className="">-</span>
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                            <span className="text-muted-foreground text-xs">Address</span>
                             <CopyableAddress
                                 address={selectedContract.address}
-                                truncateChars={8}
+                                truncateChars={10}
                                 variant="inline"
                                 size="sm"
                             />
-                            <span className="">-</span>
-                            <span className="text-sm ">{selectedContract.type}</span>
-                            <span className="">-</span>
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                            <span className="text-muted-foreground text-xs">Type</span>
+                            <span>{selectedContract.type}</span>
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                            <span className="text-muted-foreground text-xs">Chain</span>
                             <ChainBadge chainId={selectedContract.chainId} size="sm" />
                         </div>
                     </div>
