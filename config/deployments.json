@@ -1,12 +1,15 @@
 {
   "1": {},
   "31337": {
-    "DiamondCutFacet": "0xeC7F4E17BdaEdB6DB576740fB60B925ea0AD5Bbf",
-    "DiamondLoupeFacet": "0x4da5667C312C567fE50c8e03f73CD53E59947639",
-    "OwnershipFacet": "0xF63Ee1F31fa7Ed8901681CE5D4CdA10bBa6b95e7",
-    "AssetPriceOracleAndSwapperFacet": "0x1A626B1e8320391956Fd81EdDa5B2a7b4683AA9F",
-    "EigenServiceManagerFacet": "0x350273823f14F533dC8F2fCBd8a230dEDCeCF2fd",
-    "EigenCoverageProviderFacet": "0x510038dB0f8f4751bff02C51D15e9A080838914B"
+    "DiamondCutFacet": "0x7043b191Af1B40F7ccC49b9ee17bA8F307C664Ea",
+    "DiamondLoupeFacet": "0x34F77055838b557Cf2345749316f53bE00fb3dF3",
+    "OwnershipFacet": "0xA0dAE70f8C14A85e280f60fD03E4Fa2cDd5cd068",
+    "AssetPriceOracleAndSwapperFacet": "0xb044752f49af666a43721E99B1b6508Cc3d6B15C",
+    "EigenServiceManagerFacet": "0x13DD6F9f21493269EA70e3a01C1E488f08128A83",
+    "EigenCoverageProviderFacet": "0x1c8F1a1c5B5426BED0aB79Bc4f0eC03FD7f8E41F",
+    "UniswapV3SwapperEngine": "0xE79f4B8aDf68158CBe6B383c8bb9f5c1fE728C7f",
+    "EigenCoverageDiamond": "0x04583FfEc9E808E61e0bfE46dB51b71AFA36B28f",
+    "ExampleCoverageAgent": "0x74A8D3B01C3d88Dd9a6aC02E14E9B6780D16a1B3"
   },
   "11155111": {
     "EigenServiceManagerFacet": "0x444fB483d81C3Ddd9603181068f321438b49fD77",

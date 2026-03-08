@@ -5,7 +5,7 @@
         "viewQuoterV3": "0x5e55c9e631fae526cd4b0526c4818d6e0a9ef0e3",
         "v4PositionManager": "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
         "poolPaths": {
-            "v4:": {
+            "v4": {
                 "USDC/USDT": {
                     "poolKey": {
                         "currency0": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
@@ -16,7 +16,7 @@
                     "zeroForOne": true
                 }
             },
-            "v3:": {
+            "v3": {
                 "USDC/USDT": {
                     "poolInfo": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000064dac17f958d2ee523a2206206994597c13d831ec7"
                 }
@@ -29,9 +29,9 @@
         "viewQuoterV3": "0xe3c07ebF66b9D070b589bCCa30903891F71A92Be",
         "v4PositionManager": "0x429ba70129df741B2Ca2a85BC3A2a3328e5c09b4",
         "poolPaths": {
-            "v3:": {
+            "v3": {
                 "USDC/WETH": {
-                    "poolInfo": "0x1c7d4b196cb0c7b01d743fbc6116a902379c72380007b79995e5f793A07Bc00c21412e50Ecae098E7f9"
+                    "poolInfo": "0x1c7d4b196cb0c7b01d743fbc6116a902379c72380001f47b79995e5f793A07Bc00c21412e50Ecae098E7f9"
                 }
             }
         }
@@ -42,9 +42,9 @@
         "viewQuoterV3": "0xe3c07ebF66b9D070b589bCCa30903891F71A92Be",
         "v4PositionManager": "0x429ba70129df741B2Ca2a85BC3A2a3328e5c09b4",
         "poolPaths": {
-            "v3:": {
+            "v3": {
                 "USDC/WETH": {
-                    "poolInfo": "0x1c7d4b196cb0c7b01d743fbc6116a902379c72380007b79995e5f793A07Bc00c21412e50Ecae098E7f9"
+                    "poolInfo": "0x1c7d4b196cb0c7b01d743fbc6116a902379c72380001f47b79995e5f793A07Bc00c21412e50Ecae098E7f9"
                 }
             }
         }
