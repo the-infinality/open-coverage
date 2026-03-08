@@ -1,6 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from "react"
 import { type Address, isAddress, BaseError } from "viem"
-import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useAccount } from "wagmi"
+import {
+    useReadContract,
+    useWriteContract,
+    useWaitForTransactionReceipt,
+    useAccount,
+    useConfig,
+} from "wagmi"
+import { readContract } from "wagmi/actions"
 import {
     Loader2,
     CheckCircle2,
@@ -77,6 +84,7 @@ interface OperatorManagementProps {
  */
 export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorManagementProps) {
     const { address: connectedAddress } = useAccount()
+    const config = useConfig()
     const { coverageAgents, serviceManagers } = useChainFilteredContracts(chainId as number)
     const { addContract, contracts } = useContracts()
 
@@ -96,27 +104,18 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
     // State for update metadata
     const [newMetadataURI, setNewMetadataURI] = useState("")
 
-    // State for register to coverage agent
-    const [selectedCoverageAgentId, setSelectedCoverageAgentId] = useState<string>("")
+    // Single coverage agent selection used for register, allocate, and rewards split
+    const [coverageAgentId, setCoverageAgentId] = useState<string>("")
 
-    // State for allocate
-    const [allocateCoverageAgentId, setAllocateCoverageAgentId] = useState<string>("")
+    // State for allocate (strategies list)
     const [allocateStrategies, setAllocateStrategies] = useState<
         Array<{ address: string; magnitude: number }>
     >([{ address: "", magnitude: 0 }])
 
-    // State for set rewards split independently
-    const [splitCoverageAgentId, setSplitCoverageAgentId] = useState<string>("")
-    const [splitRewardsPercent, setSplitRewardsPercent] = useState(100)
+    const [splitRewardsPercent, setSplitRewardsPercent] = useState(0)
 
-    // Get selected coverage agent addresses from IDs
-    const selectedCoverageAgent = coverageAgents.find(
-        (c) => c.id === selectedCoverageAgentId
-    )?.address
-    const allocateCoverageAgent = coverageAgents.find(
-        (c) => c.id === allocateCoverageAgentId
-    )?.address
-    const splitCoverageAgent = coverageAgents.find((c) => c.id === splitCoverageAgentId)?.address
+    // Selected coverage agent address (used across register, allocate, rewards split)
+    const selectedCoverageAgent = coverageAgents.find((c) => c.id === coverageAgentId)?.address
 
     // Get EigenLayer contract addresses
     const { data: eigenAddresses } = useReadContract({
@@ -173,8 +172,8 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
         },
     })
 
-    // Get operator set ID for selected coverage agent (for registration)
-    const { data: registerOperatorSetId } = useReadContract({
+    // Get operator set ID for the selected coverage agent (used for register, allocate, rewards split)
+    const { data: operatorSetId } = useReadContract({
         address: serviceManagerAddress,
         abi: iEigenServiceManagerAbi,
         functionName: "getOperatorSetId",
@@ -188,35 +187,145 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
         },
     })
 
-    // Get operator set ID for allocation coverage agent
-    const { data: allocateOperatorSetId } = useReadContract({
-        address: serviceManagerAddress,
-        abi: iEigenServiceManagerAbi,
-        functionName: "getOperatorSetId",
-        args:
-            allocateCoverageAgent && isAddress(allocateCoverageAgent)
-                ? [allocateCoverageAgent as Address]
-                : undefined,
+    // Whether the operator is already registered to the selected coverage agent's operator set
+    const isRegisteredToSelectedAgent = useMemo(() => {
+        if (!registeredSets || operatorSetId === undefined || !serviceManagerAddress) return false
+        const sets = registeredSets as Array<{ avs: Address; id: number }>
+        return sets.some(
+            (set) =>
+                set.avs?.toLowerCase() === serviceManagerAddress?.toLowerCase() &&
+                Number(set.id) === Number(operatorSetId)
+        )
+    }, [registeredSets, operatorSetId, serviceManagerAddress])
+
+    // Coverage agent has no operator set on this provider (operatorSetId === 0) → must register from coverage agent page
+    const agentNotRegisteredToProvider =
+        !!coverageAgentId &&
+        operatorSetId !== undefined &&
+        Number(operatorSetId) === 0
+
+    // Get current rewards split from chain for the selected coverage agent
+    const operatorSetForSplit =
+        operatorSetId !== undefined && connectedAddress && serviceManagerAddress
+            ? { avs: serviceManagerAddress, id: Number(operatorSetId) }
+            : undefined
+    const splitReadArgs =
+        connectedAddress && operatorSetForSplit
+            ? ([connectedAddress, operatorSetForSplit] as const)
+            : undefined
+    const { data: currentRewardsSplitBps } = useReadContract({
+        address: eigenAddresses?.rewardsCoordinator,
+        abi: iRewardsCoordinatorAbi,
+        functionName: "getOperatorSetSplit",
+        args: splitReadArgs,
         chainId,
         query: {
-            enabled: !!chainId && !!allocateCoverageAgent && isAddress(allocateCoverageAgent),
+            enabled:
+                !!eigenAddresses?.rewardsCoordinator &&
+                !!chainId &&
+                !!splitReadArgs &&
+                !!connectedAddress,
         },
     })
 
-    // Get operator set ID for rewards split
-    const { data: splitOperatorSetId } = useReadContract({
-        address: serviceManagerAddress,
-        abi: iEigenServiceManagerAbi,
-        functionName: "getOperatorSetId",
+    // Sync slider to current on-chain rewards split when coverage agent selection changes
+    useEffect(() => {
+        if (currentRewardsSplitBps !== undefined && coverageAgentId) {
+            const percent = Math.round(Number(currentRewardsSplitBps) / 100)
+            setSplitRewardsPercent(percent)
+        }
+    }, [coverageAgentId, currentRewardsSplitBps])
+
+    // Load this operator's allocated strategies for the selected coverage agent's operator set
+    const { data: allocatedStrategiesForSet } = useReadContract({
+        address: eigenAddresses?.allocationManager,
+        abi: iAllocationManagerAbi,
+        functionName: "getAllocatedStrategies",
         args:
-            splitCoverageAgent && isAddress(splitCoverageAgent)
-                ? [splitCoverageAgent as Address]
+            operatorSetForSplit && connectedAddress
+                ? [connectedAddress, operatorSetForSplit]
                 : undefined,
         chainId,
         query: {
-            enabled: !!chainId && !!splitCoverageAgent && isAddress(splitCoverageAgent),
+            enabled:
+                !!eigenAddresses?.allocationManager &&
+                !!chainId &&
+                !!operatorSetForSplit &&
+                !!connectedAddress,
         },
     })
+
+    // Pre-fill strategy allocations form when coverage agent is selected and we have on-chain allocations
+    useEffect(() => {
+        if (
+            !chainId ||
+            !connectedAddress ||
+            !operatorSetForSplit ||
+            !eigenAddresses?.allocationManager ||
+            allocatedStrategiesForSet === undefined
+        ) {
+            return
+        }
+        const strategies = allocatedStrategiesForSet as Address[]
+        if (strategies.length === 0) {
+            setAllocateStrategies([{ address: "", magnitude: 0 }])
+            return
+        }
+        let cancelled = false
+        const run = async () => {
+            try {
+                const [allocations, maxMagnitudes] = await Promise.all([
+                    Promise.all(
+                        strategies.map((addr) =>
+                            readContract(config, {
+                                address: eigenAddresses!.allocationManager!,
+                                abi: iAllocationManagerAbi,
+                                functionName: "getAllocation",
+                                args: [connectedAddress, operatorSetForSplit!, addr],
+                                chainId,
+                            })
+                        )
+                    ),
+                    readContract(config, {
+                        address: eigenAddresses!.allocationManager!,
+                        abi: iAllocationManagerAbi,
+                        functionName: "getMaxMagnitudes",
+                        args: [connectedAddress, strategies],
+                        chainId,
+                    }),
+                ])
+                if (cancelled) return
+                const maxArr = maxMagnitudes as bigint[]
+                const next = strategies.map((addr, i) => {
+                    const current = allocations[i]?.currentMagnitude ?? 0n
+                    const max = maxArr?.[i] ?? 1n
+                    const pct =
+                        max === 0n ? 0 : Math.min(100, Math.round(Number((current * 100n) / max)))
+                    return { address: addr, magnitude: pct }
+                })
+                setAllocateStrategies(next)
+            } catch {
+                if (!cancelled)
+                    setAllocateStrategies(
+                        strategies.map((addr) => ({ address: addr, magnitude: 0 }))
+                    )
+            }
+        }
+        run()
+        return () => {
+            cancelled = true
+        }
+        // Refill only when selection or allocated data changes; omit operatorSetForSplit/eigenAddresses to avoid object-ref churn
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [
+        chainId,
+        connectedAddress,
+        coverageAgentId,
+        operatorSetId,
+        eigenAddresses?.allocationManager,
+        allocatedStrategiesForSet,
+        config,
+    ])
 
     // Strategy addresses for allocation (valid only) for fetching max magnitudes
     const allocateStrategyAddresses = useMemo(() => {
@@ -341,25 +450,22 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
     useEffect(() => {
         if (isSuccessRegisterAgent && !prevSuccessRegisterAgentRef.current) {
             refetchRegisteredSets()
-            setSelectedCoverageAgentId("")
         }
         prevSuccessRegisterAgentRef.current = isSuccessRegisterAgent
     }, [isSuccessRegisterAgent, refetchRegisteredSets])
 
-    // Handle successful allocation
+    // Handle successful allocation (reset strategy list only; keep coverage agent selected)
     useEffect(() => {
         if (isSuccessAllocate && !prevSuccessAllocateRef.current) {
-            setAllocateCoverageAgentId("")
             setAllocateStrategies([{ address: "", magnitude: 0 }])
         }
         prevSuccessAllocateRef.current = isSuccessAllocate
     }, [isSuccessAllocate])
 
-    // Handle successful standalone rewards split
+    // Handle successful standalone rewards split (slider syncs from chain via other effect)
     useEffect(() => {
         if (isSuccessSplitStandalone && !prevSuccessSplitStandaloneRef.current) {
-            setSplitCoverageAgentId("")
-            setSplitRewardsPercent(100)
+            // No state to clear; selection and slider stay in sync with chain
         }
         prevSuccessSplitStandaloneRef.current = isSuccessSplitStandalone
     }, [isSuccessSplitStandalone])
@@ -511,7 +617,7 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
             return
         }
 
-        if (registerOperatorSetId === undefined) {
+        if (operatorSetId === undefined) {
             toast.error("Loading operator set ID...")
             return
         }
@@ -525,7 +631,7 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
                     connectedAddress,
                     {
                         avs: serviceManagerAddress,
-                        operatorSetIds: [registerOperatorSetId as number],
+                        operatorSetIds: [operatorSetId as number],
                         data: "0x",
                     },
                 ],
@@ -549,7 +655,7 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
             return
         }
 
-        if (!splitCoverageAgent || !isAddress(splitCoverageAgent)) {
+        if (!selectedCoverageAgent || !isAddress(selectedCoverageAgent)) {
             toast.error("Please select a valid coverage agent")
             return
         }
@@ -560,7 +666,7 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
             return
         }
 
-        if (splitOperatorSetId === undefined) {
+        if (operatorSetId === undefined) {
             toast.error("Loading operator set ID...")
             return
         }
@@ -574,7 +680,7 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
                     connectedAddress,
                     {
                         avs: serviceManagerAddress,
-                        id: splitOperatorSetId as number,
+                        id: operatorSetId as number,
                     },
                     split,
                 ],
@@ -620,7 +726,7 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
             return
         }
 
-        if (!allocateCoverageAgent || !isAddress(allocateCoverageAgent)) {
+        if (!selectedCoverageAgent || !isAddress(selectedCoverageAgent)) {
             toast.error("Please select a valid coverage agent")
             return
         }
@@ -633,7 +739,7 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
             return
         }
 
-        if (allocateOperatorSetId === undefined) {
+        if (operatorSetId === undefined) {
             toast.error("Loading operator set ID...")
             return
         }
@@ -664,7 +770,7 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
                         {
                             operatorSet: {
                                 avs: serviceManagerAddress,
-                                id: allocateOperatorSetId as number,
+                                id: operatorSetId as number,
                             },
                             strategies: validStrategies.map((s) => s.address as Address),
                             newMagnitudes: magnitudes,
@@ -705,639 +811,700 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
 
     return (
         <>
-        <Card>
-            <CardHeader>
-                <div className="flex items-center gap-2">
-                    <User className="size-5" />
-                    <CardTitle>Operator Management</CardTitle>
-                </div>
-                <CardDescription>
-                    Manage EigenLayer operator registration and allocation directly from your wallet
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-                {/* Operator Status */}
-                <div className="rounded-lg border bg-muted/30 p-4">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-sm font-medium">Operator Status</p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                                Connected Wallet: <CopyableAddress address={connectedAddress} />
-                            </p>
-                        </div>
-                        <Badge variant={isOperator ? "default" : "secondary"}>
-                            {isOperator ? "Registered Operator" : "Not Registered"}
-                        </Badge>
+            <Card>
+                <CardHeader>
+                    <div className="flex items-center gap-2">
+                        <User className="size-5" />
+                        <CardTitle>Operator Management</CardTitle>
                     </div>
-                    {isOperator && currentMetadataURI && (
-                        <div className="mt-3 pt-3 border-t">
-                            <p className="text-xs text-muted-foreground">Current Metadata URI:</p>
-                            <p className="text-xs font-mono mt-1 break-all">{currentMetadataURI}</p>
-                        </div>
-                    )}
-                </div>
-
-                {!isOperator ? (
-                    <>
-                        <Separator />
-                        {/* Register as Operator */}
-                        <div className="space-y-4">
+                    <CardDescription>
+                        Manage EigenLayer operator registration and allocation directly from your
+                        wallet
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    {/* Operator Status */}
+                    <div className="rounded-lg border bg-muted/30 p-4">
+                        <div className="flex items-center justify-between">
                             <div>
-                                <h4 className="text-sm font-medium flex items-center gap-2">
-                                    <User className="size-4" />
-                                    Register as Operator
-                                </h4>
+                                <p className="text-sm font-medium">Operator Status</p>
                                 <p className="text-xs text-muted-foreground mt-1">
-                                    Register your wallet as an EigenLayer operator to provide
-                                    coverage
+                                    Connected Wallet: <CopyableAddress address={connectedAddress} />
                                 </p>
                             </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="metadataURI">Metadata URI *</Label>
-                                <Input
-                                    id="metadataURI"
-                                    placeholder="https://... or ipfs://..."
-                                    value={metadataURI}
-                                    onChange={(e) => setMetadataURI(e.target.value)}
-                                    disabled={isPendingRegister || isConfirmingRegister}
-                                />
+                            <Badge variant={isOperator ? "default" : "secondary"}>
+                                {isOperator ? "Registered Operator" : "Not Registered"}
+                            </Badge>
+                        </div>
+                        {isOperator && currentMetadataURI && (
+                            <div className="mt-3 pt-3 border-t">
                                 <p className="text-xs text-muted-foreground">
-                                    URL to operator metadata (JSON with name, description, etc.)
+                                    Current Metadata URI:
+                                </p>
+                                <p className="text-xs font-mono mt-1 break-all">
+                                    {currentMetadataURI}
                                 </p>
                             </div>
+                        )}
+                    </div>
 
-                            <div className="space-y-2">
-                                <Label htmlFor="delegationApprover">
-                                    Delegation Approver (optional)
-                                </Label>
-                                <Input
-                                    id="delegationApprover"
-                                    placeholder="0x... (leave empty for no approver)"
-                                    value={delegationApprover}
-                                    onChange={(e) => setDelegationApprover(e.target.value)}
-                                    className="font-mono"
-                                    disabled={isPendingRegister || isConfirmingRegister}
-                                />
-                                {delegationApprover && !isAddress(delegationApprover) && (
-                                    <p className="text-xs text-destructive">Invalid address</p>
-                                )}
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="stakerOptOut">Staker Opt-Out Window (blocks)</Label>
-                                <Input
-                                    id="stakerOptOut"
-                                    type="number"
-                                    placeholder="0"
-                                    value={stakerOptOutWindowBlocks}
-                                    onChange={(e) => setStakerOptOutWindowBlocks(e.target.value)}
-                                    disabled={isPendingRegister || isConfirmingRegister}
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                    Number of blocks before stakers can opt-out (0 for immediate)
-                                </p>
-                            </div>
-
-                            <Button
-                                onClick={handleRegisterAsOperator}
-                                disabled={!metadataURI || isPendingRegister || isConfirmingRegister}
-                                className="w-full"
-                            >
-                                {isPendingRegister || isConfirmingRegister ? (
-                                    <Loader2 className="mr-2 size-4 animate-spin" />
-                                ) : (
-                                    <User className="mr-2 size-4" />
-                                )}
-                                {isPendingRegister
-                                    ? "Confirm in wallet..."
-                                    : isConfirmingRegister
-                                      ? "Registering..."
-                                      : "Register as Operator"}
-                            </Button>
-
-                            {isSuccessRegister && (
-                                <p className="flex items-center gap-2 text-sm text-green-600">
-                                    <CheckCircle2 className="size-4" />
-                                    Successfully registered as operator!
-                                </p>
-                            )}
-                        </div>
-                    </>
-                ) : (
-                    <>
-                        <Separator />
-                        {/* Update Metadata */}
-                        <div className="space-y-4">
-                            <div>
-                                <h4 className="text-sm font-medium flex items-center gap-2">
-                                    <LinkIcon className="size-4" />
-                                    Update Operator Metadata
-                                </h4>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    Update your operator metadata URI
-                                </p>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="newMetadataURI">New Metadata URI</Label>
-                                <Input
-                                    id="newMetadataURI"
-                                    placeholder="https://... or ipfs://..."
-                                    value={newMetadataURI}
-                                    onChange={(e) => setNewMetadataURI(e.target.value)}
-                                    disabled={isPendingUpdate || isConfirmingUpdate}
-                                />
-                            </div>
-
-                            <Button
-                                onClick={handleUpdateMetadata}
-                                disabled={!newMetadataURI || isPendingUpdate || isConfirmingUpdate}
-                                className="w-full"
-                            >
-                                {isPendingUpdate || isConfirmingUpdate ? (
-                                    <Loader2 className="mr-2 size-4 animate-spin" />
-                                ) : (
-                                    <LinkIcon className="mr-2 size-4" />
-                                )}
-                                {isPendingUpdate
-                                    ? "Confirm in wallet..."
-                                    : isConfirmingUpdate
-                                      ? "Updating..."
-                                      : "Update Metadata"}
-                            </Button>
-
-                            {isSuccessUpdate && (
-                                <p className="flex items-center gap-2 text-sm text-green-600">
-                                    <CheckCircle2 className="size-4" />
-                                    Metadata updated successfully!
-                                </p>
-                            )}
-                        </div>
-
-                        <Separator />
-
-                        {/* Register to Coverage Agent */}
-                        <div className="space-y-4">
-                            <div>
-                                <h4 className="text-sm font-medium">Register to Coverage Agent</h4>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    Register your operator to a coverage agent's operator set
-                                </p>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label>Coverage Agent</Label>
-                                <CoverageAgentSelect
-                                    selectedContractId={selectedCoverageAgentId}
-                                    onSelectedContractIdChange={setSelectedCoverageAgentId}
-                                    contracts={coverageAgents}
-                                    disabled={isPendingRegisterAgent || isConfirmingRegisterAgent}
-                                />
-                            </div>
-
-                            <Button
-                                onClick={handleRegisterToCoverageAgent}
-                                disabled={
-                                    !selectedCoverageAgent ||
-                                    isPendingRegisterAgent ||
-                                    isConfirmingRegisterAgent
-                                }
-                                className="w-full"
-                            >
-                                {isPendingRegisterAgent || isConfirmingRegisterAgent ? (
-                                    <Loader2 className="mr-2 size-4 animate-spin" />
-                                ) : (
-                                    <DollarSign className="mr-2 size-4" />
-                                )}
-                                {isPendingRegisterAgent
-                                    ? "Confirm in wallet..."
-                                    : isConfirmingRegisterAgent
-                                      ? "Registering..."
-                                      : "Register to Operator Set"}
-                            </Button>
-
-                            {isSuccessRegisterAgent && (
-                                <p className="flex items-center gap-2 text-sm text-green-600">
-                                    <CheckCircle2 className="size-4" />
-                                    Registered to coverage agent!
-                                </p>
-                            )}
-                        </div>
-
-                        <Separator />
-
-                        {/* Allocate to Strategy */}
-                        <div className="space-y-4">
-                            <div>
-                                <h4 className="text-sm font-medium">Allocate to Strategy</h4>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    Allocate stake to a coverage agent and strategy (can only be
-                                    done after ~17.5 days from registration)
-                                </p>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label>Coverage Agent</Label>
-                                <CoverageAgentSelect
-                                    selectedContractId={allocateCoverageAgentId}
-                                    onSelectedContractIdChange={setAllocateCoverageAgentId}
-                                    contracts={coverageAgents}
-                                    disabled={isPendingAllocate || isConfirmingAllocate}
-                                />
-                            </div>
-
-                            <div className="space-y-3">
-                                <div className="flex items-center justify-between">
-                                    <Label>Strategy Allocations</Label>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={addAllocateStrategy}
-                                        disabled={isPendingAllocate || isConfirmingAllocate}
-                                    >
-                                        <Plus className="mr-1 size-3" />
-                                        Add Strategy
-                                    </Button>
+                    {!isOperator ? (
+                        <>
+                            <Separator />
+                            {/* Register as Operator */}
+                            <div className="space-y-4">
+                                <div>
+                                    <h4 className="text-sm font-medium flex items-center gap-2">
+                                        <User className="size-4" />
+                                        Register as Operator
+                                    </h4>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        Register your wallet as an EigenLayer operator to provide
+                                        coverage
+                                    </p>
                                 </div>
 
-                                <p className="text-xs text-muted-foreground">
-                                    Configure which strategies to allocate to and their allocation
-                                    percentages
-                                </p>
+                                <div className="space-y-2">
+                                    <Label htmlFor="metadataURI">Metadata URI *</Label>
+                                    <Input
+                                        id="metadataURI"
+                                        placeholder="https://... or ipfs://..."
+                                        value={metadataURI}
+                                        onChange={(e) => setMetadataURI(e.target.value)}
+                                        disabled={isPendingRegister || isConfirmingRegister}
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        URL to operator metadata (JSON with name, description, etc.)
+                                    </p>
+                                </div>
 
-                                <div className="space-y-3">
-                                    {allocateStrategies.map((strategy, index) => (
-                                        <div
-                                            key={index}
-                                            className="flex gap-2 items-start p-3 rounded-lg border bg-muted/30"
-                                        >
-                                            <div className="flex-1 space-y-3">
-                                                <StrategySelect
-                                                    value={strategy.address}
-                                                    onValueChange={(value) =>
-                                                        updateAllocateStrategyAddress(index, value)
-                                                    }
-                                                    serviceManagerAddress={serviceManagerAddress}
-                                                    chainId={chainId}
-                                                    placeholder="Select strategy..."
-                                                    disabled={
-                                                        isPendingAllocate || isConfirmingAllocate
-                                                    }
-                                                />
-                                                <div className="space-y-2">
-                                                    <div className="flex items-center justify-between">
-                                                        <span className="text-xs text-muted-foreground">
-                                                            Allocation
-                                                        </span>
-                                                        <span className="text-sm font-medium tabular-nums">
-                                                            {strategy.magnitude}%
-                                                        </span>
-                                                    </div>
-                                                    <Slider
-                                                        value={[strategy.magnitude]}
-                                                        onValueChange={(values) =>
-                                                            updateAllocateStrategyMagnitude(
-                                                                index,
-                                                                values[0] ?? 0
-                                                            )
-                                                        }
-                                                        min={0}
-                                                        max={100}
-                                                        step={1}
-                                                        disabled={
-                                                            isPendingAllocate ||
-                                                            isConfirmingAllocate
-                                                        }
-                                                    />
-                                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="delegationApprover">
+                                        Delegation Approver (optional)
+                                    </Label>
+                                    <Input
+                                        id="delegationApprover"
+                                        placeholder="0x... (leave empty for no approver)"
+                                        value={delegationApprover}
+                                        onChange={(e) => setDelegationApprover(e.target.value)}
+                                        className="font-mono"
+                                        disabled={isPendingRegister || isConfirmingRegister}
+                                    />
+                                    {delegationApprover && !isAddress(delegationApprover) && (
+                                        <p className="text-xs text-destructive">Invalid address</p>
+                                    )}
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="stakerOptOut">
+                                        Staker Opt-Out Window (blocks)
+                                    </Label>
+                                    <Input
+                                        id="stakerOptOut"
+                                        type="number"
+                                        placeholder="0"
+                                        value={stakerOptOutWindowBlocks}
+                                        onChange={(e) =>
+                                            setStakerOptOutWindowBlocks(e.target.value)
+                                        }
+                                        disabled={isPendingRegister || isConfirmingRegister}
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        Number of blocks before stakers can opt-out (0 for
+                                        immediate)
+                                    </p>
+                                </div>
+
+                                <Button
+                                    onClick={handleRegisterAsOperator}
+                                    disabled={
+                                        !metadataURI || isPendingRegister || isConfirmingRegister
+                                    }
+                                    className="w-full"
+                                >
+                                    {isPendingRegister || isConfirmingRegister ? (
+                                        <Loader2 className="mr-2 size-4 animate-spin" />
+                                    ) : (
+                                        <User className="mr-2 size-4" />
+                                    )}
+                                    {isPendingRegister
+                                        ? "Confirm in wallet..."
+                                        : isConfirmingRegister
+                                          ? "Registering..."
+                                          : "Register as Operator"}
+                                </Button>
+
+                                {isSuccessRegister && (
+                                    <p className="flex items-center gap-2 text-sm text-green-600">
+                                        <CheckCircle2 className="size-4" />
+                                        Successfully registered as operator!
+                                    </p>
+                                )}
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <Separator />
+                            {/* Update Metadata */}
+                            <div className="space-y-4">
+                                <div>
+                                    <h4 className="text-sm font-medium flex items-center gap-2">
+                                        <LinkIcon className="size-4" />
+                                        Update Operator Metadata
+                                    </h4>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        Update your operator metadata URI
+                                    </p>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="newMetadataURI">New Metadata URI</Label>
+                                    <Input
+                                        id="newMetadataURI"
+                                        placeholder="https://... or ipfs://..."
+                                        value={newMetadataURI}
+                                        onChange={(e) => setNewMetadataURI(e.target.value)}
+                                        disabled={isPendingUpdate || isConfirmingUpdate}
+                                    />
+                                </div>
+
+                                <Button
+                                    onClick={handleUpdateMetadata}
+                                    disabled={
+                                        !newMetadataURI || isPendingUpdate || isConfirmingUpdate
+                                    }
+                                    className="w-full"
+                                >
+                                    {isPendingUpdate || isConfirmingUpdate ? (
+                                        <Loader2 className="mr-2 size-4 animate-spin" />
+                                    ) : (
+                                        <LinkIcon className="mr-2 size-4" />
+                                    )}
+                                    {isPendingUpdate
+                                        ? "Confirm in wallet..."
+                                        : isConfirmingUpdate
+                                          ? "Updating..."
+                                          : "Update Metadata"}
+                                </Button>
+
+                                {isSuccessUpdate && (
+                                    <p className="flex items-center gap-2 text-sm text-green-600">
+                                        <CheckCircle2 className="size-4" />
+                                        Metadata updated successfully!
+                                    </p>
+                                )}
+                            </div>
+
+                            <Separator />
+
+                            <div className="space-y-4 border p-4">
+                                {/* Coverage Agent selection - used for register, allocate, and rewards split */}
+                                <div className="space-y-2">
+                                    <Label>Coverage Agent Setup</Label>
+                                    <CoverageAgentSelect
+                                        selectedContractId={coverageAgentId}
+                                        onSelectedContractIdChange={setCoverageAgentId}
+                                        contracts={coverageAgents}
+                                        disabled={
+                                            isPendingRegisterAgent ||
+                                            isConfirmingRegisterAgent ||
+                                            isPendingAllocate ||
+                                            isConfirmingAllocate ||
+                                            isPendingSplitStandalone ||
+                                            isConfirmingSplitStandalone
+                                        }
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        Select once to use for Register, Allocate to Strategies, and
+                                        Update Rewards Split below
+                                    </p>
+                                    {agentNotRegisteredToProvider && (
+                                        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2 text-xs">
+                                            <p className="text-muted-foreground">
+                                                This coverage agent is not registered with this
+                                                coverage provider. Register it from the coverage
+                                                agent page.
+                                            </p>
+                                            <Link
+                                                to={`/interact/${coverageAgentId}`}
+                                                className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground hover:opacity-90"
+                                            >
+                                                <ExternalLink className="size-3.5" />
+                                                Go to Coverage Agent
+                                            </Link>
+                                        </div>
+                                    )}
+                                    {operatorSetId !== undefined &&
+                                        Number(operatorSetId) !== 0 &&
+                                        coverageAgentId && (
+                                            <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs">
+                                                <span className="text-muted-foreground">
+                                                    Operator set for this coverage agent:{" "}
+                                                </span>
+                                                <span className="font-mono font-medium">
+                                                    #{Number(operatorSetId)}
+                                                </span>
                                             </div>
+                                        )}
+                                </div>
+
+                                {/* Register to Coverage Agent */}
+                                <div className="space-y-4">
+                                    <div>
+                                        <h4 className="text-sm font-medium">
+                                            Register to Coverage Agent
+                                        </h4>
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                            Register your operator to a coverage agent's operator
+                                            set
+                                        </p>
+                                    </div>
+
+                                    <Button
+                                        onClick={handleRegisterToCoverageAgent}
+                                        disabled={
+                                            !coverageAgentId ||
+                                            !selectedCoverageAgent ||
+                                            agentNotRegisteredToProvider ||
+                                            isRegisteredToSelectedAgent ||
+                                            isPendingRegisterAgent ||
+                                            isConfirmingRegisterAgent
+                                        }
+                                        className="w-full"
+                                    >
+                                        {isPendingRegisterAgent || isConfirmingRegisterAgent ? (
+                                            <Loader2 className="mr-2 size-4 animate-spin" />
+                                        ) : isRegisteredToSelectedAgent ? (
+                                            <CheckCircle2 className="mr-2 size-4" />
+                                        ) : (
+                                            <DollarSign className="mr-2 size-4" />
+                                        )}
+                                        {isPendingRegisterAgent
+                                            ? "Confirm in wallet..."
+                                            : isConfirmingRegisterAgent
+                                              ? "Registering..."
+                                              : isRegisteredToSelectedAgent
+                                                ? "Already Registered"
+                                                : "Register to Operator Set"}
+                                    </Button>
+
+                                    {isSuccessRegisterAgent && (
+                                        <p className="flex items-center gap-2 text-sm text-green-600">
+                                            <CheckCircle2 className="size-4" />
+                                            Registered to coverage agent!
+                                        </p>
+                                    )}
+                                </div>
+
+                                <Separator />
+
+                                {/* Allocate to Strategy */}
+                                <div className="space-y-4">
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <Label>Strategy Allocations</Label>
                                             <Button
                                                 type="button"
-                                                variant="ghost"
-                                                size="icon"
-                                                onClick={() => removeAllocateStrategy(index)}
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={addAllocateStrategy}
                                                 disabled={
-                                                    allocateStrategies.length === 1 ||
+                                                    agentNotRegisteredToProvider ||
                                                     isPendingAllocate ||
                                                     isConfirmingAllocate
                                                 }
-                                                className="shrink-0 text-muted-foreground hover:text-destructive"
                                             >
-                                                <Trash2 className="size-4" />
+                                                <Plus className="mr-1 size-3" />
+                                                Add Strategy
                                             </Button>
                                         </div>
-                                    ))}
-                                </div>
-                            </div>
 
-                            <Button
-                                onClick={handleAllocate}
-                                disabled={
-                                    !allocateCoverageAgent ||
-                                    allocateStrategies.every(
-                                        (s) =>
-                                            !s.address || !isAddress(s.address) || s.magnitude <= 0
-                                    ) ||
-                                    isPendingAllocate ||
-                                    isConfirmingAllocate ||
-                                    !maxAllocationMagnitudes ||
-                                    (maxAllocationMagnitudes as bigint[]).length !==
-                                        allocateStrategyAddresses.length
-                                }
-                                className="w-full"
-                            >
-                                {isPendingAllocate || isConfirmingAllocate ? (
-                                    <Loader2 className="mr-2 size-4 animate-spin" />
-                                ) : (
-                                    <DollarSign className="mr-2 size-4" />
-                                )}
-                                {isPendingAllocate
-                                    ? "Confirm in wallet..."
-                                    : isConfirmingAllocate
-                                      ? "Allocating..."
-                                      : "Allocate Stake"}
-                            </Button>
+                                        <p className="text-xs text-muted-foreground">
+                                            Configure which strategies to allocate to and their
+                                            allocation percentages. Current allocations are
+                                            pre-filled when you select a coverage agent.
+                                        </p>
 
-                            {isSuccessAllocate && (
-                                <p className="flex items-center gap-2 text-sm text-green-600">
-                                    <CheckCircle2 className="size-4" />
-                                    Stake allocated successfully!
-                                </p>
-                            )}
-                        </div>
-
-                        <Separator />
-
-                        {/* Update Rewards Split */}
-                        <div className="space-y-4">
-                            <div>
-                                <h4 className="text-sm font-medium flex items-center gap-2">
-                                    <DollarSign className="size-4" />
-                                    Update Rewards Split
-                                </h4>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    Update the rewards split for a coverage agent you're already
-                                    registered to
-                                </p>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label>Coverage Agent</Label>
-                                <CoverageAgentSelect
-                                    selectedContractId={splitCoverageAgentId}
-                                    onSelectedContractIdChange={setSplitCoverageAgentId}
-                                    contracts={coverageAgents}
-                                    disabled={
-                                        isPendingSplitStandalone || isConfirmingSplitStandalone
-                                    }
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <Label>Rewards Split</Label>
-                                    <span className="text-sm font-medium tabular-nums">
-                                        {splitRewardsPercent}%
-                                    </span>
-                                </div>
-                                <Slider
-                                    value={[splitRewardsPercent]}
-                                    onValueChange={(value) => setSplitRewardsPercent(value[0] ?? 0)}
-                                    min={0}
-                                    max={100}
-                                    step={1}
-                                    disabled={
-                                        isPendingSplitStandalone || isConfirmingSplitStandalone
-                                    }
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                    Percentage of rewards to send to the coverage agent
-                                </p>
-                            </div>
-
-                            <Button
-                                onClick={handleSetRewardsSplitStandalone}
-                                disabled={
-                                    !splitCoverageAgent ||
-                                    isPendingSplitStandalone ||
-                                    isConfirmingSplitStandalone
-                                }
-                                className="w-full"
-                            >
-                                {isPendingSplitStandalone || isConfirmingSplitStandalone ? (
-                                    <Loader2 className="mr-2 size-4 animate-spin" />
-                                ) : (
-                                    <DollarSign className="mr-2 size-4" />
-                                )}
-                                {isPendingSplitStandalone
-                                    ? "Confirm in wallet..."
-                                    : isConfirmingSplitStandalone
-                                      ? "Updating..."
-                                      : "Update Rewards Split"}
-                            </Button>
-
-                            {isSuccessSplitStandalone && (
-                                <p className="flex items-center gap-2 text-sm text-green-600">
-                                    <CheckCircle2 className="size-4" />
-                                    Rewards split updated successfully!
-                                </p>
-                            )}
-                        </div>
-
-                        {/* Show registered sets */}
-                        {registeredSets &&
-                            (registeredSets as Array<{ avs: Address; id: number }>).length > 0 && (
-                                <>
-                                    <Separator />
-                                    <div className="space-y-2">
-                                        <h4 className="text-sm font-medium">
-                                            Registered Operator Sets
-                                        </h4>
-                                        <div className="space-y-2">
-                                            {(
-                                                registeredSets as Array<{
-                                                    avs: Address
-                                                    id: number
-                                                }>
-                                            ).map((set, index: number) => {
-                                                const isCurrentAvs =
-                                                    set.avs?.toLowerCase() ===
-                                                    serviceManagerAddress?.toLowerCase()
-                                                const avsInStorage = serviceManagers.find(
-                                                    (c) =>
-                                                        c.address?.toLowerCase() ===
-                                                        set.avs?.toLowerCase()
-                                                )
-                                                return (
-                                                    <div
-                                                        key={index}
-                                                        className="rounded-lg border bg-muted/30 p-3 text-xs"
+                                        <div className="space-y-3">
+                                            {allocateStrategies.map((strategy, index) => (
+                                                <div
+                                                    key={index}
+                                                    className="flex gap-2 items-start p-3 rounded-lg border bg-muted/30"
+                                                >
+                                                    <div className="flex-1 space-y-3">
+                                                        <StrategySelect
+                                                            value={strategy.address}
+                                                            onValueChange={(value) =>
+                                                                updateAllocateStrategyAddress(
+                                                                    index,
+                                                                    value
+                                                                )
+                                                            }
+                                                            serviceManagerAddress={
+                                                                serviceManagerAddress
+                                                            }
+                                                            chainId={chainId}
+                                                            placeholder="Select strategy..."
+                                                            disabled={
+                                                                agentNotRegisteredToProvider ||
+                                                                isPendingAllocate ||
+                                                                isConfirmingAllocate
+                                                            }
+                                                        />
+                                                        <div className="space-y-2">
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-xs text-muted-foreground">
+                                                                    Allocation
+                                                                </span>
+                                                                <span className="text-sm font-medium tabular-nums">
+                                                                    {strategy.magnitude}%
+                                                                </span>
+                                                            </div>
+                                                            <Slider
+                                                                value={[strategy.magnitude]}
+                                                                onValueChange={(values) =>
+                                                                    updateAllocateStrategyMagnitude(
+                                                                        index,
+                                                                        values[0] ?? 0
+                                                                    )
+                                                                }
+                                                                min={0}
+                                                                max={100}
+                                                                step={1}
+                                                                disabled={
+                                                                    agentNotRegisteredToProvider ||
+                                                                    isPendingAllocate ||
+                                                                    isConfirmingAllocate
+                                                                }
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() =>
+                                                            removeAllocateStrategy(index)
+                                                        }
+                                                        disabled={
+                                                            allocateStrategies.length === 1 ||
+                                                            agentNotRegisteredToProvider ||
+                                                            isPendingAllocate ||
+                                                            isConfirmingAllocate
+                                                        }
+                                                        className="shrink-0 text-muted-foreground hover:text-destructive"
                                                     >
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="text-muted-foreground">
-                                                                Operator Set ID:
-                                                            </span>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="font-mono">
-                                                                    {set.id}
+                                                        <Trash2 className="size-4" />
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <Button
+                                        onClick={handleAllocate}
+                                        disabled={
+                                            agentNotRegisteredToProvider ||
+                                            !selectedCoverageAgent ||
+                                            allocateStrategies.every(
+                                                (s) =>
+                                                    !s.address ||
+                                                    !isAddress(s.address) ||
+                                                    s.magnitude <= 0
+                                            ) ||
+                                            isPendingAllocate ||
+                                            isConfirmingAllocate ||
+                                            !maxAllocationMagnitudes ||
+                                            (maxAllocationMagnitudes as bigint[]).length !==
+                                                allocateStrategyAddresses.length
+                                        }
+                                        className="w-full"
+                                    >
+                                        {isPendingAllocate || isConfirmingAllocate ? (
+                                            <Loader2 className="mr-2 size-4 animate-spin" />
+                                        ) : (
+                                            <DollarSign className="mr-2 size-4" />
+                                        )}
+                                        {isPendingAllocate
+                                            ? "Confirm in wallet..."
+                                            : isConfirmingAllocate
+                                              ? "Allocating..."
+                                              : "Allocate Stake"}
+                                    </Button>
+
+                                    {isSuccessAllocate && (
+                                        <p className="flex items-center gap-2 text-sm text-green-600">
+                                            <CheckCircle2 className="size-4" />
+                                            Stake allocated successfully!
+                                        </p>
+                                    )}
+                                </div>
+
+                                <Separator />
+
+                                {/* Update Rewards Split */}
+                                <div className="space-y-4">
+                                    <div>
+                                        <h4 className="text-sm font-medium flex items-center gap-2">
+                                            <DollarSign className="size-4" />
+                                            Update Rewards Split
+                                        </h4>
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                            Update the rewards split for the selected coverage agent
+                                        </p>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <Label>Rewards Split</Label>
+                                            <span className="text-sm font-medium tabular-nums">
+                                                {splitRewardsPercent}%
+                                            </span>
+                                        </div>
+                                        <Slider
+                                            value={[splitRewardsPercent]}
+                                            onValueChange={(value) =>
+                                                setSplitRewardsPercent(value[0] ?? 0)
+                                            }
+                                            min={0}
+                                            max={100}
+                                            step={1}
+                                            disabled={
+                                                agentNotRegisteredToProvider ||
+                                                isPendingSplitStandalone ||
+                                                isConfirmingSplitStandalone
+                                            }
+                                        />
+                                        <p className="text-xs text-muted-foreground">
+                                            Percentage of rewards to send to the coverage agent
+                                        </p>
+                                    </div>
+
+                                    <Button
+                                        onClick={handleSetRewardsSplitStandalone}
+                                        disabled={
+                                            agentNotRegisteredToProvider ||
+                                            !selectedCoverageAgent ||
+                                            isPendingSplitStandalone ||
+                                            isConfirmingSplitStandalone
+                                        }
+                                        className="w-full"
+                                    >
+                                        {isPendingSplitStandalone || isConfirmingSplitStandalone ? (
+                                            <Loader2 className="mr-2 size-4 animate-spin" />
+                                        ) : (
+                                            <DollarSign className="mr-2 size-4" />
+                                        )}
+                                        {isPendingSplitStandalone
+                                            ? "Confirm in wallet..."
+                                            : isConfirmingSplitStandalone
+                                              ? "Updating..."
+                                              : "Update Rewards Split"}
+                                    </Button>
+
+                                    {isSuccessSplitStandalone && (
+                                        <p className="flex items-center gap-2 text-sm text-green-600">
+                                            <CheckCircle2 className="size-4" />
+                                            Rewards split updated successfully!
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Show registered sets */}
+                            {registeredSets &&
+                                (registeredSets as Array<{ avs: Address; id: number }>).length >
+                                    0 && (
+                                    <>
+                                        <Separator />
+                                        <div className="space-y-2">
+                                            <h4 className="text-sm font-medium">
+                                                Registered Operator Sets
+                                            </h4>
+                                            <div className="space-y-2">
+                                                {(
+                                                    registeredSets as Array<{
+                                                        avs: Address
+                                                        id: number
+                                                    }>
+                                                ).map((set, index: number) => {
+                                                    const isCurrentAvs =
+                                                        set.avs?.toLowerCase() ===
+                                                        serviceManagerAddress?.toLowerCase()
+                                                    const avsInStorage = serviceManagers.find(
+                                                        (c) =>
+                                                            c.address?.toLowerCase() ===
+                                                            set.avs?.toLowerCase()
+                                                    )
+                                                    return (
+                                                        <div
+                                                            key={index}
+                                                            className="rounded-lg border bg-muted/30 p-3 text-xs"
+                                                        >
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-muted-foreground">
+                                                                    Operator Set ID:
+                                                                </span>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-mono">
+                                                                        {set.id}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center justify-between mt-1 gap-2 flex-wrap">
+                                                                <span className="text-muted-foreground">
+                                                                    AVS:
+                                                                </span>
+                                                                <span className="flex items-center gap-2">
+                                                                    {isCurrentAvs ? (
+                                                                        <Badge
+                                                                            variant="default"
+                                                                            className="text-xs"
+                                                                        >
+                                                                            THIS AVS
+                                                                        </Badge>
+                                                                    ) : avsInStorage ? (
+                                                                        <Link
+                                                                            to={`/interact/${avsInStorage.id}`}
+                                                                            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium bg-primary text-primary-foreground hover:opacity-90"
+                                                                        >
+                                                                            <ExternalLink className="size-3" />
+                                                                            Go to AVS
+                                                                        </Link>
+                                                                    ) : (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                setAddAvsPayload({
+                                                                                    address:
+                                                                                        set.avs,
+                                                                                    chainId:
+                                                                                        chainId ??
+                                                                                        0,
+                                                                                })
+                                                                                setAddAvsName(
+                                                                                    generateContractName(
+                                                                                        "CoverageProvider",
+                                                                                        contracts
+                                                                                    )
+                                                                                )
+                                                                                setAddAvsDialogOpen(
+                                                                                    true
+                                                                                )
+                                                                            }}
+                                                                            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+                                                                        >
+                                                                            <Plus className="size-3" />
+                                                                            Add
+                                                                        </button>
+                                                                    )}
+                                                                    <CopyableAddress
+                                                                        address={set.avs}
+                                                                    />
                                                                 </span>
                                                             </div>
                                                         </div>
-                                                        <div className="flex items-center justify-between mt-1 gap-2 flex-wrap">
-                                                            <span className="text-muted-foreground">
-                                                                AVS:
-                                                            </span>
-                                                            <span className="flex items-center gap-2">
-                                                                {isCurrentAvs ? (
-                                                                    <Badge
-                                                                        variant="default"
-                                                                        className="text-xs"
-                                                                    >
-                                                                        THIS AVS
-                                                                    </Badge>
-                                                                ) : avsInStorage ? (
-                                                                    <Link
-                                                                        to={`/interact/${avsInStorage.id}`}
-                                                                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium bg-primary text-primary-foreground hover:opacity-90"
-                                                                    >
-                                                                        <ExternalLink className="size-3" />
-                                                                        Go to AVS
-                                                                    </Link>
-                                                                ) : (
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            setAddAvsPayload({
-                                                                                address: set.avs,
-                                                                                chainId:
-                                                                                    chainId ?? 0,
-                                                                            })
-                                                                            setAddAvsName(
-                                                                                generateContractName(
-                                                                                    "CoverageProvider",
-                                                                                    contracts
-                                                                                )
-                                                                            )
-                                                                            setAddAvsDialogOpen(
-                                                                                true
-                                                                            )
-                                                                        }}
-                                                                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground"
-                                                                    >
-                                                                        <Plus className="size-3" />
-                                                                        Add
-                                                                    </button>
-                                                                )}
-                                                                <CopyableAddress
-                                                                    address={set.avs}
-                                                                />
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                )
-                                            })}
+                                                    )
+                                                })}
+                                            </div>
                                         </div>
-                                    </div>
-                                </>
-                            )}
-                    </>
-                )}
-            </CardContent>
-        </Card>
+                                    </>
+                                )}
+                        </>
+                    )}
+                </CardContent>
+            </Card>
 
-        {/* Quick-add AVS dialog */}
-        <Dialog
-            open={addAvsDialogOpen}
-            onOpenChange={(open) => {
-                setAddAvsDialogOpen(open)
-                if (!open) setAddAvsPayload(null)
-            }}
-        >
-            <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                    <DialogTitle>Add AVS to app</DialogTitle>
-                    <DialogDescription>
-                        Add this AVS (Coverage Provider) to your saved contracts to open it quickly
-                        later.
-                    </DialogDescription>
-                </DialogHeader>
-                {addAvsPayload && (
-                    <div className="space-y-4 py-2">
-                        <div className="space-y-2">
-                            <Label htmlFor="add-avs-name">Name</Label>
-                            <Input
-                                id="add-avs-name"
-                                value={addAvsName}
-                                onChange={(e) => setAddAvsName(e.target.value)}
-                                placeholder="e.g. CoverageProvider-dune"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label>Address</Label>
-                            <div className="rounded-md border bg-muted/30 px-3 py-2 font-mono text-xs">
-                                <CopyableAddress address={addAvsPayload.address} />
+            {/* Quick-add AVS dialog */}
+            <Dialog
+                open={addAvsDialogOpen}
+                onOpenChange={(open) => {
+                    setAddAvsDialogOpen(open)
+                    if (!open) setAddAvsPayload(null)
+                }}
+            >
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Add AVS to app</DialogTitle>
+                        <DialogDescription>
+                            Add this AVS (Coverage Provider) to your saved contracts to open it
+                            quickly later.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {addAvsPayload && (
+                        <div className="space-y-4 py-2">
+                            <div className="space-y-2">
+                                <Label htmlFor="add-avs-name">Name</Label>
+                                <Input
+                                    id="add-avs-name"
+                                    value={addAvsName}
+                                    onChange={(e) => setAddAvsName(e.target.value)}
+                                    placeholder="e.g. CoverageProvider-dune"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Address</Label>
+                                <div className="rounded-md border bg-muted/30 px-3 py-2 font-mono text-xs">
+                                    <CopyableAddress address={addAvsPayload.address} />
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Chain</Label>
+                                <p className="text-sm text-muted-foreground">
+                                    {getSupportedChainsInfo().find(
+                                        (c) => c.id === addAvsPayload.chainId
+                                    )?.name ?? `Chain ${addAvsPayload.chainId}`}
+                                </p>
                             </div>
                         </div>
-                        <div className="space-y-2">
-                            <Label>Chain</Label>
-                            <p className="text-sm text-muted-foreground">
-                                {getSupportedChainsInfo().find(
-                                    (c) => c.id === addAvsPayload.chainId
-                                )?.name ?? `Chain ${addAvsPayload.chainId}`}
-                            </p>
-                        </div>
-                    </div>
-                )}
-                <DialogFooter>
-                    <Button
-                        variant="outline"
-                        onClick={() => {
-                            setAddAvsDialogOpen(false)
-                            setAddAvsPayload(null)
-                        }}
-                    >
-                        Cancel
-                    </Button>
-                    <Button
-                        onClick={() => {
-                            if (!addAvsPayload || !addAvsName.trim()) return
-                            const exists = contracts.some(
-                                (c) =>
-                                    c.address.toLowerCase() ===
-                                        addAvsPayload.address.toLowerCase() &&
-                                    c.chainId === addAvsPayload.chainId
-                            )
-                            if (exists) {
-                                toast.error("This AVS is already in your contracts")
-                                return
-                            }
-                            const nameExists = contracts.some(
-                                (c) =>
-                                    c.name.toLowerCase() === addAvsName.trim().toLowerCase()
-                            )
-                            if (nameExists) {
-                                toast.error("A contract with this name already exists")
-                                return
-                            }
-                            addContract({
-                                name: addAvsName.trim(),
-                                address: addAvsPayload.address,
-                                type: "CoverageProvider",
-                                chainId: addAvsPayload.chainId,
-                            })
-                            toast.success("AVS added. You can open it from your contracts.")
-                            setAddAvsDialogOpen(false)
-                            setAddAvsPayload(null)
-                        }}
-                        disabled={!addAvsPayload || !addAvsName.trim()}
-                    >
-                        Add AVS
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-    </>
+                    )}
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                setAddAvsDialogOpen(false)
+                                setAddAvsPayload(null)
+                            }}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={() => {
+                                if (!addAvsPayload || !addAvsName.trim()) return
+                                const exists = contracts.some(
+                                    (c) =>
+                                        c.address.toLowerCase() ===
+                                            addAvsPayload.address.toLowerCase() &&
+                                        c.chainId === addAvsPayload.chainId
+                                )
+                                if (exists) {
+                                    toast.error("This AVS is already in your contracts")
+                                    return
+                                }
+                                const nameExists = contracts.some(
+                                    (c) => c.name.toLowerCase() === addAvsName.trim().toLowerCase()
+                                )
+                                if (nameExists) {
+                                    toast.error("A contract with this name already exists")
+                                    return
+                                }
+                                addContract({
+                                    name: addAvsName.trim(),
+                                    address: addAvsPayload.address,
+                                    type: "CoverageProvider",
+                                    chainId: addAvsPayload.chainId,
+                                })
+                                toast.success("AVS added. You can open it from your contracts.")
+                                setAddAvsDialogOpen(false)
+                                setAddAvsPayload(null)
+                            }}
+                            disabled={!addAvsPayload || !addAvsName.trim()}
+                        >
+                            Add AVS
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </>
     )
 }
