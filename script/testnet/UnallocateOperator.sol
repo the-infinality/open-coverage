@@ -51,9 +51,7 @@ contract UnallocateOperator is Script, EigenHelper {
                 zeroMagnitudes[j] = 0;
             }
             params[idx] = IAllocationManagerTypes.AllocateParams({
-                operatorSet: sets[i],
-                strategies: strategies,
-                newMagnitudes: zeroMagnitudes
+                operatorSet: sets[i], strategies: strategies, newMagnitudes: zeroMagnitudes
             });
             idx++;
             console.log("  Deallocate from operator set:");

@@ -10,7 +10,11 @@ import {UniswapAddressbook} from "../../utils/UniswapHelper.sol";
 import {EigenCoverageDiamond} from "../../src/providers/eigenlayer/EigenCoverageDiamond.sol";
 import {IEigenServiceManager} from "../../src/providers/eigenlayer/interfaces/IEigenServiceManager.sol";
 import {ExampleCoverageAgent} from "../../src/ExampleCoverageAgent.sol";
-import {IAssetPriceOracleAndSwapper, AssetPair, PriceStrategy} from "../../src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {
+    IAssetPriceOracleAndSwapper,
+    AssetPair,
+    PriceStrategy
+} from "../../src/interfaces/IAssetPriceOracleAndSwapper.sol";
 
 struct DeployToTestnetResult {
     address diamondCut;
@@ -63,8 +67,7 @@ contract DeployTestnet is DeployerHelperScript {
         console.log("      UniswapV3SwapperEngine:", r.swapperEngine);
 
         console.log("[5/11] Building facet cuts and deploying EigenCoverageDiamond...");
-        string memory metadataURI =
-            vm.envOr("AVS_METADATA_URI", string("https://coverage.example.com/metadata.json"));
+        string memory metadataURI = vm.envOr("AVS_METADATA_URI", string("https://coverage.example.com/metadata.json"));
         IDiamondCut.FacetCut[] memory cuts = _buildAllFacetCuts(
             r.diamondCut,
             r.diamondLoupe,
@@ -86,17 +89,18 @@ contract DeployTestnet is DeployerHelperScript {
         console.log("[7/11] Registering USDC/WETH asset pair on EigenCoverageDiamond...");
         (address usdc, address weth) = _getUsdcAndWeth();
         bytes memory poolInfo = _getUsdcWethPoolInfo();
-        IAssetPriceOracleAndSwapper(r.eigenCoverageDiamond).register(
-            AssetPair({
-                assetA: usdc,
-                assetB: weth,
-                swapEngine: r.swapperEngine,
-                poolInfo: poolInfo,
-                priceStrategy: PriceStrategy.SwapperOnly,
-                swapperAccuracy: 0,
-                priceOracle: address(0)
-            })
-        );
+        IAssetPriceOracleAndSwapper(r.eigenCoverageDiamond)
+            .register(
+                AssetPair({
+                    assetA: usdc,
+                    assetB: weth,
+                    swapEngine: r.swapperEngine,
+                    poolInfo: poolInfo,
+                    priceStrategy: PriceStrategy.SwapperOnly,
+                    swapperAccuracy: 0,
+                    priceOracle: address(0)
+                })
+            );
         console.log("      Registered USDC/WETH pair. USDC:", usdc, "WETH:", weth);
         console.log("      poolInfo length:", poolInfo.length);
 
@@ -143,9 +147,7 @@ contract DeployTestnet is DeployerHelperScript {
     function _getUsdcWethPoolInfo() internal view returns (bytes memory) {
         string memory configJson = getConfig(UNISWAP_CONFIG_SUFFIX);
         string memory chainId = vm.toString(block.chainid);
-        string memory key = string.concat(
-            "$['", chainId, "']['poolPaths']['v3']['USDC/WETH']['poolInfo']"
-        );
+        string memory key = string.concat("$['", chainId, "']['poolPaths']['v3']['USDC/WETH']['poolInfo']");
         try vm.parseJsonBytes(configJson, key) returns (bytes memory data) {
             if (data.length > 0) return data;
         } catch {}
@@ -155,8 +157,7 @@ contract DeployTestnet is DeployerHelperScript {
         } catch {}
         revert(
             string.concat(
-                "DeployTestnet: no poolPaths.v3.USDC/WETH.poolInfo in config/uniswap.json for chain ",
-                chainId
+                "DeployTestnet: no poolPaths.v3.USDC/WETH.poolInfo in config/uniswap.json for chain ", chainId
             )
         );
     }
@@ -170,7 +171,9 @@ contract DeployTestnet is DeployerHelperScript {
         if (len % 2 != 0) {
             bytes memory padded = new bytes(len + 1);
             padded[0] = "0";
-            for (uint256 i = 0; i < len; i++) padded[i + 1] = s[start + i];
+            for (uint256 i = 0; i < len; i++) {
+                padded[i + 1] = s[start + i];
+            }
             return _hexToBytesFromBytes(padded, 0);
         }
         return _hexToBytesFromBytes(s, start);

@@ -1079,7 +1079,8 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coverageId = coverageAgent.purchaseCoverage(requests);
 
         // Slash zero amount (should do nothing)
-        (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed) = coverageAgent.slashCoverage(coverageId, 0, block.timestamp);
+        (CoverageClaimStatus[] memory slashStatuses, uint256 totalSlashed) =
+            coverageAgent.slashCoverage(coverageId, 0, block.timestamp);
 
         // Verify nothing was slashed
         assertEq(totalSlashed, 0);

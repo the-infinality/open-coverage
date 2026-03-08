@@ -105,15 +105,15 @@ contract SetupEigenOperator is Script, EigenHelper, StdCheats {
         operatorSetIds[0] = operatorSetId;
         IAllocationManager allocationManager = _getAllocationManager();
         IAllocationManagerTypes.RegisterParams memory params = IAllocationManagerTypes.RegisterParams({
-            avs: eigenCoverageDiamond,
-            operatorSetIds: operatorSetIds,
-            data: ""
+            avs: eigenCoverageDiamond, operatorSetIds: operatorSetIds, data: ""
         });
         allocationManager.registerForOperatorSets(operator, params);
         console.log("      Registration complete.");
 
         console.log("[8/9] Allocating to coverage agent (modifyAllocations)...");
-        _allocateToCoverageAgent(allocationManager, delegationManager, operator, eigenCoverageDiamond, operatorSetId, wethStrategy);
+        _allocateToCoverageAgent(
+            allocationManager, delegationManager, operator, eigenCoverageDiamond, operatorSetId, wethStrategy
+        );
 
         console.log("[9/9] Creating position against ExampleCoverageAgent (reservations allowed, 1 month expiry)...");
         uint256 positionId = _createPosition(eigenCoverageDiamond, coverageAgent, operator, weth);
@@ -134,20 +134,21 @@ contract SetupEigenOperator is Script, EigenHelper, StdCheats {
         internal
         returns (uint256)
     {
-        return ICoverageProvider(provider).createPosition(
-            CoveragePosition({
-                coverageAgent: coverageAgent_,
-                minRate: 100,
-                maxDuration: 30 days,
-                expiryTimestamp: block.timestamp + POSITION_EXPIRY_ONE_MONTH,
-                asset: weth_,
-                refundable: Refundable.None,
-                slashCoordinator: address(0),
-                maxReservationTime: MAX_RESERVATION_TIME,
-                operatorId: bytes32(uint256(uint160(operator_)))
-            }),
-            ""
-        );
+        return ICoverageProvider(provider)
+            .createPosition(
+                CoveragePosition({
+                    coverageAgent: coverageAgent_,
+                    minRate: 100,
+                    maxDuration: 30 days,
+                    expiryTimestamp: block.timestamp + POSITION_EXPIRY_ONE_MONTH,
+                    asset: weth_,
+                    refundable: Refundable.None,
+                    slashCoordinator: address(0),
+                    maxReservationTime: MAX_RESERVATION_TIME,
+                    operatorId: bytes32(uint256(uint160(operator_)))
+                }),
+                ""
+            );
     }
 
     function _getEigenCoverageDiamondAddress() internal view returns (address) {
@@ -194,9 +195,7 @@ contract SetupEigenOperator is Script, EigenHelper, StdCheats {
         magnitudes[0] = magnitude;
         IAllocationManagerTypes.AllocateParams[] memory allocations = new IAllocationManagerTypes.AllocateParams[](1);
         allocations[0] = IAllocationManagerTypes.AllocateParams({
-            operatorSet: operatorSet,
-            strategies: strategies,
-            newMagnitudes: magnitudes
+            operatorSet: operatorSet, strategies: strategies, newMagnitudes: magnitudes
         });
         allocationManager_.modifyAllocations(operator_, allocations);
         console.log("      Allocated magnitude (WETH strategy shares):", magnitude);

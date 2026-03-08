@@ -20,7 +20,9 @@ contract UndelegateOperator is Script, EigenHelper {
         console.log("DelegationManager:", address(delegationManager));
 
         require(delegationManager.isDelegated(staker), "UndelegateOperator: not delegated to any operator");
-        require(!delegationManager.isOperator(staker), "UndelegateOperator: operators cannot undelegate from themselves");
+        require(
+            !delegationManager.isOperator(staker), "UndelegateOperator: operators cannot undelegate from themselves"
+        );
 
         address operator = delegationManager.delegatedTo(staker);
         console.log("Current operator:", operator);
@@ -34,7 +36,9 @@ contract UndelegateOperator is Script, EigenHelper {
             console.log("  [%s]:", i);
             console.logBytes32(withdrawalRoots[i]);
         }
-        console.log("\nComplete the queued withdrawal(s) via DelegationManager.completeQueuedWithdrawal when delay has passed.");
+        console.log(
+            "\nComplete the queued withdrawal(s) via DelegationManager.completeQueuedWithdrawal when delay has passed."
+        );
 
         return withdrawalRoots;
     }
