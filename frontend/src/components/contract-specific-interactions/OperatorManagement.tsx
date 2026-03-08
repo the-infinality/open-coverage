@@ -1,8 +1,29 @@
 import { useState, useEffect, useRef, useMemo } from "react"
 import { type Address, isAddress, BaseError } from "viem"
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useAccount } from "wagmi"
-import { Loader2, CheckCircle2, User, DollarSign, Link as LinkIcon, Plus, Trash2 } from "lucide-react"
+import {
+    Loader2,
+    CheckCircle2,
+    User,
+    DollarSign,
+    Link as LinkIcon,
+    Plus,
+    Trash2,
+    ExternalLink,
+} from "lucide-react"
+import { Link } from "react-router-dom"
 import { toast } from "sonner"
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog"
+import { useContracts } from "@/hooks/use-contracts"
+import { generateContractName } from "@/lib/utils"
+import { getSupportedChainsInfo } from "@/lib/wagmi"
 import { iEigenServiceManagerAbi } from "@/generated/abis"
 import {
     iDelegationManagerAbi,
@@ -56,7 +77,16 @@ interface OperatorManagementProps {
  */
 export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorManagementProps) {
     const { address: connectedAddress } = useAccount()
-    const { coverageAgents } = useChainFilteredContracts(chainId as number)
+    const { coverageAgents, serviceManagers } = useChainFilteredContracts(chainId as number)
+    const { addContract, contracts } = useContracts()
+
+    // Add AVS dialog state (quick-add AVS from registered operator set)
+    const [addAvsDialogOpen, setAddAvsDialogOpen] = useState(false)
+    const [addAvsPayload, setAddAvsPayload] = useState<{
+        address: Address
+        chainId: number
+    } | null>(null)
+    const [addAvsName, setAddAvsName] = useState("")
 
     // State for register as operator
     const [metadataURI, setMetadataURI] = useState("")
@@ -71,19 +101,21 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
 
     // State for allocate
     const [allocateCoverageAgentId, setAllocateCoverageAgentId] = useState<string>("")
-    const [allocateStrategies, setAllocateStrategies] = useState<Array<{ address: string; magnitude: number }>>([
-        { address: "", magnitude: 0 },
-    ])
+    const [allocateStrategies, setAllocateStrategies] = useState<
+        Array<{ address: string; magnitude: number }>
+    >([{ address: "", magnitude: 0 }])
 
     // State for set rewards split independently
     const [splitCoverageAgentId, setSplitCoverageAgentId] = useState<string>("")
     const [splitRewardsPercent, setSplitRewardsPercent] = useState(100)
 
     // Get selected coverage agent addresses from IDs
-    const selectedCoverageAgent = coverageAgents.find((c) => c.id === selectedCoverageAgentId)
-        ?.address
-    const allocateCoverageAgent = coverageAgents.find((c) => c.id === allocateCoverageAgentId)
-        ?.address
+    const selectedCoverageAgent = coverageAgents.find(
+        (c) => c.id === selectedCoverageAgentId
+    )?.address
+    const allocateCoverageAgent = coverageAgents.find(
+        (c) => c.id === allocateCoverageAgentId
+    )?.address
     const splitCoverageAgent = coverageAgents.find((c) => c.id === splitCoverageAgentId)?.address
 
     // Get EigenLayer contract addresses
@@ -152,8 +184,7 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
                 : undefined,
         chainId,
         query: {
-            enabled:
-                !!chainId && !!selectedCoverageAgent && isAddress(selectedCoverageAgent),
+            enabled: !!chainId && !!selectedCoverageAgent && isAddress(selectedCoverageAgent),
         },
     })
 
@@ -168,8 +199,7 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
                 : undefined,
         chainId,
         query: {
-            enabled:
-                !!chainId && !!allocateCoverageAgent && isAddress(allocateCoverageAgent),
+            enabled: !!chainId && !!allocateCoverageAgent && isAddress(allocateCoverageAgent),
         },
     })
 
@@ -336,7 +366,12 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
 
     // Handle transaction receipt errors
     useEffect(() => {
-        if (isErrorRegister && errorRegister && hashRegister && hasShownErrorRegister.current !== hashRegister) {
+        if (
+            isErrorRegister &&
+            errorRegister &&
+            hashRegister &&
+            hasShownErrorRegister.current !== hashRegister
+        ) {
             hasShownErrorRegister.current = hashRegister
             const decodedError = decodeContractError(errorRegister)
             toast.error(`Transaction failed: ${decodedError}`, { duration: 10000 })
@@ -344,7 +379,12 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
     }, [isErrorRegister, errorRegister, hashRegister])
 
     useEffect(() => {
-        if (isErrorUpdate && errorUpdate && hashUpdate && hasShownErrorUpdate.current !== hashUpdate) {
+        if (
+            isErrorUpdate &&
+            errorUpdate &&
+            hashUpdate &&
+            hasShownErrorUpdate.current !== hashUpdate
+        ) {
             hasShownErrorUpdate.current = hashUpdate
             const decodedError = decodeContractError(errorUpdate)
             toast.error(`Transaction failed: ${decodedError}`, { duration: 10000 })
@@ -365,7 +405,12 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
     }, [isErrorRegisterAgent, errorRegisterAgent, hashRegisterAgent])
 
     useEffect(() => {
-        if (isErrorAllocate && errorAllocate && hashAllocate && hasShownErrorAllocate.current !== hashAllocate) {
+        if (
+            isErrorAllocate &&
+            errorAllocate &&
+            hashAllocate &&
+            hasShownErrorAllocate.current !== hashAllocate
+        ) {
             hasShownErrorAllocate.current = hashAllocate
             const decodedError = decodeContractError(errorAllocate)
             toast.error(`Transaction failed: ${decodedError}`, { duration: 10000 })
@@ -397,9 +442,10 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
             return
         }
 
-        const approver = delegationApprover && isAddress(delegationApprover) 
-            ? delegationApprover 
-            : "0x0000000000000000000000000000000000000000"
+        const approver =
+            delegationApprover && isAddress(delegationApprover)
+                ? delegationApprover
+                : "0x0000000000000000000000000000000000000000"
 
         const optOutBlocks = Number(stakerOptOutWindowBlocks) || 0
 
@@ -658,6 +704,7 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
     }
 
     return (
+        <>
         <Card>
             <CardHeader>
                 <div className="flex items-center gap-2">
@@ -701,7 +748,8 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
                                     Register as Operator
                                 </h4>
                                 <p className="text-xs text-muted-foreground mt-1">
-                                    Register your wallet as an EigenLayer operator to provide coverage
+                                    Register your wallet as an EigenLayer operator to provide
+                                    coverage
                                 </p>
                             </div>
 
@@ -753,9 +801,7 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
 
                             <Button
                                 onClick={handleRegisterAsOperator}
-                                disabled={
-                                    !metadataURI || isPendingRegister || isConfirmingRegister
-                                }
+                                disabled={!metadataURI || isPendingRegister || isConfirmingRegister}
                                 className="w-full"
                             >
                                 {isPendingRegister || isConfirmingRegister ? (
@@ -886,8 +932,8 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
                             <div>
                                 <h4 className="text-sm font-medium">Allocate to Strategy</h4>
                                 <p className="text-xs text-muted-foreground mt-1">
-                                    Allocate stake to a coverage agent and strategy (can only be done
-                                    after ~17.5 days from registration)
+                                    Allocate stake to a coverage agent and strategy (can only be
+                                    done after ~17.5 days from registration)
                                 </p>
                             </div>
 
@@ -961,7 +1007,8 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
                                                         max={100}
                                                         step={1}
                                                         disabled={
-                                                            isPendingAllocate || isConfirmingAllocate
+                                                            isPendingAllocate ||
+                                                            isConfirmingAllocate
                                                         }
                                                     />
                                                 </div>
@@ -990,7 +1037,8 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
                                 disabled={
                                     !allocateCoverageAgent ||
                                     allocateStrategies.every(
-                                        (s) => !s.address || !isAddress(s.address) || s.magnitude <= 0
+                                        (s) =>
+                                            !s.address || !isAddress(s.address) || s.magnitude <= 0
                                     ) ||
                                     isPendingAllocate ||
                                     isConfirmingAllocate ||
@@ -1056,15 +1104,12 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
                                 </div>
                                 <Slider
                                     value={[splitRewardsPercent]}
-                                    onValueChange={(value) =>
-                                        setSplitRewardsPercent(value[0] ?? 0)
-                                    }
+                                    onValueChange={(value) => setSplitRewardsPercent(value[0] ?? 0)}
                                     min={0}
                                     max={100}
                                     step={1}
                                     disabled={
-                                        isPendingSplitStandalone ||
-                                        isConfirmingSplitStandalone
+                                        isPendingSplitStandalone || isConfirmingSplitStandalone
                                     }
                                 />
                                 <p className="text-xs text-muted-foreground">
@@ -1102,40 +1147,197 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
                         </div>
 
                         {/* Show registered sets */}
-                        {registeredSets && (registeredSets as Array<{ avs: Address; id: number }>).length > 0 && (
-                            <>
-                                <Separator />
-                                <div className="space-y-2">
-                                    <h4 className="text-sm font-medium">Registered Operator Sets</h4>
+                        {registeredSets &&
+                            (registeredSets as Array<{ avs: Address; id: number }>).length > 0 && (
+                                <>
+                                    <Separator />
                                     <div className="space-y-2">
-                                        {(registeredSets as Array<{ avs: Address; id: number }>).map(
-                                            (set, index: number) => (
-                                                <div
-                                                    key={index}
-                                                    className="rounded-lg border bg-muted/30 p-3 text-xs"
-                                                >
-                                                    <div className="flex items-center justify-between">
-                                                        <span className="text-muted-foreground">
-                                                            Operator Set ID:
-                                                        </span>
-                                                        <span className="font-mono">{set.id}</span>
+                                        <h4 className="text-sm font-medium">
+                                            Registered Operator Sets
+                                        </h4>
+                                        <div className="space-y-2">
+                                            {(
+                                                registeredSets as Array<{
+                                                    avs: Address
+                                                    id: number
+                                                }>
+                                            ).map((set, index: number) => {
+                                                const isCurrentAvs =
+                                                    set.avs?.toLowerCase() ===
+                                                    serviceManagerAddress?.toLowerCase()
+                                                const avsInStorage = serviceManagers.find(
+                                                    (c) =>
+                                                        c.address?.toLowerCase() ===
+                                                        set.avs?.toLowerCase()
+                                                )
+                                                return (
+                                                    <div
+                                                        key={index}
+                                                        className="rounded-lg border bg-muted/30 p-3 text-xs"
+                                                    >
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-muted-foreground">
+                                                                Operator Set ID:
+                                                            </span>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-mono">
+                                                                    {set.id}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center justify-between mt-1 gap-2 flex-wrap">
+                                                            <span className="text-muted-foreground">
+                                                                AVS:
+                                                            </span>
+                                                            <span className="flex items-center gap-2">
+                                                                {isCurrentAvs ? (
+                                                                    <Badge
+                                                                        variant="default"
+                                                                        className="text-xs"
+                                                                    >
+                                                                        THIS AVS
+                                                                    </Badge>
+                                                                ) : avsInStorage ? (
+                                                                    <Link
+                                                                        to={`/interact/${avsInStorage.id}`}
+                                                                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium bg-primary text-primary-foreground hover:opacity-90"
+                                                                    >
+                                                                        <ExternalLink className="size-3" />
+                                                                        Go to AVS
+                                                                    </Link>
+                                                                ) : (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setAddAvsPayload({
+                                                                                address: set.avs,
+                                                                                chainId:
+                                                                                    chainId ?? 0,
+                                                                            })
+                                                                            setAddAvsName(
+                                                                                generateContractName(
+                                                                                    "CoverageProvider",
+                                                                                    contracts
+                                                                                )
+                                                                            )
+                                                                            setAddAvsDialogOpen(
+                                                                                true
+                                                                            )
+                                                                        }}
+                                                                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+                                                                    >
+                                                                        <Plus className="size-3" />
+                                                                        Add
+                                                                    </button>
+                                                                )}
+                                                                <CopyableAddress
+                                                                    address={set.avs}
+                                                                />
+                                                            </span>
+                                                        </div>
                                                     </div>
-                                                    <div className="flex items-center justify-between mt-1">
-                                                        <span className="text-muted-foreground">
-                                                            AVS:
-                                                        </span>
-                                                        <CopyableAddress address={set.avs} />
-                                                    </div>
-                                                </div>
-                                            )
-                                        )}
+                                                )
+                                            })}
+                                        </div>
                                     </div>
-                                </div>
-                            </>
-                        )}
+                                </>
+                            )}
                     </>
                 )}
             </CardContent>
         </Card>
+
+        {/* Quick-add AVS dialog */}
+        <Dialog
+            open={addAvsDialogOpen}
+            onOpenChange={(open) => {
+                setAddAvsDialogOpen(open)
+                if (!open) setAddAvsPayload(null)
+            }}
+        >
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Add AVS to app</DialogTitle>
+                    <DialogDescription>
+                        Add this AVS (Coverage Provider) to your saved contracts to open it quickly
+                        later.
+                    </DialogDescription>
+                </DialogHeader>
+                {addAvsPayload && (
+                    <div className="space-y-4 py-2">
+                        <div className="space-y-2">
+                            <Label htmlFor="add-avs-name">Name</Label>
+                            <Input
+                                id="add-avs-name"
+                                value={addAvsName}
+                                onChange={(e) => setAddAvsName(e.target.value)}
+                                placeholder="e.g. CoverageProvider-dune"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Address</Label>
+                            <div className="rounded-md border bg-muted/30 px-3 py-2 font-mono text-xs">
+                                <CopyableAddress address={addAvsPayload.address} />
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Chain</Label>
+                            <p className="text-sm text-muted-foreground">
+                                {getSupportedChainsInfo().find(
+                                    (c) => c.id === addAvsPayload.chainId
+                                )?.name ?? `Chain ${addAvsPayload.chainId}`}
+                            </p>
+                        </div>
+                    </div>
+                )}
+                <DialogFooter>
+                    <Button
+                        variant="outline"
+                        onClick={() => {
+                            setAddAvsDialogOpen(false)
+                            setAddAvsPayload(null)
+                        }}
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={() => {
+                            if (!addAvsPayload || !addAvsName.trim()) return
+                            const exists = contracts.some(
+                                (c) =>
+                                    c.address.toLowerCase() ===
+                                        addAvsPayload.address.toLowerCase() &&
+                                    c.chainId === addAvsPayload.chainId
+                            )
+                            if (exists) {
+                                toast.error("This AVS is already in your contracts")
+                                return
+                            }
+                            const nameExists = contracts.some(
+                                (c) =>
+                                    c.name.toLowerCase() === addAvsName.trim().toLowerCase()
+                            )
+                            if (nameExists) {
+                                toast.error("A contract with this name already exists")
+                                return
+                            }
+                            addContract({
+                                name: addAvsName.trim(),
+                                address: addAvsPayload.address,
+                                type: "CoverageProvider",
+                                chainId: addAvsPayload.chainId,
+                            })
+                            toast.success("AVS added. You can open it from your contracts.")
+                            setAddAvsDialogOpen(false)
+                            setAddAvsPayload(null)
+                        }}
+                        disabled={!addAvsPayload || !addAvsName.trim()}
+                    >
+                        Add AVS
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    </>
     )
 }
