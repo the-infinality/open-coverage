@@ -359,7 +359,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
             revert ClaimExpired(claimId, _claim.createdAt + _claim.duration);
         }
 
-        (, uint16 coveragePercentage) = positionBacking(_claim.positionId);
+        (,, uint16 coveragePercentage) = positionBacking(_claim.positionId);
         if (coveragePercentage < _liquidationThreshold) {
             revert MeetsLiquidationThreshold(_liquidationThreshold, coveragePercentage);
         }
@@ -598,7 +598,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         emit ICoverageLiquidatable.LiquidationThresholdUpdated(threshold);
     }
 
-    /// @inheritdoc ICoverageLiquidatable
+    /// @inheritdoc ICoverageProvider
     function setCoverageThreshold(bytes32 operatorId, uint16 coverageThreshold_) external {
         address operator = address(uint160(uint256(operatorId)));
         if (coverageThreshold_ > 10000) revert ThresholdExceedsMax(10000, coverageThreshold_);
@@ -624,9 +624,12 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
 
         uint256 allocatedCoverage =
             IEigenServiceManager(address(this)).coverageAllocated(operator, strategy, _position.coverageAgent);
+
+        // Max position amount is dependent on the operator's coverage threshold
+        uint256 usableCoverage = allocatedCoverage * operators[operator].coverageThreshold / 10000;
         uint256 totalCoverageByOperator = _totalCoverageByOperatorStrategy(operator, strategy, _position.coverageAgent);
-        if (allocatedCoverage > totalCoverageByOperator) {
-            maxAmount = allocatedCoverage - totalCoverageByOperator;
+        if (usableCoverage > totalCoverageByOperator) {
+            maxAmount = usableCoverage - totalCoverageByOperator;
         }
     }
 
@@ -636,12 +639,16 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     }
 
     /// @inheritdoc ICoverageProvider
-    function positionBacking(uint256 positionId) public view returns (int256 backing, uint16 coveragePercentage) {
+    function positionBacking(uint256 positionId)
+        public
+        view
+        returns (int256 availableBacking, uint256 totalBacking, uint16 coveragePercentage)
+    {
         CoveragePosition memory _position = positions[positionId];
         address operator = address(uint160(uint256(_position.operatorId)));
         address strategy = assetToStrategy[_position.asset];
-        (backing, coveragePercentage) = _coverageBackingAmount(operator, strategy, _position.coverageAgent);
-        return (backing, coveragePercentage);
+        (availableBacking, totalBacking, coveragePercentage) =
+            _coverageBackingAmount(operator, strategy, _position.coverageAgent);
     }
 
     /// @inheritdoc ICoverageProvider
@@ -649,7 +656,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         return claimSlashAmounts[claimId];
     }
 
-    /// @inheritdoc ICoverageLiquidatable
+    /// @inheritdoc ICoverageProvider
     function coverageThreshold(bytes32 operatorId) external view returns (uint16) {
         return operators[address(uint160(uint256(operatorId)))].coverageThreshold;
     }
@@ -738,7 +745,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     /// @notice Checks if the operator has sufficient coverage available for the coverage agent
     /// @dev Reverts only if the operator does not have enough allocated to safely cover the agent.
     function _checkCoverageForAgent(address operator, address strategy, address coverageAgent) private view {
-        (int256 backing, uint16 coveragePercentage) = _coverageBackingAmount(operator, strategy, coverageAgent);
+        (int256 backing,, uint16 coveragePercentage) = _coverageBackingAmount(operator, strategy, coverageAgent);
 
         if (coveragePercentage > operators[operator].coverageThreshold || backing < 0) {
             // forge-lint: disable-next-line(unsafe-typecast)
@@ -751,28 +758,28 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     /// @param operator The operator address.
     /// @param strategy The strategy address.
     /// @param coverageAgent The coverage agent address.
-    /// @return backing The coverage backing (positive = fully backed, negative = deficit).
+    /// @return availableBacking The available backing (positive = fully backed, negative = deficit).
+    /// @return totalBacking The total allocated backing for the position.
     /// @return coveragePercentage The utilization percentage of the operator's allocated coverage where 10000 = 100%.
     function _coverageBackingAmount(address operator, address strategy, address coverageAgent)
         private
         view
-        returns (int256 backing, uint16 coveragePercentage)
+        returns (int256 availableBacking, uint256 totalBacking, uint16 coveragePercentage)
     {
-        uint256 totalAllocatedCoverage =
-            IEigenServiceManager(address(this)).coverageAllocated(operator, strategy, coverageAgent);
+        totalBacking = IEigenServiceManager(address(this)).coverageAllocated(operator, strategy, coverageAgent);
         uint256 totalCoverageByOperator = _totalCoverageByOperatorStrategy(operator, strategy, coverageAgent);
 
         // Calculate backing: positive = fully backed, negative = deficit
         // casting to 'int256' is safe because both won't possibly hold more than 2^256 - 1
         // forge-lint: disable-next-line(unsafe-typecast)
-        backing = int256(totalAllocatedCoverage) - int256(totalCoverageByOperator);
+        availableBacking = int256(totalBacking) - int256(totalCoverageByOperator);
         // Calculate coverage utilization: percentage of allocated coverage being used by claims
-        if (totalAllocatedCoverage == 0) {
-            coveragePercentage = type(uint16).max;
+        if (totalBacking == 0) {
+            coveragePercentage = 10000;
         } else {
             // casting to 'uint16' is safe because utilization percentage won't realistically exceed type(uint16).max
             // forge-lint: disable-next-line(unsafe-typecast)
-            coveragePercentage = uint16((totalCoverageByOperator * 10000) / totalAllocatedCoverage);
+            coveragePercentage = uint16((totalCoverageByOperator * 10000) / totalBacking);
         }
     }
 

@@ -258,9 +258,13 @@ interface ICoverageProvider {
     /// @notice Get the total available backing for a position.
     /// @dev A negative value indicates a backing deficit, while a positive value means the position is fully backed.
     /// @param positionId The position id to check backing for.
-    /// @return backing The total available backing for the position (negative = deficit, positive = fully backed).
+    /// @return availableBacking The available backing backstop for the position (negative = deficit, positive = fully backed).
+    /// @return totalBacking The total allocated backing for the position.
     /// @return coveragePercentage The coverage utilization percentage in basis points (10000 = 100%).
-    function positionBacking(uint256 positionId) external view returns (int256 backing, uint16 coveragePercentage);
+    function positionBacking(uint256 positionId)
+        external
+        view
+        returns (int256 availableBacking, uint256 totalBacking, uint16 coveragePercentage);
 
     /// @notice Get the total amount slashed for a given claim.
     /// @param claimId The claim id to get the total slash amount for.
@@ -271,4 +275,14 @@ interface ICoverageProvider {
     /// @dev This is similar to a chain ID in blockchain nomenclature.
     /// @return providerTypeId The ID representing the type of coverage provider.
     function providerTypeId() external view returns (uint256 providerTypeId);
+
+    /// @notice Returns the coverage threshold for an operator
+    /// @param operatorId The operator to get the coverage threshold for
+    /// @return coverageThreshold The coverage threshold for the operator
+    function coverageThreshold(bytes32 operatorId) external view returns (uint16 coverageThreshold);
+
+    /// @notice Sets the coverage threshold for an operator
+    /// @param operatorId The operator id to set the coverage threshold for
+    /// @param coverageThreshold The coverage threshold to set for the operator
+    function setCoverageThreshold(bytes32 operatorId, uint16 coverageThreshold) external;
 }

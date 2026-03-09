@@ -103,8 +103,8 @@ library EigenFacetsDeployer {
         selectors[17] = ICoverageProvider.claimTotalSlashAmount.selector;
         selectors[18] = ICoverageLiquidatable.liquidationThreshold.selector;
         selectors[19] = ICoverageLiquidatable.setLiquidationThreshold.selector;
-        selectors[20] = ICoverageLiquidatable.setCoverageThreshold.selector;
-        selectors[21] = ICoverageLiquidatable.coverageThreshold.selector;
+        selectors[20] = ICoverageProvider.setCoverageThreshold.selector;
+        selectors[21] = ICoverageProvider.coverageThreshold.selector;
     }
 }
 

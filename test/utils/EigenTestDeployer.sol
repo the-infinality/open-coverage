@@ -367,7 +367,7 @@ contract EigenTestDeployer is TestDeployer, EigenHelper, UniswapHelper {
         _stakeAndDelegateToOperator(stakeAmount);
 
         // Raise coverage threshold to allow high utilization claims
-        eigenCoverageLiquidatable.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 9500);
+        eigenCoverageProvider.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 9500);
 
         oldPositionId = _createPositionForOperator(operator, refundable, 365 days);
         newPositionId = _createPositionForOperator(operator, refundable, 365 days);
