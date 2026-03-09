@@ -271,7 +271,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
     function test_coverageThreshold_defaultAfterRegistration() public {
         operator.registerCoverageAgent(address(eigenCoverageDiamond), address(coverageAgent), 0);
 
-        uint16 threshold = eigenCoverageLiquidatable.coverageThreshold(bytes32(uint256(uint160(address(operator)))));
+        uint16 threshold = eigenCoverageProvider.coverageThreshold(bytes32(uint256(uint160(address(operator)))));
         assertEq(threshold, 7000, "Default coverage threshold should be 7000 (70%)");
     }
 
@@ -279,28 +279,28 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         _setupwithAllocations();
 
         uint16 newThreshold = 8500;
-        eigenCoverageLiquidatable.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), newThreshold);
+        eigenCoverageProvider.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), newThreshold);
 
-        uint16 threshold = eigenCoverageLiquidatable.coverageThreshold(bytes32(uint256(uint160(address(operator)))));
+        uint16 threshold = eigenCoverageProvider.coverageThreshold(bytes32(uint256(uint160(address(operator)))));
         assertEq(threshold, newThreshold, "Coverage threshold should be updated to 8500");
     }
 
     function test_setCoverageThreshold_updatesValue() public {
         _setupwithAllocations();
 
-        eigenCoverageLiquidatable.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 5000);
-        assertEq(eigenCoverageLiquidatable.coverageThreshold(bytes32(uint256(uint160(address(operator))))), 5000);
+        eigenCoverageProvider.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 5000);
+        assertEq(eigenCoverageProvider.coverageThreshold(bytes32(uint256(uint160(address(operator))))), 5000);
 
-        eigenCoverageLiquidatable.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 9000);
-        assertEq(eigenCoverageLiquidatable.coverageThreshold(bytes32(uint256(uint160(address(operator))))), 9000);
+        eigenCoverageProvider.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 9000);
+        assertEq(eigenCoverageProvider.coverageThreshold(bytes32(uint256(uint160(address(operator))))), 9000);
     }
 
     function test_setCoverageThreshold_zeroValue() public {
         _setupwithAllocations();
 
-        eigenCoverageLiquidatable.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 0);
+        eigenCoverageProvider.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 0);
         assertEq(
-            eigenCoverageLiquidatable.coverageThreshold(bytes32(uint256(uint160(address(operator))))),
+            eigenCoverageProvider.coverageThreshold(bytes32(uint256(uint160(address(operator))))),
             0,
             "Coverage threshold should be 0"
         );
@@ -309,9 +309,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
     function test_setCoverageThreshold_maxAllowed() public {
         _setupwithAllocations();
 
-        eigenCoverageLiquidatable.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 10000);
+        eigenCoverageProvider.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 10000);
         assertEq(
-            eigenCoverageLiquidatable.coverageThreshold(bytes32(uint256(uint160(address(operator))))),
+            eigenCoverageProvider.coverageThreshold(bytes32(uint256(uint160(address(operator))))),
             10000,
             "Coverage threshold should be 10000 (100%)"
         );
@@ -323,12 +323,12 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.expectRevert(
             abi.encodeWithSelector(ICoverageLiquidatable.ThresholdExceedsMax.selector, uint16(10000), uint16(10001))
         );
-        eigenCoverageLiquidatable.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 10001);
+        eigenCoverageProvider.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 10001);
     }
 
     function test_coverageThreshold_unregisteredOperator() public {
         address unregistered = makeAddr("unregistered");
-        uint16 threshold = eigenCoverageLiquidatable.coverageThreshold(bytes32(uint256(uint160(unregistered))));
+        uint16 threshold = eigenCoverageProvider.coverageThreshold(bytes32(uint256(uint160(unregistered))));
         assertEq(threshold, 0, "Unregistered operator should have 0 threshold");
     }
 
@@ -561,8 +561,16 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
             maxReservationTime: 0,
             operatorId: bytes32(uint256(uint160(address(operator))))
         });
+
+        uint256 coverageThreshold =
+            eigenCoverageProvider.coverageThreshold(bytes32(uint256(uint160(address(operator)))));
+        uint256 allocatedCoverage = eigenServiceManager.coverageAllocated(
+            address(operator), address(_getTestStrategy()), address(coverageAgent)
+        );
+        uint256 maxAmount = allocatedCoverage * coverageThreshold / 10000;
+
         uint256 positionId = eigenCoverageProvider.createPosition(data, "");
-        assertApproxEqAbs(eigenCoverageProvider.positionMaxAmount(positionId), 35735542, 4e5);
+        assertApproxEqAbs(eigenCoverageProvider.positionMaxAmount(positionId), maxAmount, 4e5);
     }
 
     function test_RevertWhen_claimPosition_durationExceedsMax() public {
@@ -3734,7 +3742,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
     function test_liquidateClaim_multipleLiquidations() public {
         _setupwithAllocations();
         _stakeAndDelegateToOperator(1000e18);
-        eigenCoverageLiquidatable.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 9500);
+        eigenCoverageProvider.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 9500);
 
         // Create 3 positions
         uint256 posA = _createPositionForOperator(operator, Refundable.None, 365 days);
@@ -3777,7 +3785,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
     function test_liquidateClaim_atExactExpiry() public {
         _setupwithAllocations();
         _stakeAndDelegateToOperator(1000e18);
-        eigenCoverageLiquidatable.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 9500);
+        eigenCoverageProvider.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 9500);
 
         uint256 oldPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
 
@@ -3851,7 +3859,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         _setupwithAllocations();
         _stakeAndDelegateToOperator(1000e18);
-        eigenCoverageLiquidatable.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 9500);
+        eigenCoverageProvider.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 9500);
 
         uint256 oldPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
         uint256 newPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
@@ -3886,7 +3894,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         _setupwithAllocations();
         _stakeAndDelegateToOperator(1000e18);
-        eigenCoverageLiquidatable.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 9500);
+        eigenCoverageProvider.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 9500);
 
         uint256 oldPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
         uint256 newPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
@@ -3954,7 +3962,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         _setupwithAllocations();
         deal(rETH, staker, oldStake);
         _stakeAndDelegateToOperator(oldStake);
-        eigenCoverageLiquidatable.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 9500);
+        eigenCoverageProvider.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 9500);
 
         uint256 oldPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
 
@@ -3973,7 +3981,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         // Set up second operator with new stake
         _setupSecondOperatorWithAllocations(newStake);
-        eigenCoverageLiquidatable.setCoverageThreshold(bytes32(uint256(uint160(address(operator2)))), 9500);
+        eigenCoverageProvider.setCoverageThreshold(bytes32(uint256(uint160(address(operator2)))), 9500);
         uint256 newPositionId = _createPositionForOperator(operator2, Refundable.None, 365 days);
 
         uint256 newMaxCoverage = eigenServiceManager.coverageAllocated(
@@ -4004,7 +4012,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
     function testFuzz_liquidateClaim_varyingNewPositionExpiry(uint256 newExpiryOffset) public {
         _setupwithAllocations();
         _stakeAndDelegateToOperator(1000e18);
-        eigenCoverageLiquidatable.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 9500);
+        eigenCoverageProvider.setCoverageThreshold(bytes32(uint256(uint160(address(operator)))), 9500);
 
         uint256 oldPositionId = _createPositionForOperator(operator, Refundable.None, 365 days);
 

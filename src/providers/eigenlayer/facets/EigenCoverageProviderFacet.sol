@@ -598,7 +598,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         emit ICoverageLiquidatable.LiquidationThresholdUpdated(threshold);
     }
 
-    /// @inheritdoc ICoverageLiquidatable
+    /// @inheritdoc ICoverageProvider
     function setCoverageThreshold(bytes32 operatorId, uint16 coverageThreshold_) external {
         address operator = address(uint160(uint256(operatorId)));
         if (coverageThreshold_ > 10000) revert ThresholdExceedsMax(10000, coverageThreshold_);
@@ -624,9 +624,12 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
 
         uint256 allocatedCoverage =
             IEigenServiceManager(address(this)).coverageAllocated(operator, strategy, _position.coverageAgent);
+
+        // Max position amount is dependent on the operator's coverage threshold
+        uint256 usableCoverage = allocatedCoverage * operators[operator].coverageThreshold / 10000;
         uint256 totalCoverageByOperator = _totalCoverageByOperatorStrategy(operator, strategy, _position.coverageAgent);
-        if (allocatedCoverage > totalCoverageByOperator) {
-            maxAmount = allocatedCoverage - totalCoverageByOperator;
+        if (usableCoverage > totalCoverageByOperator) {
+            maxAmount = usableCoverage - totalCoverageByOperator;
         }
     }
 
@@ -649,7 +652,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         return claimSlashAmounts[claimId];
     }
 
-    /// @inheritdoc ICoverageLiquidatable
+    /// @inheritdoc ICoverageProvider
     function coverageThreshold(bytes32 operatorId) external view returns (uint16) {
         return operators[address(uint160(uint256(operatorId)))].coverageThreshold;
     }

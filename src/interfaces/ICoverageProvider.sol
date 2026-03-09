@@ -271,4 +271,14 @@ interface ICoverageProvider {
     /// @dev This is similar to a chain ID in blockchain nomenclature.
     /// @return providerTypeId The ID representing the type of coverage provider.
     function providerTypeId() external view returns (uint256 providerTypeId);
+
+    /// @notice Returns the coverage threshold for an operator
+    /// @param operatorId The operator to get the coverage threshold for
+    /// @return coverageThreshold The coverage threshold for the operator
+    function coverageThreshold(bytes32 operatorId) external view returns (uint16 coverageThreshold);
+
+    /// @notice Sets the coverage threshold for an operator
+    /// @param operatorId The operator id to set the coverage threshold for
+    /// @param coverageThreshold The coverage threshold to set for the operator
+    function setCoverageThreshold(bytes32 operatorId, uint16 coverageThreshold) external;
 }
