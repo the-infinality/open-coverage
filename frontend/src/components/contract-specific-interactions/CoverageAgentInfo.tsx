@@ -292,6 +292,7 @@ interface LoadedClaimData {
     providerAddress: Address
     claim: CoverageClaimData
     backing: bigint
+    coveragePercentage: number
     totalSlashAmount: bigint
     coverageId: number
 }
@@ -322,7 +323,7 @@ function ClaimItem({
     tokenSymbol: string
     onCompleteSlash?: (claimData: LoadedClaimData) => void
 }) {
-    const { claim, claimId, providerAddress, backing } = claimData
+    const { claim, claimId, providerAddress, backing, coveragePercentage } = claimData
     const statusInfo = CLAIM_STATUS_LABELS[claim.status] || {
         label: "Unknown",
         variant: "outline" as const,
@@ -384,6 +385,14 @@ function ClaimItem({
                         className={`font-mono ${backing < 0n ? "text-destructive" : "text-green-600"}`}
                     >
                         {formatUnits(backing, tokenDecimals)} {tokenSymbol}
+                    </span>
+                </div>
+                <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Backing %</span>
+                    <span
+                        className={`font-mono ${coveragePercentage >= 10000 ? "text-destructive" : "text-green-600"}`}
+                    >
+                        {(coveragePercentage / 100).toFixed(2)}%
                     </span>
                 </div>
                 {totalSlashAmount > 0n && (
@@ -1645,14 +1654,13 @@ function CoverageClaimsManagement({
                     return false
                 }
 
-                const [backing] = await readContract(config, {
+                const [backing, coveragePercentage] = await readContract(config, {
                     address: providerAddress as Address,
                     abi: iCoverageProviderAbi,
                     functionName: "positionBacking",
                     args: [claimData.positionId],
                     chainId,
                 })
-                console.log(claim, backing)
 
                 setLoadedClaims((prev) => {
                     // Check if claim already loaded
@@ -1670,6 +1678,7 @@ function CoverageClaimsManagement({
                             providerAddress: providerAddress as Address,
                             claim: claimData,
                             backing: backing as bigint,
+                            coveragePercentage: Number(coveragePercentage),
                             totalSlashAmount: totalSlashAmount as bigint,
                             coverageId,
                         },
