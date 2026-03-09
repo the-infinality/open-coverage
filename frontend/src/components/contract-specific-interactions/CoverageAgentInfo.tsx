@@ -19,6 +19,7 @@ import {
     ArrowRightLeft,
     X,
     Clock,
+    Banknote,
 } from "lucide-react"
 import {
     useReadContract,
@@ -30,7 +31,12 @@ import {
 import { readContract } from "wagmi/actions"
 import { toast } from "sonner"
 import type { CoverageContract } from "@/types/contracts"
-import { iCoverageAgentAbi, iCoverageProviderAbi, iExampleCoverageAgentAbi, iSlashCoordinatorAbi } from "@/generated/abis"
+import {
+    iCoverageAgentAbi,
+    iCoverageProviderAbi,
+    iExampleCoverageAgentAbi,
+    iSlashCoordinatorAbi,
+} from "@/generated/abis"
 import { ierc20Abi } from "@/generated/eigen-abis"
 import { ContractCard } from "@/components/ContractCard"
 import { CoverageProviderSelect } from "@/components/ContractSelects"
@@ -388,7 +394,7 @@ function ClaimItem({
                     </span>
                 </div>
                 <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Backing %</span>
+                    <span className="text-muted-foreground">Coverage %</span>
                     <span
                         className={`font-mono ${coveragePercentage >= 10000 ? "text-destructive" : "text-green-600"}`}
                     >
@@ -852,23 +858,19 @@ function CompleteSlashDialog({
                                 )}
                             </div>
                         ) : (
-                            <p className="text-sm text-muted-foreground">
-                                Unable to fetch status
-                            </p>
+                            <p className="text-sm text-muted-foreground">Unable to fetch status</p>
                         )}
                     </div>
 
                     {/* Deadline */}
                     <div className="space-y-2">
-                        <Label htmlFor="completeSlashDeadline">
-                            Deadline (minutes from now)
-                        </Label>
+                        <Label htmlFor="completeSlashDeadline">Deadline (minutes from now)</Label>
                         <div className="flex items-center gap-2">
                             <Clock className="size-4 text-muted-foreground" />
                             <Input
                                 id="completeSlashDeadline"
                                 type="number"
-                                min="1"
+                                min="0"
                                 value={deadlineMinutes}
                                 onChange={(e) => setDeadlineMinutes(e.target.value)}
                                 className="font-mono"
@@ -888,9 +890,7 @@ function CompleteSlashDialog({
                     </Button>
                     <Button
                         onClick={handleCompleteSlash}
-                        disabled={
-                            isPending || isConfirming || !canCompleteSlash || isLoadingStatus
-                        }
+                        disabled={isPending || isConfirming || !canCompleteSlash || isLoadingStatus}
                     >
                         {isPending || isConfirming ? (
                             <Loader2 className="mr-2 size-4 animate-spin" />
@@ -1446,6 +1446,306 @@ function ConvertCoverageDialog({
 }
 
 /**
+ * Repay Slashed Coverage Dialog - approve asset then call repaySlashedCoverage
+ */
+function RepaySlashedCoverageDialog({
+    open,
+    onOpenChange,
+    coverageId,
+    claims,
+    contractAddress,
+    assetAddress,
+    chainId,
+    tokenDecimals,
+    tokenSymbol,
+    onSuccess,
+}: {
+    open: boolean
+    onOpenChange: (open: boolean) => void
+    coverageId: number | null
+    claims: LoadedClaimData[]
+    contractAddress: Address
+    assetAddress: Address | undefined
+    chainId: SupportedChainId | undefined
+    tokenDecimals: number
+    tokenSymbol: string
+    onSuccess: () => void
+}) {
+    const { address: userAddress } = useAccount()
+    const [repayAmountStr, setRepayAmountStr] = useState("")
+    const [isApproving, setIsApproving] = useState(false)
+
+    const totalOwing = useMemo(
+        () => claims.reduce((sum, c) => sum + c.totalSlashAmount, 0n),
+        [claims]
+    )
+
+    const { writeContract, isPending, data: hash, reset: resetWrite } = useWriteContract()
+    const {
+        isLoading: isConfirming,
+        isSuccess,
+        isError: isReceiptError,
+        error: receiptError,
+    } = useWaitForTransactionReceipt({ hash })
+
+    const { data: userBalance } = useReadContract({
+        address: assetAddress,
+        abi: ierc20Abi,
+        functionName: "balanceOf",
+        args: userAddress ? [userAddress] : undefined,
+        chainId,
+        query: { enabled: !!assetAddress && !!userAddress && !!chainId && open },
+    })
+
+    const { data: currentAllowance, refetch: refetchAllowance } = useReadContract({
+        address: assetAddress,
+        abi: ierc20Abi,
+        functionName: "allowance",
+        args: userAddress ? [userAddress, contractAddress] : undefined,
+        chainId,
+        query: { enabled: !!assetAddress && !!userAddress && !!chainId && open },
+    })
+
+    const prevSuccessRef = useRef(false)
+    const hasShownReceiptError = useRef<string>("")
+
+    const repayAmountWei = useMemo(() => {
+        if (!repayAmountStr || parseFloat(repayAmountStr) <= 0) return 0n
+        return BigInt(Math.floor(parseFloat(repayAmountStr) * 10 ** tokenDecimals))
+    }, [repayAmountStr, tokenDecimals])
+
+    const needsApproval = useMemo(() => {
+        if (!currentAllowance || repayAmountWei === 0n) return true
+        return (currentAllowance as bigint) < repayAmountWei
+    }, [currentAllowance, repayAmountWei])
+
+    const hasSufficientBalance = useMemo(() => {
+        if (!userBalance) return false
+        return (userBalance as bigint) >= repayAmountWei
+    }, [userBalance, repayAmountWei])
+
+    useEffect(() => {
+        if (open && totalOwing > 0n) {
+            setRepayAmountStr(formatUnits(totalOwing, tokenDecimals))
+        }
+    }, [open, totalOwing, tokenDecimals])
+
+    useEffect(() => {
+        if (isSuccess && !prevSuccessRef.current) {
+            if (isApproving) {
+                toast.success("Approval successful! You can now submit repayment.")
+                setIsApproving(false)
+                resetWrite()
+                refetchAllowance()
+            } else {
+                toast.success("Repayment submitted successfully!")
+                onSuccess()
+                onOpenChange(false)
+            }
+        }
+        prevSuccessRef.current = isSuccess
+    }, [isSuccess, isApproving, onSuccess, onOpenChange, refetchAllowance, resetWrite])
+
+    useEffect(() => {
+        if (isReceiptError && receiptError && hash && hasShownReceiptError.current !== hash) {
+            hasShownReceiptError.current = hash
+            const decodedError = decodeContractError(receiptError)
+            toast.error(`Transaction failed: ${decodedError}`, { duration: 10000 })
+            setIsApproving(false)
+        }
+    }, [isReceiptError, receiptError, hash])
+
+    useEffect(() => {
+        if (!open) {
+            setIsApproving(false)
+            prevSuccessRef.current = false
+            hasShownReceiptError.current = ""
+        }
+    }, [open])
+
+    const handleApprove = () => {
+        if (!assetAddress) return
+        setIsApproving(true)
+        writeContract(
+            {
+                address: assetAddress,
+                abi: ierc20Abi,
+                functionName: "approve",
+                args: [contractAddress, repayAmountWei],
+                chainId,
+            },
+            {
+                onSuccess: (hash) => toast.success(`Approval submitted: ${hash.slice(0, 10)}...`),
+                onError: (error) => {
+                    setIsApproving(false)
+                    toast.error(decodeContractError(error), { duration: 8000 })
+                },
+            }
+        )
+    }
+
+    const handleRepay = () => {
+        if (coverageId === null) return
+        if (repayAmountWei === 0n) {
+            toast.error("Enter a valid repayment amount")
+            return
+        }
+        if (!hasSufficientBalance) {
+            toast.error("Insufficient balance")
+            return
+        }
+        if (needsApproval) {
+            toast.error("Please approve the token transfer first")
+            return
+        }
+        writeContract(
+            {
+                address: contractAddress,
+                abi: iExampleCoverageAgentAbi,
+                functionName: "repaySlashedCoverage",
+                args: [BigInt(coverageId), repayAmountWei],
+                chainId,
+            },
+            {
+                onSuccess: (hash) => toast.success(`Repayment submitted: ${hash.slice(0, 10)}...`),
+                onError: (error) => {
+                    toast.error(decodeContractError(error), { duration: 8000 })
+                },
+            }
+        )
+    }
+
+    if (coverageId === null) return null
+
+    const isProcessing = isPending || isConfirming
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <Banknote className="size-5 text-primary" />
+                        Repay Slashed Coverage #{coverageId}
+                    </DialogTitle>
+                    <DialogDescription>
+                        Repay slashed claims for this coverage. Approve the coverage agent to spend
+                        your tokens, then submit the repayment. You can repay part or the full
+                        amount owing.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4">
+                    <div className="rounded-lg border bg-muted/50 p-4 space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Total owing</span>
+                            <span className="font-mono font-medium">
+                                {formatUnits(totalOwing, tokenDecimals)} {tokenSymbol}
+                            </span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Your balance</span>
+                            <span
+                                className={`font-mono ${!hasSufficientBalance && repayAmountWei > 0n ? "text-destructive" : ""}`}
+                            >
+                                {userBalance !== undefined
+                                    ? `${formatUnits(userBalance as bigint, tokenDecimals)} ${tokenSymbol}`
+                                    : "Loading..."}
+                            </span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Current allowance</span>
+                            <span
+                                className={`font-mono ${needsApproval && repayAmountWei > 0n ? "text-amber-600" : "text-green-600"}`}
+                            >
+                                {currentAllowance !== undefined
+                                    ? `${formatUnits(currentAllowance as bigint, tokenDecimals)} ${tokenSymbol}`
+                                    : "Loading..."}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="repay-amount">Repay amount ({tokenSymbol})</Label>
+                        <Input
+                            id="repay-amount"
+                            type="number"
+                            step="any"
+                            min="0"
+                            value={repayAmountStr}
+                            onChange={(e) => setRepayAmountStr(e.target.value)}
+                            className="font-mono"
+                            disabled={isProcessing}
+                            placeholder={formatUnits(totalOwing, tokenDecimals)}
+                        />
+                    </div>
+
+                    {repayAmountWei > 0n && !hasSufficientBalance && (
+                        <div className="flex items-center gap-2 text-sm text-destructive">
+                            <AlertTriangle className="size-4" />
+                            <span>Insufficient balance</span>
+                        </div>
+                    )}
+                    {repayAmountWei > 0n && hasSufficientBalance && needsApproval && (
+                        <div className="flex items-center gap-2 text-sm text-amber-600">
+                            <AlertTriangle className="size-4" />
+                            <span>Approve tokens before submitting repayment</span>
+                        </div>
+                    )}
+                </div>
+
+                <DialogFooter>
+                    <Button
+                        variant="outline"
+                        onClick={() => onOpenChange(false)}
+                        disabled={isProcessing}
+                    >
+                        Cancel
+                    </Button>
+                    {needsApproval && repayAmountWei > 0n && (
+                        <Button
+                            variant="secondary"
+                            onClick={handleApprove}
+                            disabled={
+                                isProcessing || !hasSufficientBalance || repayAmountWei === 0n
+                            }
+                        >
+                            {isProcessing && isApproving ? (
+                                <Loader2 className="mr-2 size-4 animate-spin" />
+                            ) : (
+                                <CheckCircle2 className="mr-2 size-4" />
+                            )}
+                            {isProcessing && isApproving
+                                ? isPending
+                                    ? "Confirm in wallet..."
+                                    : "Approving..."
+                                : `Approve ${repayAmountStr || "0"} ${tokenSymbol}`}
+                        </Button>
+                    )}
+                    <Button
+                        onClick={handleRepay}
+                        disabled={
+                            isProcessing ||
+                            repayAmountWei === 0n ||
+                            needsApproval ||
+                            !hasSufficientBalance
+                        }
+                    >
+                        {isProcessing && !isApproving ? (
+                            <Loader2 className="mr-2 size-4 animate-spin" />
+                        ) : (
+                            <Banknote className="mr-2 size-4" />
+                        )}
+                        {isProcessing && !isApproving
+                            ? "Confirm in wallet..."
+                            : "Repay Slashed Coverage"}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+/**
  * Coverage Claims Management component
  */
 function CoverageClaimsManagement({
@@ -1500,9 +1800,18 @@ function CoverageClaimsManagement({
     const [slashDialogOpen, setSlashDialogOpen] = useState(false)
     const [slashCoverageId, setSlashCoverageId] = useState<number | null>(null)
 
+    // Repay slashed coverage dialog state
+    const [repayDialogOpen, setRepayDialogOpen] = useState(false)
+    const [repayCoverageId, setRepayCoverageId] = useState<number | null>(null)
+
     // Complete slash dialog state
     const [completeSlashDialogOpen, setCompleteSlashDialogOpen] = useState(false)
-    const [completeSlashClaimData, setCompleteSlashClaimData] = useState<LoadedClaimData | null>(null)
+    const [completeSlashClaimData, setCompleteSlashClaimData] = useState<LoadedClaimData | null>(
+        null
+    )
+
+    // Close coverage state (which coverage is being closed for tx feedback)
+    const [closingCoverageId, setClosingCoverageId] = useState<number | null>(null)
 
     // Get selected provider addresses from contract IDs
     const selectedProvider = getSelectedProvider(selectedProviderId, registeredProviderContracts)
@@ -1622,6 +1931,36 @@ function CoverageClaimsManagement({
             setIsApprovingPurchase(false)
         }
     }, [isReceiptError, receiptError, hash])
+
+    // Close coverage write and receipt
+    const {
+        writeContract: writeCloseCoverage,
+        isPending: isPendingCloseCoverage,
+        data: hashCloseCoverage,
+    } = useWriteContract()
+    const { isSuccess: isCloseCoverageSuccess } = useWaitForTransactionReceipt({
+        hash: hashCloseCoverage,
+    })
+
+    // When close coverage tx confirms, remove that coverage from local state
+    useEffect(() => {
+        if (isCloseCoverageSuccess && closingCoverageId !== null) {
+            const coverageIdToRemove = closingCoverageId
+            setClosingCoverageId(null)
+            setLoadedClaims((prev) => prev.filter((c) => c.coverageId !== coverageIdToRemove))
+            setLoadedCoverageIds((prev) => {
+                const next = new Set(prev)
+                next.delete(coverageIdToRemove)
+                return next
+            })
+            setReservationCoverageIds((prev) => {
+                const next = new Set(prev)
+                next.delete(coverageIdToRemove)
+                return next
+            })
+            toast.success(`Coverage #${coverageIdToRemove} closed`)
+        }
+    }, [isCloseCoverageSuccess, closingCoverageId])
 
     // Load a single claim from a provider
     const loadClaim = useCallback(
@@ -1898,6 +2237,30 @@ function CoverageClaimsManagement({
         })
     }
 
+    const handleCloseCoverage = (coverageId: number) => {
+        if (!chainId) return
+        setClosingCoverageId(coverageId)
+        writeCloseCoverage(
+            {
+                address: contract.address,
+                abi: iExampleCoverageAgentAbi,
+                functionName: "closeCoverage",
+                args: [BigInt(coverageId)],
+                chainId,
+            },
+            {
+                onSuccess: (hash) => {
+                    toast.success(`Close coverage submitted: ${hash.slice(0, 10)}...`)
+                },
+                onError: (error) => {
+                    setClosingCoverageId(null)
+                    const decodedError = decodeContractError(error)
+                    toast.error(decodedError, { duration: 8000 })
+                },
+            }
+        )
+    }
+
     const handleApprovePurchase = () => {
         if (!assetAddress || pendingRequests.length === 0) return
 
@@ -2074,6 +2437,14 @@ function CoverageClaimsManagement({
         setConvertCoverageId(null)
 
         // Reload the coverage with forceReload=true to bypass the duplicate check
+        loadCoverage(coverageIdToReload, true)
+    }
+
+    const handleRepaySuccess = () => {
+        if (repayCoverageId === null) return
+        const coverageIdToReload = repayCoverageId
+        setRepayCoverageId(null)
+        setLoadedClaims((prev) => prev.filter((c) => c.coverageId !== coverageIdToReload))
         loadCoverage(coverageIdToReload, true)
     }
 
@@ -2605,6 +2976,43 @@ function CoverageClaimsManagement({
                                                                     Slash
                                                                 </Button>
                                                             )}
+                                                        {claims.reduce(
+                                                            (sum, c) => sum + c.totalSlashAmount,
+                                                            0n
+                                                        ) > 0n && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() => {
+                                                                    setRepayCoverageId(coverageId)
+                                                                    setRepayDialogOpen(true)
+                                                                }}
+                                                                title="Repay slashed coverage"
+                                                            >
+                                                                <Banknote className="size-4 mr-1" />
+                                                                Repay
+                                                            </Button>
+                                                        )}
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() =>
+                                                                handleCloseCoverage(coverageId)
+                                                            }
+                                                            disabled={
+                                                                isPendingCloseCoverage &&
+                                                                closingCoverageId === coverageId
+                                                            }
+                                                            title="Close coverage (closes all claims at providers)"
+                                                        >
+                                                            {isPendingCloseCoverage &&
+                                                            closingCoverageId === coverageId ? (
+                                                                <Loader2 className="size-4 mr-1 animate-spin" />
+                                                            ) : (
+                                                                <X className="size-4 mr-1" />
+                                                            )}
+                                                            Close Coverage
+                                                        </Button>
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
@@ -2624,6 +3032,42 @@ function CoverageClaimsManagement({
                                                         </Button>
                                                     </div>
                                                 </div>
+
+                                                {/* Coverage-level Total Slashed and Repayments Owing */}
+                                                {(() => {
+                                                    const coverageTotalOwing = claims.reduce(
+                                                        (sum, c) => sum + c.totalSlashAmount,
+                                                        0n
+                                                    )
+                                                    return coverageTotalOwing > 0n ? (
+                                                        <div className="border-b bg-muted/30 px-4 py-2 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+                                                            <div className="flex items-center justify-between gap-2">
+                                                                <span className="text-muted-foreground">
+                                                                    Total Slashed
+                                                                </span>
+                                                                <span className="font-mono text-destructive font-medium">
+                                                                    {formatUnits(
+                                                                        coverageTotalOwing,
+                                                                        tokenDecimals
+                                                                    )}{" "}
+                                                                    {tokenSymbol}
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center justify-between gap-2">
+                                                                <span className="text-muted-foreground">
+                                                                    Repayments owing
+                                                                </span>
+                                                                <span className="font-mono font-medium">
+                                                                    {formatUnits(
+                                                                        coverageTotalOwing,
+                                                                        tokenDecimals
+                                                                    )}{" "}
+                                                                    {tokenSymbol}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    ) : null
+                                                })()}
 
                                                 {/* Claims List */}
                                                 <div className="p-3 space-y-3">
@@ -2676,6 +3120,20 @@ function CoverageClaimsManagement({
                         tokenDecimals={tokenDecimals}
                         tokenSymbol={tokenSymbol}
                         onSuccess={handleConvertSuccess}
+                    />
+
+                    {/* Repay Slashed Coverage Dialog */}
+                    <RepaySlashedCoverageDialog
+                        open={repayDialogOpen}
+                        onOpenChange={setRepayDialogOpen}
+                        coverageId={repayCoverageId}
+                        claims={loadedClaims.filter((c) => c.coverageId === repayCoverageId)}
+                        contractAddress={contract.address}
+                        assetAddress={assetAddress as Address | undefined}
+                        chainId={chainId}
+                        tokenDecimals={tokenDecimals}
+                        tokenSymbol={tokenSymbol}
+                        onSuccess={handleRepaySuccess}
                     />
 
                     {/* Complete Slash Dialog */}

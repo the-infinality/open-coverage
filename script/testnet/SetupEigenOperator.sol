@@ -21,7 +21,6 @@ interface IWETH {
 }
 
 uint256 constant STAKE_AMOUNT_WETH = 0.2 ether;
-uint256 constant POSITION_EXPIRY_ONE_MONTH = 30 days;
 uint256 constant MAX_RESERVATION_TIME = 7 days;
 
 /// @title SetupEigenOperator
@@ -137,10 +136,10 @@ contract SetupEigenOperator is Script, EigenHelper, StdCheats {
                 CoveragePosition({
                     coverageAgent: coverageAgent_,
                     minRate: 100,
-                    maxDuration: 30 days,
-                    expiryTimestamp: block.timestamp + POSITION_EXPIRY_ONE_MONTH,
+                    maxDuration: 60 days,
+                    expiryTimestamp: block.timestamp + 120 days,
                     asset: weth_,
-                    refundable: Refundable.None,
+                    refundable: Refundable.Full,
                     slashCoordinator: address(0),
                     maxReservationTime: MAX_RESERVATION_TIME,
                     operatorId: bytes32(uint256(uint160(operator_)))

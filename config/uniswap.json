@@ -31,7 +31,7 @@
         "poolPaths": {
             "v3": {
                 "USDC/WETH": {
-                    "poolInfo": "0x1c7d4b196cb0c7b01d743fbc6116a902379c72380001f47b79995e5f793A07Bc00c21412e50Ecae098E7f9"
+                    "poolInfo": "0x1c7d4b196cb0c7b01d743fbc6116a902379c72380001f4fff9976782d46cc05630d1f6ebab18b2324d6b14"
                 }
             }
         }
@@ -44,7 +44,7 @@
         "poolPaths": {
             "v3": {
                 "USDC/WETH": {
-                    "poolInfo": "0x1c7d4b196cb0c7b01d743fbc6116a902379c72380001f47b79995e5f793A07Bc00c21412e50Ecae098E7f9"
+                    "poolInfo": "0x1c7d4b196cb0c7b01d743fbc6116a902379c72380001f4fff9976782d46cc05630d1f6ebab18b2324d6b14"
                 }
             }
         }

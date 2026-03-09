@@ -1393,6 +1393,13 @@ export const iEigenServiceManagerAbi = [
 export const iExampleCoverageAgentAbi = [
     {
         type: "function",
+        inputs: [{ name: "coverageId", internalType: "uint256", type: "uint256" }],
+        name: "closeCoverage",
+        outputs: [],
+        stateMutability: "nonpayable",
+    },
+    {
+        type: "function",
         inputs: [
             { name: "coverageId", internalType: "uint256", type: "uint256" },
             {
@@ -1515,6 +1522,25 @@ export const iExampleCoverageAgentAbi = [
         name: "updateMetadata",
         outputs: [],
         stateMutability: "nonpayable",
+    },
+    {
+        type: "event",
+        anonymous: false,
+        inputs: [
+            {
+                name: "coverageId",
+                internalType: "uint256",
+                type: "uint256",
+                indexed: true,
+            },
+            {
+                name: "amount",
+                internalType: "uint256",
+                type: "uint256",
+                indexed: false,
+            },
+        ],
+        name: "RewardsRefunded",
     },
     { type: "error", inputs: [], name: "NotCoverageAgentCoordinator" },
 ] as const

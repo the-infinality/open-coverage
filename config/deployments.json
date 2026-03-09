@@ -12,14 +12,14 @@
     "ExampleCoverageAgent": "0x74A8D3B01C3d88Dd9a6aC02E14E9B6780D16a1B3"
   },
   "11155111": {
-    "EigenServiceManagerFacet": "0x13DD6F9f21493269EA70e3a01C1E488f08128A83",
-    "EigenCoverageProviderFacet": "0x1c8F1a1c5B5426BED0aB79Bc4f0eC03FD7f8E41F",
-    "DiamondCutFacet": "0x7043b191Af1B40F7ccC49b9ee17bA8F307C664Ea",
-    "DiamondLoupeFacet": "0x34F77055838b557Cf2345749316f53bE00fb3dF3",
-    "OwnershipFacet": "0xA0dAE70f8C14A85e280f60fD03E4Fa2cDd5cd068",
-    "AssetPriceOracleAndSwapperFacet": "0xb044752f49af666a43721E99B1b6508Cc3d6B15C",
-    "UniswapV3SwapperEngine": "0xE79f4B8aDf68158CBe6B383c8bb9f5c1fE728C7f",
-    "EigenCoverageDiamond": "0x04583FfEc9E808E61e0bfE46dB51b71AFA36B28f",
-    "ExampleCoverageAgent": "0x74A8D3B01C3d88Dd9a6aC02E14E9B6780D16a1B3"
+    "EigenServiceManagerFacet": "0x35cCaf639F52B2fF939101Eb32e15dbF879d2540",
+    "EigenCoverageProviderFacet": "0xA03f99Dc3B7e28Bd17173d9e826586C456905a7F",
+    "DiamondCutFacet": "0xE6f542FC091732B4D480f0b148D99215eBdD8A66",
+    "DiamondLoupeFacet": "0xd619670E28083b21805BB21Fa1Acc0287b4392C8",
+    "OwnershipFacet": "0x5E9F68006F517006ac38B56048F245C58f140d7a",
+    "AssetPriceOracleAndSwapperFacet": "0x850907bF1ad1B7Fc2FeCE4ea97e379c0429F2436",
+    "UniswapV3SwapperEngine": "0x89C82c8F58C935FF4B7Afe46a86B4Ca52b4Bc39E",
+    "EigenCoverageDiamond": "0x997102126a3B10AA7Bfd991ef4DE8E6E196AFDF2",
+    "ExampleCoverageAgent": "0x533DC1904809a47991797aE64d955c1029c143B1"
   }
 }

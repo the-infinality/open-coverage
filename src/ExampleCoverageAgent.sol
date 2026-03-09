@@ -271,6 +271,8 @@ contract ExampleCoverageAgent is ICoverageAgent, IExampleCoverageAgent, ERC165 {
             uint256 repayAmount = amounts[i] * amount / totalOwing;
             totalRepaid += repayAmount;
 
+            SafeERC20.forceApprove(IERC20(_ASSET), coverageData.claims[i].coverageProvider, repayAmount);
+
             ICoverageProvider(coverageData.claims[i].coverageProvider)
                 .repaySlashedClaim(coverageData.claims[i].claimId, repayAmount);
         }

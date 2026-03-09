@@ -146,6 +146,10 @@ contract MockCoverageProvider is ICoverageProvider, ICoverageLiquidatable {
             } else {
                 _claims[claimIds[i]].status = CoverageClaimStatus.Slashed;
                 slashStatuses[i] = CoverageClaimStatus.Slashed;
+                // Real provider sends slashed amount to coverage agent; mock must have balance (e.g. deal in test)
+                IERC20 asset = IERC20(ICoverageAgent(_position.coverageAgent).asset());
+                bool success = asset.transfer(_position.coverageAgent, amounts[i]);
+                if (!success) revert RewardTransferFailed();
                 emit ClaimSlashed(claimIds[i], amounts[i]);
             }
         }
@@ -155,11 +159,21 @@ contract MockCoverageProvider is ICoverageProvider, ICoverageLiquidatable {
         if (_claimSlashAmounts[claimId] > _claims[claimId].amount) {
             revert SlashAmountExceedsClaim(claimId, _claimSlashAmounts[claimId], _claims[claimId].amount);
         }
+        uint256 amount = _claimSlashAmounts[claimId];
         _claims[claimId].status = CoverageClaimStatus.Slashed;
-        emit ClaimSlashed(claimId, _claimSlashAmounts[claimId]);
+        // Real provider sends slashed amount to coverage agent; mock must have balance (e.g. deal in test)
+        address agent = _positions[_claims[claimId].positionId].coverageAgent;
+        IERC20 asset = IERC20(ICoverageAgent(agent).asset());
+        bool success = asset.transfer(agent, amount);
+        if (!success) revert RewardTransferFailed();
+        emit ClaimSlashed(claimId, amount);
     }
 
     function repaySlashedClaim(uint256 claimId, uint256 amount) external override {
+        // Pull tokens from the coverage agent (caller), matching real provider behavior so approval is tested
+        bool success = IERC20(ICoverageAgent(msg.sender).asset()).transferFrom(msg.sender, address(this), amount);
+        if (!success) revert RewardTransferFailed();
+
         if (amount >= _claimSlashAmounts[claimId]) {
             _claimSlashAmounts[claimId] = 0;
             _claims[claimId].status = CoverageClaimStatus.Repaid;
@@ -249,6 +263,8 @@ contract ExampleCoverageAgentTest is TestDeployer {
 
         // Deploy mock provider and price oracle
         mockProvider = new MockCoverageProvider();
+        // Fund mock so it can send tokens to the agent when slashing (real provider gets these from strategy/slash flow)
+        deal(USDC, address(mockProvider), 1e12);
     }
 
     /// ============ Constructor Tests ============
@@ -670,6 +686,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
     function test_slashCoverage_multipleProviders() public {
         // Register multiple providers
         MockCoverageProvider provider2 = new MockCoverageProvider();
+        deal(USDC, address(provider2), 1e12);
         coverageAgent.registerCoverageProvider(address(mockProvider));
         coverageAgent.registerCoverageProvider(address(provider2));
 
@@ -1519,6 +1536,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
     function test_repaymentsOwing_multipleProviders() public {
         // Register multiple providers
         MockCoverageProvider provider2 = new MockCoverageProvider();
+        deal(USDC, address(provider2), 1e12);
         coverageAgent.registerCoverageProvider(address(mockProvider));
         coverageAgent.registerCoverageProvider(address(provider2));
 
@@ -2060,6 +2078,7 @@ contract ExampleCoverageAgentTest is TestDeployer {
     function test_repaySlashedCoverage_multipleProviders() public {
         // Register multiple providers
         MockCoverageProvider provider2 = new MockCoverageProvider();
+        deal(USDC, address(provider2), 1e12);
         coverageAgent.registerCoverageProvider(address(mockProvider));
         coverageAgent.registerCoverageProvider(address(provider2));
 
@@ -2255,9 +2274,9 @@ contract ExampleCoverageAgentTest is TestDeployer {
         uint256 coordinatorBalanceAfter = IERC20(USDC).balanceOf(coordinator);
         assertEq(coordinatorBalanceAfter, coordinatorBalanceBefore); // Paid 2000e6, got 0 back
 
-        // Verify tokens are stuck in the coverage agent (1000e6 excess)
+        // With a provider that pulls tokens, the agent sends the full proportional amount (2000e6) to the provider
         uint256 agentBalanceAfter = IERC20(USDC).balanceOf(address(coverageAgent));
-        assertEq(agentBalanceAfter, agentBalanceBefore + 2000e6);
+        assertEq(agentBalanceAfter, agentBalanceBefore);
 
         // Verify the slash is fully repaid
         (, uint256 totalOwingAfter) = coverageAgent.repaymentsOwing(coverageId);
@@ -2494,9 +2513,9 @@ contract ExampleCoverageAgentTest is TestDeployer {
         // Should have 1 wei remainder
         assertEq(remainder, 1);
 
-        // Verify no extra tokens stuck in agent
+        // Verify no extra tokens stuck in agent (agent paid 99999999 to provider, returned 1 to coordinator)
         uint256 agentBalanceAfter = IERC20(USDC).balanceOf(address(coverageAgent));
-        assertEq(agentBalanceAfter, agentBalanceBefore + 99999999);
+        assertEq(agentBalanceAfter, agentBalanceBefore);
 
         // Verify repayment amounts
         (, uint256 totalOwingAfter) = coverageAgent.repaymentsOwing(coverageId);
