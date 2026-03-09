@@ -24,7 +24,7 @@ contract DeployExampleCoverageAgent is Script, ChainHelper {
         console.log("ExampleCoverageAgent deployed at:", exampleCoverageAgentAddress);
         console.log("Coordinator:", coordinator);
         console.log("Coverage Asset:", coverageAsset);
-        console.log("Metadata URI:", metadataUri);
+        console.log("Example Coverage Agent Metadata URI:", metadataUri);
 
         vm.stopBroadcast();
     }

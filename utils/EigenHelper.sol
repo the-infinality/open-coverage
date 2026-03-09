@@ -61,6 +61,18 @@ contract EigenHelper {
         return IStrategy(_getAddressBook().eigenAddresses.testStrategy);
     }
 
+    /// @notice Returns the WETH strategy from config (strategies.WETH). Falls back to testStrategy if WETH not set (e.g. mainnet).
+    function _getWethStrategy() internal view returns (IStrategy) {
+        Vm vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
+        string memory configJson = getConfig(EIGEN_CONFIG_SUFFIX);
+        string memory path = string.concat("$['", vm.toString(block.chainid), "'].strategies.WETH");
+        if (configJson.keyExists(path)) {
+            address wethStrategy = configJson.readAddress(path);
+            if (wethStrategy != address(0)) return IStrategy(wethStrategy);
+        }
+        return _getTestStrategy();
+    }
+
     function _getAddressBook() internal view returns (EigenAddressbook memory ab) {
         Vm vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
@@ -90,5 +102,11 @@ contract EigenHelper {
         vm.label(ab.eigenAddresses.permissionController, "Permission Controller");
         vm.label(ab.eigenAddresses.strategyFactory, "Strategy Factory");
         vm.label(ab.eigenAddresses.testStrategy, "Test Strategy");
+        string memory configJson = getConfig(EIGEN_CONFIG_SUFFIX);
+        string memory wethStrategyPath = string.concat("$['", vm.toString(block.chainid), "'].strategies.WETH");
+        if (configJson.keyExists(wethStrategyPath)) {
+            address wethStrategy = configJson.readAddress(wethStrategyPath);
+            if (wethStrategy != address(0)) vm.label(wethStrategy, "WETH Strategy");
+        }
     }
 }
