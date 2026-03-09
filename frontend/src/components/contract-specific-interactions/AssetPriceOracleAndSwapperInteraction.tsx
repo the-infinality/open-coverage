@@ -261,6 +261,8 @@ function StrategyAssetOption({
 
 /**
  * Quote Results Display Component
+ * - quote / minAmountOut are in Asset A (output) decimals
+ * - maxAmountIn is in Asset B (input) decimals
  */
 function QuoteResults({
     quote,
@@ -269,6 +271,8 @@ function QuoteResults({
     maxAmountIn,
     assetASymbol,
     assetADecimals,
+    assetBSymbol,
+    assetBDecimals,
 }: {
     quote?: bigint
     verified?: boolean
@@ -276,6 +280,8 @@ function QuoteResults({
     maxAmountIn?: bigint
     assetASymbol?: string
     assetADecimals?: number
+    assetBSymbol?: string
+    assetBDecimals?: number
 }) {
     return (
         <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
@@ -310,8 +316,8 @@ function QuoteResults({
                     <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">Max Amount In</span>
                         <span className="font-mono">
-                            {formatUnits(maxAmountIn, assetADecimals || 18)}{" "}
-                            {assetASymbol || "tokens"}
+                            {formatUnits(maxAmountIn, assetBDecimals ?? 18)}{" "}
+                            {assetBSymbol ?? "tokens"}
                         </span>
                     </div>
                 )}
@@ -559,16 +565,19 @@ function ReadSection({
     const assetBInfo = useTokenInfo(assetB, chainId)
 
     // Parse amount based on quote type
-    // All quote types take Asset B amount (what you spend/output from wallet)
+    // getQuote / swapForInput: amount is Asset B (what you spend). swapForOutput: amount is Asset A (what you want to receive)
     const parsedAmount = useMemo(() => {
         if (!amountInput || amountInput.trim() === "") return undefined
         try {
-            const decimals = assetBInfo.tokenDecimals || 18
+            const decimals =
+                quoteType === "swapForOutput"
+                    ? (assetAInfo.tokenDecimals ?? 18)
+                    : (assetBInfo.tokenDecimals ?? 18)
             return parseUnits(amountInput, decimals)
         } catch {
             return undefined
         }
-    }, [amountInput, assetBInfo.tokenDecimals])
+    }, [amountInput, quoteType, assetAInfo.tokenDecimals, assetBInfo.tokenDecimals])
     
     // Check if input is valid
     const isValidAmount = useMemo(() => {
@@ -661,10 +670,13 @@ function ReadSection({
 
     const isLoading = isLoadingQuote || isLoadingSwapForInput || isLoadingSwapForOutput
 
-    // Type-safe extraction of quote results
+    // Type-safe extraction of quote results (getQuote and swap* return [value, verified])
     const quoteData = quoteResult as [bigint, boolean] | undefined
     const quote = quoteData?.[0]
     const verified = quoteData?.[1]
+
+    const swapForInputData = swapForInputResult as [bigint, boolean] | undefined
+    const swapForOutputData = swapForOutputResult as [bigint, boolean] | undefined
 
     return (
         <div className="space-y-6">
@@ -755,8 +767,8 @@ function ReadSection({
                         </TabsContent>
                         <TabsContent value="swapForOutput" className="mt-4">
                             <p className="text-xs text-muted-foreground">
-                                Enter the amount of Asset B you want to spend (output from wallet)
-                                to see the minimum Asset A you will receive
+                                Enter the amount of Asset A you want to receive to see the maximum
+                                Asset B you need to spend
                             </p>
                         </TabsContent>
                     </Tabs>
@@ -766,8 +778,8 @@ function ReadSection({
                 <div className="space-y-2">
                     <Label>
                         {quoteType === "swapForOutput"
-                            ? `Amount Out (${assetBInfo.tokenSymbol || "Asset B"})`
-                            : `Amount In (${assetBInfo.tokenSymbol || "Asset B"})`}
+                            ? `Amount Out (${assetAInfo.tokenSymbol ?? "Asset A"})`
+                            : `Amount In (${assetBInfo.tokenSymbol ?? "Asset B"})`}
                     </Label>
                     <div className="flex gap-2">
                         <Input
@@ -793,8 +805,10 @@ function ReadSection({
                         )}
                         {isValidAmount && amountInput && (
                             <p className="text-xs text-muted-foreground">
-                                Enter amount in {assetBInfo.tokenSymbol || "Asset B"} units
-                                {` (${assetBInfo.tokenDecimals || 18} decimals)`}
+                                Enter amount in{" "}
+                                {quoteType === "swapForOutput"
+                                    ? `${assetAInfo.tokenSymbol ?? "Asset A"} units (${assetAInfo.tokenDecimals ?? 18} decimals)`
+                                    : `${assetBInfo.tokenSymbol ?? "Asset B"} units (${assetBInfo.tokenDecimals ?? 18} decimals)`}
                             </p>
                         )}
                         <Button
@@ -837,23 +851,21 @@ function ReadSection({
 
                 {/* Quote Results */}
                 {(quote !== undefined ||
-                    swapForInputResult !== undefined ||
-                    swapForOutputResult !== undefined) && (
+                    swapForInputData?.[0] !== undefined ||
+                    swapForOutputData?.[0] !== undefined) && (
                     <QuoteResults
                         quote={quoteType === "getQuote" ? quote : undefined}
                         verified={quoteType === "getQuote" ? verified : undefined}
                         minAmountOut={
-                            quoteType === "swapForInput"
-                                ? (swapForInputResult as bigint)
-                                : undefined
+                            quoteType === "swapForInput" ? swapForInputData?.[0] : undefined
                         }
                         maxAmountIn={
-                            quoteType === "swapForOutput"
-                                ? (swapForOutputResult as bigint)
-                                : undefined
+                            quoteType === "swapForOutput" ? swapForOutputData?.[0] : undefined
                         }
                         assetASymbol={assetAInfo.tokenSymbol}
                         assetADecimals={assetAInfo.tokenDecimals}
+                        assetBSymbol={assetBInfo.tokenSymbol}
+                        assetBDecimals={assetBInfo.tokenDecimals}
                     />
                 )}
             </div>
