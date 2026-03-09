@@ -479,6 +479,13 @@ export const iCoverageProviderAbi = [
     },
     {
         type: "function",
+        inputs: [{ name: "operatorId", internalType: "bytes32", type: "bytes32" }],
+        name: "coverageThreshold",
+        outputs: [{ name: "coverageThreshold", internalType: "uint16", type: "uint16" }],
+        stateMutability: "view",
+    },
+    {
+        type: "function",
         inputs: [
             {
                 name: "data",
@@ -574,7 +581,8 @@ export const iCoverageProviderAbi = [
         inputs: [{ name: "positionId", internalType: "uint256", type: "uint256" }],
         name: "positionBacking",
         outputs: [
-            { name: "backing", internalType: "int256", type: "int256" },
+            { name: "availableBacking", internalType: "int256", type: "int256" },
+            { name: "totalBacking", internalType: "uint256", type: "uint256" },
             { name: "coveragePercentage", internalType: "uint16", type: "uint16" },
         ],
         stateMutability: "view",
@@ -613,6 +621,16 @@ export const iCoverageProviderAbi = [
         ],
         name: "reserveClaim",
         outputs: [{ name: "claimId", internalType: "uint256", type: "uint256" }],
+        stateMutability: "nonpayable",
+    },
+    {
+        type: "function",
+        inputs: [
+            { name: "operatorId", internalType: "bytes32", type: "bytes32" },
+            { name: "coverageThreshold", internalType: "uint16", type: "uint16" },
+        ],
+        name: "setCoverageThreshold",
+        outputs: [],
         stateMutability: "nonpayable",
     },
     {

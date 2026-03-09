@@ -258,9 +258,13 @@ interface ICoverageProvider {
     /// @notice Get the total available backing for a position.
     /// @dev A negative value indicates a backing deficit, while a positive value means the position is fully backed.
     /// @param positionId The position id to check backing for.
-    /// @return backing The total available backing for the position (negative = deficit, positive = fully backed).
+    /// @return availableBacking The available backing backstop for the position (negative = deficit, positive = fully backed).
+    /// @return totalBacking The total allocated backing for the position.
     /// @return coveragePercentage The coverage utilization percentage in basis points (10000 = 100%).
-    function positionBacking(uint256 positionId) external view returns (int256 backing, uint16 coveragePercentage);
+    function positionBacking(uint256 positionId)
+        external
+        view
+        returns (int256 availableBacking, uint256 totalBacking, uint16 coveragePercentage);
 
     /// @notice Get the total amount slashed for a given claim.
     /// @param claimId The claim id to get the total slash amount for.

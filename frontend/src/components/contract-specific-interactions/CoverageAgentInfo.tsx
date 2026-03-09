@@ -298,6 +298,7 @@ interface LoadedClaimData {
     providerAddress: Address
     claim: CoverageClaimData
     backing: bigint
+    totalBacking: bigint
     coveragePercentage: number
     totalSlashAmount: bigint
     coverageId: number
@@ -1993,7 +1994,7 @@ function CoverageClaimsManagement({
                     return false
                 }
 
-                const [backing, coveragePercentage] = await readContract(config, {
+                const [backing, totalBacking, coveragePercentage] = await readContract(config, {
                     address: providerAddress as Address,
                     abi: iCoverageProviderAbi,
                     functionName: "positionBacking",
@@ -2017,6 +2018,7 @@ function CoverageClaimsManagement({
                             providerAddress: providerAddress as Address,
                             claim: claimData,
                             backing: backing as bigint,
+                            totalBacking: totalBacking as bigint,
                             coveragePercentage: Number(coveragePercentage),
                             totalSlashAmount: totalSlashAmount as bigint,
                             coverageId,

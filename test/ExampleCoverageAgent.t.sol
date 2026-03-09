@@ -219,8 +219,8 @@ contract MockCoverageProvider is ICoverageProvider, ICoverageLiquidatable {
         return 9000;
     }
 
-    function positionBacking(uint256) external pure override returns (int256, uint16) {
-        return (0, 0);
+    function positionBacking(uint256) external pure override returns (int256, uint256, uint16) {
+        return (0, 0, 0);
     }
 
     function claimTotalSlashAmount(uint256 claimId) external view override returns (uint256) {
