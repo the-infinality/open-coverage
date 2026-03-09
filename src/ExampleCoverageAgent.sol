@@ -299,6 +299,29 @@ contract ExampleCoverageAgent is ICoverageAgent, IExampleCoverageAgent, ERC165 {
     }
 
     /// @inheritdoc IExampleCoverageAgent
+    function closeCoverage(uint256 coverageId) external onlyCoordinator {
+        require(coverageId < _coverages.length, InvalidCoverage(coverageId));
+        Coverage storage coverageData = _coverages[coverageId];
+
+        uint256 balanceBefore = IERC20(_ASSET).balanceOf(address(this));
+
+        for (uint256 i = 0; i < coverageData.claims.length; i++) {
+            Claim storage claimData = coverageData.claims[i];
+            ICoverageProvider(claimData.coverageProvider).closeClaim(claimData.claimId);
+        }
+
+        uint256 balanceAfter = IERC20(_ASSET).balanceOf(address(this));
+        uint256 refundAmount = balanceAfter > balanceBefore ? balanceAfter - balanceBefore : 0;
+
+        if (refundAmount > 0) {
+            SafeERC20.safeTransfer(IERC20(_ASSET), _COORDINATOR, refundAmount);
+            emit RewardsRefunded(coverageId, refundAmount);
+        }
+
+        emit CoverageClosed(coverageId);
+    }
+
+    /// @inheritdoc IExampleCoverageAgent
     function updateMetadata(string calldata metadataURI) external onlyCoordinator {
         emit MetadataUpdated(metadataURI);
     }

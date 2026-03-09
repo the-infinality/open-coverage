@@ -27,6 +27,7 @@ contract MockCoverageProvider is ICoverageProvider, ICoverageLiquidatable {
     mapping(uint256 => CoverageClaim) private _claims;
     mapping(address => uint256) private _totalCoverageByAgent;
     mapping(uint256 => uint256) private _claimSlashAmounts;
+    mapping(uint256 => uint256) private _refundOnClose;
 
     function onIsRegistered() external override {
         isRegistered = true;
@@ -105,8 +106,21 @@ contract MockCoverageProvider is ICoverageProvider, ICoverageLiquidatable {
         emit ClaimIssued(coverageClaim.positionId, claimId, amount, duration);
     }
 
+    /// @notice Set refund amount to send to the coverage agent when this claim is closed (for testing).
+    function setRefundOnClose(uint256 claimId, uint256 amount) external {
+        _refundOnClose[claimId] = amount;
+    }
+
     function closeClaim(uint256 claimId) external override {
         _claims[claimId].status = CoverageClaimStatus.Completed;
+        uint256 refund = _refundOnClose[claimId];
+        if (refund > 0) {
+            _refundOnClose[claimId] = 0;
+            address agent = msg.sender;
+            bool success = IERC20(ICoverageAgent(agent).asset()).transfer(agent, refund);
+            if (!success) revert RewardTransferFailed();
+            ICoverageAgent(agent).onClaimRefunded(claimId, refund);
+        }
         emit ClaimClosed(claimId);
     }
 
@@ -2920,5 +2934,208 @@ contract ExampleCoverageAgentTest is TestDeployer {
 
         (, uint256 finalOwing) = coverageAgent.repaymentsOwing(coverageId);
         assertEq(finalOwing, 0); // Successfully closed with exact amount
+    }
+
+    /// ============ closeCoverage Tests ============
+
+    function test_closeCoverage_closesAllClaimsAndEmitsCoverageClosed() public {
+        coverageAgent.registerCoverageProvider(address(mockProvider));
+
+        CoveragePosition memory position = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: USDC,
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
+        });
+        uint256 positionId = mockProvider.createPosition(position, "");
+
+        ClaimCoverageRequest[] memory requests = new ClaimCoverageRequest[](1);
+        requests[0] = ClaimCoverageRequest({
+            coverageProvider: address(mockProvider),
+            positionId: positionId,
+            amount: 1000e6,
+            duration: 30 days,
+            reward: 10e6
+        });
+
+        deal(USDC, coordinator, 10e6);
+        vm.prank(coordinator);
+        IERC20(USDC).approve(address(coverageAgent), 10e6);
+        uint256 coverageId = coverageAgent.purchaseCoverage(requests);
+
+        vm.expectEmit(true, false, false, false);
+        emit ICoverageAgent.CoverageClosed(coverageId);
+        coverageAgent.closeCoverage(coverageId);
+
+        Coverage memory cov = coverageAgent.coverage(coverageId);
+        assertEq(cov.claims.length, 1);
+        assertEq(uint8(mockProvider.claim(cov.claims[0].claimId).status), uint8(CoverageClaimStatus.Completed));
+    }
+
+    function test_closeCoverage_transfersRefundToCoordinatorAndEmitsRewardsRefunded() public {
+        coverageAgent.registerCoverageProvider(address(mockProvider));
+
+        CoveragePosition memory position = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: USDC,
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
+        });
+        uint256 positionId = mockProvider.createPosition(position, "");
+
+        ClaimCoverageRequest[] memory requests = new ClaimCoverageRequest[](1);
+        requests[0] = ClaimCoverageRequest({
+            coverageProvider: address(mockProvider),
+            positionId: positionId,
+            amount: 1000e6,
+            duration: 30 days,
+            reward: 10e6
+        });
+
+        deal(USDC, coordinator, 10e6);
+        vm.prank(coordinator);
+        IERC20(USDC).approve(address(coverageAgent), 10e6);
+        uint256 coverageId = coverageAgent.purchaseCoverage(requests);
+
+        uint256 refundAmount = 5e6;
+        mockProvider.setRefundOnClose(0, refundAmount);
+
+        uint256 coordinatorBalanceBefore = IERC20(USDC).balanceOf(coordinator);
+
+        coverageAgent.closeCoverage(coverageId);
+
+        // Refund is transferred to coordinator (from provider -> agent -> coordinator)
+        assertEq(IERC20(USDC).balanceOf(coordinator), coordinatorBalanceBefore + refundAmount);
+    }
+
+    function test_closeCoverage_noRefund_doesNotEmitRewardsRefunded() public {
+        coverageAgent.registerCoverageProvider(address(mockProvider));
+
+        CoveragePosition memory position = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: USDC,
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
+        });
+        uint256 positionId = mockProvider.createPosition(position, "");
+
+        ClaimCoverageRequest[] memory requests = new ClaimCoverageRequest[](1);
+        requests[0] = ClaimCoverageRequest({
+            coverageProvider: address(mockProvider),
+            positionId: positionId,
+            amount: 1000e6,
+            duration: 30 days,
+            reward: 10e6
+        });
+
+        deal(USDC, coordinator, 10e6);
+        vm.prank(coordinator);
+        IERC20(USDC).approve(address(coverageAgent), 10e6);
+        uint256 coverageId = coverageAgent.purchaseCoverage(requests);
+
+        // No setRefundOnClose - balance should not change
+        coverageAgent.closeCoverage(coverageId);
+
+        // Coordinator balance unchanged (only had 10e6, spent it all on purchase)
+        assertEq(IERC20(USDC).balanceOf(coordinator), 0);
+    }
+
+    function test_closeCoverage_multipleClaims_allClosedAndRefundAggregated() public {
+        coverageAgent.registerCoverageProvider(address(mockProvider));
+
+        CoveragePosition memory position = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: USDC,
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
+        });
+        uint256 positionId = mockProvider.createPosition(position, "");
+
+        ClaimCoverageRequest[] memory requests = new ClaimCoverageRequest[](3);
+        for (uint256 i = 0; i < 3; i++) {
+            requests[i] = ClaimCoverageRequest({
+                coverageProvider: address(mockProvider),
+                positionId: positionId,
+                amount: 1000e6,
+                duration: 30 days,
+                reward: 10e6
+            });
+        }
+
+        deal(USDC, coordinator, 30e6);
+        vm.prank(coordinator);
+        IERC20(USDC).approve(address(coverageAgent), 30e6);
+        uint256 coverageId = coverageAgent.purchaseCoverage(requests);
+
+        Coverage memory cov = coverageAgent.coverage(coverageId);
+        mockProvider.setRefundOnClose(cov.claims[0].claimId, 2e6);
+        mockProvider.setRefundOnClose(cov.claims[1].claimId, 3e6);
+        mockProvider.setRefundOnClose(cov.claims[2].claimId, 1e6);
+
+        uint256 coordinatorBalanceBefore = IERC20(USDC).balanceOf(coordinator);
+        coverageAgent.closeCoverage(coverageId);
+
+        uint256 totalRefund = 2e6 + 3e6 + 1e6;
+        assertEq(IERC20(USDC).balanceOf(coordinator), coordinatorBalanceBefore + totalRefund);
+    }
+
+    function test_RevertWhen_closeCoverage_invalidCoverageId() public {
+        vm.expectRevert(abi.encodeWithSelector(ICoverageAgent.InvalidCoverage.selector, 0));
+        coverageAgent.closeCoverage(0);
+    }
+
+    function test_RevertWhen_closeCoverage_notCoordinator() public {
+        coverageAgent.registerCoverageProvider(address(mockProvider));
+
+        CoveragePosition memory position = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 30 days,
+            expiryTimestamp: block.timestamp + 365 days,
+            asset: USDC,
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: 0,
+            operatorId: bytes32(0)
+        });
+        uint256 positionId = mockProvider.createPosition(position, "");
+
+        ClaimCoverageRequest[] memory requests = new ClaimCoverageRequest[](1);
+        requests[0] = ClaimCoverageRequest({
+            coverageProvider: address(mockProvider),
+            positionId: positionId,
+            amount: 1000e6,
+            duration: 30 days,
+            reward: 10e6
+        });
+
+        deal(USDC, coordinator, 10e6);
+        vm.prank(coordinator);
+        IERC20(USDC).approve(address(coverageAgent), 10e6);
+        coverageAgent.purchaseCoverage(requests);
+
+        vm.prank(nonHandler);
+        vm.expectRevert(IExampleCoverageAgent.NotCoverageAgentCoordinator.selector);
+        coverageAgent.closeCoverage(0);
     }
 }
