@@ -9,6 +9,7 @@ import { getAddress } from "viem"
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import {
     Form,
@@ -113,6 +114,7 @@ export function AddContractPage() {
     // Contract existence check state
     const [contractExists, setContractExists] = useState<boolean | null>(null)
     const [isCheckingExists, setIsCheckingExists] = useState(false)
+    const [bypassVerification, setBypassVerification] = useState(false)
 
     const form = useForm<FormData>({
         resolver: zodResolver(formSchema) as unknown as undefined,
@@ -181,6 +183,19 @@ export function AddContractPage() {
         [contractExists, supportedInterfaces, requiredInterface]
     )
 
+    const cannotVerifyContract =
+        isAddressValid &&
+        !isValidating &&
+        !supportsRequiredInterface
+
+    useEffect(() => {
+        setBypassVerification(false)
+    }, [watchedAddress, watchedChainId, watchedType])
+
+    useEffect(() => {
+        if (supportsRequiredInterface) setBypassVerification(false)
+    }, [supportsRequiredInterface])
+
     const { coverageProvider } = useCheckCoverageProvider(
         watchedType === "CoverageProvider" ? (watchedAddress as `0x${string}`) : undefined,
         watchedChainId
@@ -219,6 +234,13 @@ export function AddContractPage() {
             return
         }
 
+        const verified =
+            contractExists === true && supportedInterfaces.includes(requiredInterface)
+        if (!verified && !bypassVerification) {
+            toast.error("Contract could not be verified. Enable bypass or fix the address.")
+            return
+        }
+
         switch (values.type) {
             case "CoverageProvider":
                 addContract({
@@ -238,8 +260,13 @@ export function AddContractPage() {
             }
         }
 
-        toast.success("Contract added successfully")
+        toast.success(
+            verified
+                ? "Contract added successfully"
+                : `Contract added as ${values.type} without interface verification`
+        )
         form.reset()
+        setBypassVerification(false)
         navigate("/")
     }
 
@@ -478,11 +505,58 @@ export function AddContractPage() {
                                 )}
                             />
 
+                            {cannotVerifyContract && (
+                                <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 space-y-3">
+                                    <p className="text-sm font-medium text-amber-950 dark:text-amber-100">
+                                        Verification failed
+                                    </p>
+                                    <p className="text-sm text-muted-foreground">
+                                        {contractExists === false ? (
+                                            <>
+                                                No bytecode at this address on the selected chain. You
+                                                can still add it if the address will be correct once
+                                                deployed.
+                                            </>
+                                        ) : contractExists === true ? (
+                                            <>
+                                                This contract does not report{" "}
+                                                <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                                                    {requiredInterface}
+                                                </code>{" "}
+                                                via ERC-165. Only proceed if you are sure this
+                                                address matches the selected contract type.
+                                            </>
+                                        ) : (
+                                            <>
+                                                Could not confirm bytecode at this address. You can
+                                                add the contract anyway if you trust the address and
+                                                type.
+                                            </>
+                                        )}
+                                    </p>
+                                    <label className="flex cursor-pointer items-start gap-3">
+                                        <Checkbox
+                                            checked={bypassVerification}
+                                            onChange={(e) =>
+                                                setBypassVerification(e.target.checked)
+                                            }
+                                            className="mt-0.5"
+                                        />
+                                        <span className="text-sm leading-tight">
+                                            Add anyway without verification (ABI may not match on-chain
+                                            code)
+                                        </span>
+                                    </label>
+                                </div>
+                            )}
+
                             <Button
                                 type="submit"
                                 className="w-full"
                                 disabled={
-                                    !isAddressValid || isValidating || !supportsRequiredInterface
+                                    !isAddressValid ||
+                                    isValidating ||
+                                    (!supportsRequiredInterface && !bypassVerification)
                                 }
                                 size="lg"
                             >
