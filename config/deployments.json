@@ -12,8 +12,8 @@
     "ExampleCoverageAgent": "0x74A8D3B01C3d88Dd9a6aC02E14E9B6780D16a1B3"
   },
   "11155111": {
-    "EigenServiceManagerFacet": "0x35cCaf639F52B2fF939101Eb32e15dbF879d2540",
-    "EigenCoverageProviderFacet": "0xA03f99Dc3B7e28Bd17173d9e826586C456905a7F",
+    "EigenServiceManagerFacet": "0x6179f406C31ad3d0972fa0572A48E68c39a7a8EF",
+    "EigenCoverageProviderFacet": "0x114E3772F69EaDF80792Bc90477A83a6dCC06344",
     "DiamondCutFacet": "0xE6f542FC091732B4D480f0b148D99215eBdD8A66",
     "DiamondLoupeFacet": "0xd619670E28083b21805BB21Fa1Acc0287b4392C8",
     "OwnershipFacet": "0x5E9F68006F517006ac38B56048F245C58f140d7a",

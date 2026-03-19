@@ -77,8 +77,8 @@ contract DeployEigenProviderFacets is Script {
                 }
                 if (!anyExist) return;
                 string[2] memory artifacts = [
-                    "../../src/providers/eigenlayer/facets/EigenServiceManagerFacet.sol:EigenServiceManagerFacet",
-                    "../../src/providers/eigenlayer/facets/EigenCoverageProviderFacet.sol:EigenCoverageProviderFacet"
+                    "src/providers/eigenlayer/facets/EigenServiceManagerFacet.sol:EigenServiceManagerFacet",
+                    "src/providers/eigenlayer/facets/EigenCoverageProviderFacet.sol:EigenCoverageProviderFacet"
                 ];
                 bool allSameBytecode = true;
                 for (uint256 f = 0; f < 2; f++) {
