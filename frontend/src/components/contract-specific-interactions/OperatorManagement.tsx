@@ -49,6 +49,7 @@ import { CoverageAgentSelect } from "@/components/ContractSelects"
 import { StrategySelect } from "@/components/StrategySelect"
 import { useChainFilteredContracts } from "@/hooks/use-chain-filtered-contracts"
 import { supportedChains } from "@/lib/wagmi"
+import { OperatorAllocations } from "./OperatorAllocations"
 
 type SupportedChainId = (typeof supportedChains)[number]["id"]
 
@@ -87,6 +88,9 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
     const config = useConfig()
     const { coverageAgents, serviceManagers } = useChainFilteredContracts(chainId as number)
     const { addContract, contracts } = useContracts()
+
+    const [crossSetAllocatePending, setCrossSetAllocatePending] = useState(false)
+    const [allocationRefreshKey, setAllocationRefreshKey] = useState(0)
 
     // Add AVS dialog state (quick-add AVS from registered operator set)
     const [addAvsDialogOpen, setAddAvsDialogOpen] = useState(false)
@@ -397,6 +401,7 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
         prevSuccessHashRef.current = txHashToWatch
         refetchIsOperator()
         refetchRegisteredSets()
+        setAllocationRefreshKey((k) => k + 1)
     }, [isSuccess, txHashToWatch, refetchIsOperator, refetchRegisteredSets])
 
     // Handle transaction receipt errors
@@ -872,9 +877,8 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
                                             isPendingRegisterAgent ||
                                             isLoading ||
                                             isPendingAllocate ||
-                                            isLoading ||
-                                            isPendingSplitStandalone ||
-                                            isLoading
+                                            crossSetAllocatePending ||
+                                            isPendingSplitStandalone
                                         }
                                     />
                                     <p className="text-xs text-muted-foreground">
@@ -910,6 +914,8 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
                                             </div>
                                         )}
                                 </div>
+
+                                <Separator />
 
                                 {/* Register to Coverage Agent */}
                                 <div className="space-y-4">
@@ -967,6 +973,7 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
                                                 disabled={
                                                     agentNotRegisteredToProvider ||
                                                     isPendingAllocate ||
+                                                    crossSetAllocatePending ||
                                                     isLoading
                                                 }
                                             >
@@ -1004,6 +1011,7 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
                                                             disabled={
                                                                 agentNotRegisteredToProvider ||
                                                                 isPendingAllocate ||
+                                                                crossSetAllocatePending ||
                                                                 isLoading
                                                             }
                                                         />
@@ -1030,6 +1038,7 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
                                                                 disabled={
                                                                     agentNotRegisteredToProvider ||
                                                                     isPendingAllocate ||
+                                                                    crossSetAllocatePending ||
                                                                     isLoading
                                                                 }
                                                             />
@@ -1046,6 +1055,7 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
                                                             allocateStrategies.length === 1 ||
                                                             agentNotRegisteredToProvider ||
                                                             isPendingAllocate ||
+                                                            crossSetAllocatePending ||
                                                             isLoading
                                                         }
                                                         className="shrink-0 text-muted-foreground hover:text-destructive"
@@ -1066,6 +1076,7 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
                                                 (s) => !s.address || !isAddress(s.address)
                                             ) ||
                                             isPendingAllocate ||
+                                            crossSetAllocatePending ||
                                             isLoading ||
                                             !maxAllocationMagnitudes ||
                                             (maxAllocationMagnitudes as bigint[]).length !==
@@ -1158,6 +1169,20 @@ export function OperatorManagement({ serviceManagerAddress, chainId }: OperatorM
                                     </Button>
                                 </div>
                             </div>
+
+                            <OperatorAllocations
+                                chainId={chainId}
+                                connectedAddress={connectedAddress}
+                                allocationManager={eigenAddresses?.allocationManager}
+                                isOperator={!!isOperator}
+                                serviceManagers={serviceManagers}
+                                isPendingAllocate={isPendingAllocate}
+                                isConfirmingTx={isLoading}
+                                onTxSubmitted={(hash) => setTxHashToWatch(hash)}
+                                onCrossSetAllocatePending={setCrossSetAllocatePending}
+                                allocationRefreshKey={allocationRefreshKey}
+                                currentServiceManagerAddress={serviceManagerAddress}
+                            />
 
                             {/* Show registered sets */}
                             {registeredSets &&
