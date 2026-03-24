@@ -18,13 +18,14 @@ import {IEigenServiceManager} from "../interfaces/IEigenServiceManager.sol";
 import {ICoverageAgent} from "../../../interfaces/ICoverageAgent.sol";
 import {IAssetPriceOracleAndSwapper} from "../../../interfaces/IAssetPriceOracleAndSwapper.sol";
 import {EigenCoverageStorage} from "../EigenCoverageStorage.sol";
+import {IERC165} from "@openzeppelin-v5/contracts/utils/introspection/IERC165.sol";
 import {WAD} from "eigenlayer-contracts/libraries/SlashingLib.sol";
 
 /// @title EigenServiceManagerFacet
 /// @author p-dealwis, Infinality
 /// @notice Facet contract implementing IEigenServiceManager interface
 /// @dev This contract is designed to be called via delegatecall from EigenCoverageDiamond
-contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager {
+contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager, IERC165 {
     using EnumerableMap for EnumerableMap.AddressToUintMap;
 
     /// @inheritdoc IEigenServiceManager
@@ -337,5 +338,10 @@ contract EigenServiceManagerFacet is EigenCoverageStorage, IEigenServiceManager 
             }
             revert ICoverageProvider.InsufficientSlashableCoverageAvailable(amount - totalAllocatedStakeValue);
         }
+    }
+
+    /// @inheritdoc IERC165
+    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
+        return interfaceId == type(IEigenServiceManager).interfaceId || interfaceId == type(IERC165).interfaceId;
     }
 }

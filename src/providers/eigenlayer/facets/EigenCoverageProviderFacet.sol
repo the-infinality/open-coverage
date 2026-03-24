@@ -23,12 +23,13 @@ import {ISlashCoordinator, SlashCoordinationStatus} from "../../../interfaces/IS
 import {IRewardsCoordinator} from "eigenlayer-contracts/interfaces/IRewardsCoordinator.sol";
 import {ICoverageLiquidatable} from "../../../interfaces/ICoverageLiquidatable.sol";
 import {LibDiamond} from "../../../diamond/libraries/LibDiamond.sol";
+import {IERC165} from "@openzeppelin-v5/contracts/utils/introspection/IERC165.sol";
 
 /// @title EigenCoverageProviderFacet
 /// @author p-dealwis, Infinality
 /// @notice Facet contract implementing ICoverageProvider interface
 /// @dev This contract is designed to be called via delegatecall from EigenCoverageDiamond
-contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, ICoverageLiquidatable {
+contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, ICoverageLiquidatable, IERC165 {
     using EnumerableMap for EnumerableMap.AddressToUintMap;
 
     /// @inheritdoc ICoverageProvider
@@ -919,5 +920,11 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
     /// @notice Returns the minimum of two uint256 values
     function _min(uint256 a, uint256 b) private pure returns (uint256) {
         return a < b ? a : b;
+    }
+
+    /// @inheritdoc IERC165
+    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
+        return interfaceId == type(ICoverageProvider).interfaceId
+            || interfaceId == type(ICoverageLiquidatable).interfaceId || interfaceId == type(IERC165).interfaceId;
     }
 }

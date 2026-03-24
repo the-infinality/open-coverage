@@ -13,7 +13,8 @@ import {IERC173} from "./interfaces/IERC173.sol";
 ///      Concrete diamond contracts should inherit from this contract to get the standard
 ///      function routing behavior as specified in EIP-2535.
 ///      See https://eips.ethereum.org/EIPS/eip-2535
-abstract contract Diamond {
+///      Implements IERC165 using LibDiamond.supportedInterfaces and by querying each facet.
+abstract contract Diamond is IERC165 {
     /// @notice Error when function selector is not found in any facet
     /// @dev This error is thrown when a function is called that doesn't exist in any facet
     /// @param _functionSelector The function selector that was not found
@@ -30,6 +31,31 @@ abstract contract Diamond {
         ds.supportedInterfaces[type(IDiamondCut).interfaceId] = true;
         ds.supportedInterfaces[type(IDiamondLoupe).interfaceId] = true;
         ds.supportedInterfaces[type(IERC173).interfaceId] = true;
+    }
+
+    /// @inheritdoc IERC165
+    function supportsInterface(bytes4 interfaceId) external view returns (bool) {
+        if (interfaceId == 0xffffffff) {
+            return false;
+        }
+        LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
+        if (ds.supportedInterfaces[interfaceId]) {
+            return true;
+        }
+        address[] storage facetAddrs = ds.facetAddresses;
+        uint256 n = facetAddrs.length;
+        for (uint256 i; i < n;) {
+            address facet = facetAddrs[i];
+            try IERC165(facet).supportsInterface(interfaceId) returns (bool supported) {
+                if (supported) {
+                    return true;
+                }
+            } catch {}
+            unchecked {
+                ++i;
+            }
+        }
+        return false;
     }
 
     /// @notice Fallback function that delegates calls to facets based on function selector

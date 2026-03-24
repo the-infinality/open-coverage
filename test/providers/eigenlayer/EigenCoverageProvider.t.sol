@@ -19,7 +19,15 @@ import {ISlashCoordinator, SlashCoordinationStatus} from "../../../src/interface
 import {IStrategy} from "eigenlayer-contracts/interfaces/IStrategy.sol";
 import {IAllocationManager} from "eigenlayer-contracts/interfaces/IAllocationManager.sol";
 import {OperatorSet} from "eigenlayer-contracts/libraries/OperatorSetLib.sol";
-import {AssetPair, PriceStrategy} from "../../../src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {
+    AssetPair,
+    IAssetPriceOracleAndSwapper,
+    PriceStrategy
+} from "../../../src/interfaces/IAssetPriceOracleAndSwapper.sol";
+import {IDiamondCut} from "../../../src/diamond/interfaces/IDiamondCut.sol";
+import {IDiamondLoupe} from "../../../src/diamond/interfaces/IDiamondLoupe.sol";
+import {IERC165} from "../../../src/diamond/interfaces/IERC165.sol";
+import {IERC173} from "../../../src/diamond/interfaces/IERC173.sol";
 import {ISwapperEngine} from "../../../src/interfaces/ISwapperEngine.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {
@@ -46,6 +54,20 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.expectEmit(false, false, false, true);
         emit ICoverageAgent.MetadataUpdated(newUri);
         coverageAgent.updateMetadata(newUri);
+    }
+
+    function test_supportsInterface_eigenCoverageDiamond() public view {
+        IERC165 diamond = IERC165(address(eigenCoverageDiamond));
+        assertTrue(diamond.supportsInterface(type(IERC165).interfaceId));
+        assertTrue(diamond.supportsInterface(type(IDiamondCut).interfaceId));
+        assertTrue(diamond.supportsInterface(type(IDiamondLoupe).interfaceId));
+        assertTrue(diamond.supportsInterface(type(IERC173).interfaceId));
+        assertTrue(diamond.supportsInterface(type(IEigenServiceManager).interfaceId));
+        assertTrue(diamond.supportsInterface(type(IAssetPriceOracleAndSwapper).interfaceId));
+        assertTrue(diamond.supportsInterface(type(ICoverageProvider).interfaceId));
+        assertTrue(diamond.supportsInterface(type(ICoverageLiquidatable).interfaceId));
+        assertFalse(diamond.supportsInterface(0xffffffff));
+        assertFalse(diamond.supportsInterface(bytes4(0xdeadbeef)));
     }
 
     function test_createPosition() public {
