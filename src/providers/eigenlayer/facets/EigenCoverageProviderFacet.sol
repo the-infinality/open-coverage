@@ -229,9 +229,9 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
         }
         if (amount == 0) revert ZeroAmount();
 
-        // Calculate minimum reward pro-rata based on the new amount and duration
-        uint256 minimumReward = (amount * positionData.minRate * duration) / (10000 * 365 days);
-        if (minimumReward > reward) revert InsufficientReward(minimumReward, reward);
+        // Re-validate against the position at conversion time so the issued claim cannot extend past
+        // expiry (or violate maxDuration) when converting late in the reservation window.
+        _validateClaimAgainstPosition(positionData, amount, duration, reward);
 
         // If amount is less than reserved, update coverage tracking
         if (amount < _claim.amount) {

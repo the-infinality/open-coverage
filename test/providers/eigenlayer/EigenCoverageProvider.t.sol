@@ -2029,6 +2029,47 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.stopPrank();
     }
 
+    /// @notice Converting late in the reservation window must not issue a claim whose end exceeds position expiry
+    function test_RevertWhen_convertReservedClaim_exceedsPositionExpiry_lateConversion() public {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(10e18);
+
+        uint256 maxReservationTime = 50;
+        uint256 reservedDuration = 990 days;
+        // Reserve at T0: T0 + reservedDuration <= expiry (slack = 10 days)
+        uint256 expiryTimestamp = block.timestamp + 1000 days;
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 0,
+            expiryTimestamp: expiryTimestamp,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: maxReservationTime,
+            operatorId: bytes32(uint256(uint160(address(operator))))
+        });
+        uint256 positionId = eigenCoverageProvider.createPosition(data, "");
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, reservedDuration, 10e6);
+
+        // Last valid conversion time: T0 + maxReservationTime; issued claim ends at T1 + duration
+        vm.warp(block.timestamp + maxReservationTime);
+
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ICoverageProvider.DurationExceedsExpiry.selector,
+                expiryTimestamp,
+                block.timestamp + reservedDuration
+            )
+        );
+        eigenCoverageProvider.convertReservedClaim(claimId, 1000e6, reservedDuration, 10e6);
+        vm.stopPrank();
+    }
+
     /// @notice Test that duration cannot exceed reserved duration
     function test_RevertWhen_convertReservedClaim_durationExceedsReserved() public {
         uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
