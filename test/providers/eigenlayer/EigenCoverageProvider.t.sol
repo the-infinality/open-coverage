@@ -2061,9 +2061,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                ICoverageProvider.DurationExceedsExpiry.selector,
-                expiryTimestamp,
-                block.timestamp + reservedDuration
+                ICoverageProvider.DurationExceedsExpiry.selector, expiryTimestamp, block.timestamp + reservedDuration
             )
         );
         eigenCoverageProvider.convertReservedClaim(claimId, 1000e6, reservedDuration, 10e6);
