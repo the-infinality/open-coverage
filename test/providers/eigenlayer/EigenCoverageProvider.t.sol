@@ -2068,6 +2068,97 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         vm.stopPrank();
     }
 
+    /// @notice Even a duration below the reserved cap can exceed position expiry if conversion is late
+    function test_RevertWhen_convertReservedClaim_exceedsPositionExpiry_shorterReservedDuration() public {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(10e18);
+
+        uint256 maxReservationTime = 50;
+        uint256 reservedDuration = 990 days;
+        uint256 expiryTimestamp = block.timestamp + 1000 days;
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 0,
+            expiryTimestamp: expiryTimestamp,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: maxReservationTime,
+            operatorId: bytes32(uint256(uint160(address(operator))))
+        });
+        uint256 positionId = eigenCoverageProvider.createPosition(data, "");
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, reservedDuration, 10e6);
+
+        vm.warp(block.timestamp + maxReservationTime);
+
+        uint256 convertDuration = 981 days;
+        assertLe(convertDuration, reservedDuration, "sanity: still within reserved duration");
+
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ICoverageProvider.DurationExceedsExpiry.selector, expiryTimestamp, block.timestamp + convertDuration
+            )
+        );
+        eigenCoverageProvider.convertReservedClaim(claimId, 1000e6, convertDuration, 10e6);
+        vm.stopPrank();
+    }
+
+    /// @notice Late conversion succeeds when duration is short enough that claim end is before position expiry
+    function test_convertReservedClaim_lateConversion_succeedsWithShorterDuration() public {
+        _setupwithAllocations();
+        _stakeAndDelegateToOperator(10e18);
+
+        uint256 maxReservationTime = 50;
+        uint256 reservedDuration = 990 days;
+        uint256 expiryTimestamp = block.timestamp + 1000 days;
+        CoveragePosition memory data = CoveragePosition({
+            coverageAgent: address(coverageAgent),
+            minRate: 100,
+            maxDuration: 0,
+            expiryTimestamp: expiryTimestamp,
+            asset: address(_getTestStrategy().underlyingToken()),
+            refundable: Refundable.None,
+            slashCoordinator: address(0),
+            maxReservationTime: maxReservationTime,
+            operatorId: bytes32(uint256(uint160(address(operator))))
+        });
+        uint256 positionId = eigenCoverageProvider.createPosition(data, "");
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, reservedDuration, 10e6);
+
+        vm.warp(block.timestamp + maxReservationTime);
+
+        // End of issued claim: T1 + shortDuration <= expiryTimestamp
+        uint256 shortDuration = 9 days;
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+
+        eigenCoverageProvider.convertReservedClaim(claimId, 1000e6, shortDuration, 10e6);
+        vm.stopPrank();
+
+        CoverageClaim memory claim = eigenCoverageProvider.claim(claimId);
+        assertEq(uint8(claim.status), uint8(CoverageClaimStatus.Issued));
+        assertEq(claim.duration, shortDuration);
+    }
+
+    /// @notice convertReservedClaim uses _validateClaimAgainstPosition: zero duration reverts
+    function test_RevertWhen_convertReservedClaim_zeroDuration() public {
+        uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
+
+        vm.startPrank(address(coverageAgent));
+        uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, 30 days, 10e6);
+
+        IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
+        vm.expectRevert(ICoverageProvider.ZeroDuration.selector);
+        eigenCoverageProvider.convertReservedClaim(claimId, 1000e6, 0, 10e6);
+        vm.stopPrank();
+    }
+
     /// @notice Test that duration cannot exceed reserved duration
     function test_RevertWhen_convertReservedClaim_durationExceedsReserved() public {
         uint256 positionId = _setupPositionWithReservation(10e18, 1 hours);
