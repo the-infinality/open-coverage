@@ -430,7 +430,7 @@ contract EigenCoverageProviderFacet is EigenCoverageStorage, ICoverageProvider, 
                 InvalidClaim(claimIds[i], _claim.status)
             );
 
-            // Ensure the claim cannot be slashed before after its duration has elapsed
+            // Claim cannot be slashed after its duration has elapsed
             if (block.timestamp > _claim.createdAt + _claim.duration) {
                 revert ClaimExpired(claimIds[i], _claim.createdAt + _claim.duration);
             }
