@@ -2034,10 +2034,11 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         _setupwithAllocations();
         _stakeAndDelegateToOperator(10e18);
 
-        uint256 maxReservationTime = 50;
-        uint256 reservedDuration = 990 days;
-        // Reserve at T0: T0 + reservedDuration <= expiry (slack = 10 days)
-        uint256 expiryTimestamp = block.timestamp + 1000 days;
+        // Compact windows so minRate=100 and reward=10e6 satisfy _validateClaimAgainstPosition (990-day paths need ~27e6).
+        uint256 maxReservationTime = 2 days;
+        uint256 reservedDuration = 99 days;
+        // Reserve at T0: T0 + reservedDuration <= expiry (slack = 1 day)
+        uint256 expiryTimestamp = block.timestamp + 100 days;
         CoveragePosition memory data = CoveragePosition({
             coverageAgent: address(coverageAgent),
             minRate: 100,
@@ -2055,6 +2056,7 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         uint256 claimId = eigenCoverageProvider.reserveClaim(positionId, 1000e6, reservedDuration, 10e6);
 
         // Last valid conversion time: T0 + maxReservationTime; issued claim ends at T1 + duration
+        // T1 = T0 + maxReservationTime; issued claim ends at T1 + reservedDuration > expiry
         vm.warp(block.timestamp + maxReservationTime);
 
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
@@ -2073,9 +2075,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         _setupwithAllocations();
         _stakeAndDelegateToOperator(10e18);
 
-        uint256 maxReservationTime = 50;
-        uint256 reservedDuration = 990 days;
-        uint256 expiryTimestamp = block.timestamp + 1000 days;
+        uint256 maxReservationTime = 2 days;
+        uint256 reservedDuration = 99 days;
+        uint256 expiryTimestamp = block.timestamp + 100 days;
         CoveragePosition memory data = CoveragePosition({
             coverageAgent: address(coverageAgent),
             minRate: 100,
@@ -2094,7 +2096,8 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         vm.warp(block.timestamp + maxReservationTime);
 
-        uint256 convertDuration = 981 days;
+        // Still <= reserved (99d) but T1 + convertDuration > expiry (T0 + 100d)
+        uint256 convertDuration = 98 days + 1 hours;
         assertLe(convertDuration, reservedDuration, "sanity: still within reserved duration");
 
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
@@ -2113,9 +2116,9 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
         _setupwithAllocations();
         _stakeAndDelegateToOperator(10e18);
 
-        uint256 maxReservationTime = 50;
-        uint256 reservedDuration = 990 days;
-        uint256 expiryTimestamp = block.timestamp + 1000 days;
+        uint256 maxReservationTime = 2 days;
+        uint256 reservedDuration = 99 days;
+        uint256 expiryTimestamp = block.timestamp + 100 days;
         CoveragePosition memory data = CoveragePosition({
             coverageAgent: address(coverageAgent),
             minRate: 100,
@@ -2134,8 +2137,8 @@ contract EigenCoverageProviderTest is EigenTestDeployer {
 
         vm.warp(block.timestamp + maxReservationTime);
 
-        // End of issued claim: T1 + shortDuration <= expiryTimestamp
-        uint256 shortDuration = 9 days;
+        // End of issued claim: T1 + shortDuration <= expiryTimestamp (T0 + 2d + 30d << T0 + 100d)
+        uint256 shortDuration = 30 days;
         IERC20(coverageAgent.asset()).approve(address(eigenCoverageDiamond), 10e6);
 
         eigenCoverageProvider.convertReservedClaim(claimId, 1000e6, shortDuration, 10e6);
