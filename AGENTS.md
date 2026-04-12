@@ -25,15 +25,27 @@ Foundry must be on PATH: `export PATH="$HOME/.foundry/bin:$PATH"` (already in `~
 - **Lint:** `cd frontend && yarn lint` (ESLint)
 - **Format check:** `cd frontend && yarn format:check` (Prettier)
 
+### Testing with the frontend
+
+When manually testing the frontend, use `config/deployments.json` to load deployed contracts. The Sepolia (chain ID `11155111`) deployments are the primary test targets:
+
+| Contract | Sepolia Address |
+|----------|----------------|
+| `EigenCoverageDiamond` | `0x997102126a3B10AA7Bfd991ef4DE8E6E196AFDF2` |
+| `ExampleCoverageAgent` | `0x533DC1904809a47991797aE64d955c1029c143B1` |
+| `EigenServiceManagerFacet` | `0x6179f406C31ad3d0972fa0572A48E68c39a7a8EF` |
+| `EigenCoverageProviderFacet` | `0x114E3772F69EaDF80792Bc90477A83a6dCC06344` |
+
+Add these contracts in the frontend UI using their Sepolia addresses and the matching contract type (Coverage Agent, Coverage Provider, or Eigen Service Manager) to test contract interaction flows.
+
 ### Pre-commit checks
 
-The following checks **must** pass before every commit:
+A Git pre-commit hook is installed at `.git/hooks/pre-commit` that enforces:
 
-1. **`forge fmt`** — auto-formats all Solidity files (run from repo root)
-2. **`forge test`** — runs the full Solidity test suite (requires `MAINNET_ARCHIVE_RPC`)
-3. **`cd frontend && yarn lint`** — ESLint must exit with zero errors
+1. **`forge fmt --check`** — Solidity formatting must be correct
+2. **`forge test`** — full Solidity test suite must pass
 
-Run all three in order before committing. `forge fmt` modifies files in-place (no `--check` flag), so stage any reformatted files before committing.
+The hook runs automatically on `git commit`. If it fails, fix the issues and re-commit. Additionally, **`cd frontend && yarn lint`** must exit with zero errors before committing frontend changes.
 
 ### Key caveats
 
