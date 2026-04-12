@@ -261,8 +261,8 @@ function StrategyAssetOption({
 
 /**
  * Quote Results Display Component
- * - quote / minAmountOut are in Asset A (output) decimals
- * - maxAmountIn is in Asset B (input) decimals
+ * Matches `getQuote(amountIn, base, quote)` / swap helpers: amount in is base; quote result is in `quote` token decimals.
+ * This UI labels Asset B as base (amount in) and Asset A as quote (amount out) for getQuote.
  */
 function QuoteResults({
     quote,
@@ -565,7 +565,7 @@ function ReadSection({
     const assetBInfo = useTokenInfo(assetB, chainId)
 
     // Parse amount based on quote type
-    // getQuote / swapForInput: amount is Asset B (what you spend). swapForOutput: amount is Asset A (what you want to receive)
+    // getQuote / swapForInput: amount is base or swap spent (here: Asset B). swapForOutput: amount is base received (Asset A)
     const parsedAmount = useMemo(() => {
         if (!amountInput || amountInput.trim() === "") return undefined
         try {
@@ -610,7 +610,7 @@ function ReadSection({
         address: contract.address,
         abi: iAssetPriceOracleAndSwapperAbi,
         functionName: "getQuote",
-        args: parsedAmount && assetA && assetB ? [parsedAmount, assetA, assetB] : undefined,
+        args: parsedAmount && assetA && assetB ? [parsedAmount, assetB, assetA] : undefined,
         chainId,
         query: {
             enabled:
@@ -723,7 +723,7 @@ function ReadSection({
                         isLoadingStrategies={isLoadingStrategies}
                         chainId={chainId}
                         onChange={setAssetA}
-                        label="Asset A (Output/Base)"
+                        label="Asset A (quote — amount out for getQuote)"
                     />
 
                     {/* Asset B - manual input only */}
@@ -732,7 +732,7 @@ function ReadSection({
                         isLoadingStrategies={isLoadingStrategies}
                         chainId={chainId}
                         onChange={setAssetB}
-                        label="Asset B (Input/Swap)"
+                        label="Asset B (base — amount in for getQuote)"
                         showStrategyOption={true}
                     />
                 </div>
@@ -756,7 +756,8 @@ function ReadSection({
                         </TabsList>
                         <TabsContent value="getQuote" className="mt-4">
                             <p className="text-xs text-muted-foreground">
-                                Get the equivalent amount of Asset A for a given amount of Asset B
+                                Same as <code className="text-xs">IPriceOracle.getQuote</code>: enter an amount of Asset B
+                                (base); result is an amount of Asset A (quote)
                             </p>
                         </TabsContent>
                         <TabsContent value="swapForInput" className="mt-4">
