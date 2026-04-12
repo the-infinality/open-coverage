@@ -116,7 +116,7 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
     }
 
     /// @inheritdoc IAssetPriceOracleAndSwapper
-    function getQuote(uint256 inAmount, address base, address quote)
+    function getQuote(uint256 amountIn, address base, address quote)
         public
         view
         returns (uint256 outAmount, bool verified)
@@ -125,18 +125,18 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
         verified = true;
 
         if (_assetPair.priceStrategy == PriceStrategy.OracleOnly) {
-            outAmount = IPriceOracle(_assetPair.priceOracle).getQuote(inAmount, base, quote);
+            outAmount = IPriceOracle(_assetPair.priceOracle).getQuote(amountIn, base, quote);
         } else if (_assetPair.priceStrategy == PriceStrategy.SwapperOnly) {
-            outAmount = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, inAmount, base, quote);
+            outAmount = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountIn, base, quote);
         } else {
             uint256 verifyingQuote = 0;
             if (_assetPair.priceStrategy == PriceStrategy.SwapperVerified) {
-                outAmount = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, inAmount, base, quote);
-                verifyingQuote = IPriceOracle(_assetPair.priceOracle).getQuote(inAmount, base, quote);
+                outAmount = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountIn, base, quote);
+                verifyingQuote = IPriceOracle(_assetPair.priceOracle).getQuote(amountIn, base, quote);
             } else if (_assetPair.priceStrategy == PriceStrategy.OracleVerified) {
-                outAmount = IPriceOracle(_assetPair.priceOracle).getQuote(inAmount, base, quote);
+                outAmount = IPriceOracle(_assetPair.priceOracle).getQuote(amountIn, base, quote);
                 verifyingQuote =
-                    ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, inAmount, base, quote);
+                    ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountIn, base, quote);
             }
             uint256 diff = outAmount > verifyingQuote ? outAmount - verifyingQuote : verifyingQuote - outAmount;
             uint256 tolerance = (outAmount * _assetPair.swapperAccuracy) / 10000;
@@ -150,7 +150,7 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
         view
         returns (uint256 maxAmountIn, bool verified)
     {
-        // getQuote(inAmount, base, quote) returns outAmount of quote for inAmount of base.
+        // getQuote(amountIn, base, quote) returns outAmount of quote for amountIn of base.
         // We need maxAmountIn of swap for amountOut of base → getQuote(amountOut, swap, base).
         (uint256 q, bool verified_) = getQuote(amountOut, swap, base);
         maxAmountIn = q + (uint256(_swapSlippage()) * q) / 10000;
