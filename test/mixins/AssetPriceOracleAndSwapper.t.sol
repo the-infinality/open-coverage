@@ -144,31 +144,7 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
         );
     }
 
-    function test_RevertWhen_register_InvalidSwapperAccuracy_zeroWhenRequired() public {
-        AssetPair memory pair = AssetPair({
-            assetA: USDC,
-            assetB: USDT,
-            swapEngine: address(uniswapV3SwapperEngine),
-            poolInfo: USDC_USDT_V3_POOL_INFO,
-            priceStrategy: PriceStrategy.OracleOnly,
-            swapperAccuracy: 0,
-            priceOracle: address(mockPriceOracle)
-        });
-        // Use low-level call so the reverting branch (priceOracleRequired && swapperAccuracy == 0)
-        // is executed and recorded by coverage
-        (bool success, bytes memory result) = address(assetPriceOracleAndSwapper)
-            .call(abi.encodeWithSelector(IAssetPriceOracleAndSwapper.register.selector, pair));
-        assertFalse(success, "register should revert with InvalidSwapperAccuracy");
-        assertEq(
-            // casting to 'bytes4' is safe because selector are always 4 bytes
-            // forge-lint: disable-next-line(unsafe-typecast)
-            bytes4(result),
-            IAssetPriceOracleAndSwapper.InvalidSwapperAccuracy.selector,
-            "revert reason should be InvalidSwapperAccuracy"
-        );
-    }
-
-    /// @dev Also hits revert (priceOracleRequired && swapperAccuracy == 0) via SwapperVerified
+    /// @dev Also hits revert (SwapperVerified && swapperAccuracy == 0)
     function test_RevertWhen_register_InvalidSwapperAccuracy_zeroWhenRequired_swapperVerified() public {
         bytes memory poolInfo = abi.encodePacked(rETH, uint24(100), WETH, uint24(500), USDC);
         MockPriceOracle oracle = new MockPriceOracle(1e18, rETH, USDC);
@@ -185,6 +161,49 @@ contract AssetPriceOracleAndSwapperTest is TestDeployer, UniswapHelper {
                 priceOracle: address(oracle)
             })
         );
+    }
+
+    /// @dev OracleVerified requires non-zero swapperAccuracy (oracle vs swapper tolerance)
+    function test_RevertWhen_register_InvalidSwapperAccuracy_zeroWhenRequired_oracleVerified() public {
+        bytes memory poolInfo = abi.encodePacked(rETH, uint24(100), WETH, uint24(500), USDC);
+        MockPriceOracle oracle = new MockPriceOracle(1e18, rETH, USDC);
+
+        vm.expectRevert(IAssetPriceOracleAndSwapper.InvalidSwapperAccuracy.selector);
+        assetPriceOracleAndSwapper.register(
+            AssetPair({
+                assetA: rETH,
+                assetB: USDC,
+                swapEngine: address(uniswapV3SwapperEngine),
+                poolInfo: poolInfo,
+                priceStrategy: PriceStrategy.OracleVerified,
+                swapperAccuracy: 0,
+                priceOracle: address(oracle)
+            })
+        );
+    }
+
+    /// @dev OracleOnly does not use swapperAccuracy; zero is valid
+    function test_register_oracleOnly_swapperAccuracy_zero_allowed() public {
+        address tokenA = makeAddr("oracleOnlyA");
+        address tokenB = makeAddr("oracleOnlyB");
+        bytes memory poolInfo = abi.encodePacked(USDC, uint24(500), USDT);
+        MockPriceOracle oracle = new MockPriceOracle(1, tokenA, tokenB);
+
+        assetPriceOracleAndSwapper.register(
+            AssetPair({
+                assetA: tokenA,
+                assetB: tokenB,
+                swapEngine: address(uniswapV3SwapperEngine),
+                poolInfo: poolInfo,
+                priceStrategy: PriceStrategy.OracleOnly,
+                swapperAccuracy: 0,
+                priceOracle: address(oracle)
+            })
+        );
+
+        AssetPair memory pair = assetPriceOracleAndSwapper.assetPair(tokenA, tokenB);
+        assertEq(pair.swapperAccuracy, 0);
+        assertEq(uint16(pair.priceStrategy), uint16(PriceStrategy.OracleOnly));
     }
 
     function test_RevertWhen_register_InvalidAssetPair_assetA_zero() public {

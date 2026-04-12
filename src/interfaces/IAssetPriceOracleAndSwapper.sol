@@ -24,11 +24,11 @@ struct AssetPair {
     bytes poolInfo;
     /// @notice The price strategy to use for the asset pair
     PriceStrategy priceStrategy;
-    /// @notice The accuracy of the swapper
-    /// @dev This is the accuracy of the swapper in basis points i.e. 1 = 0.01%
+    /// @notice Tolerance for oracle vs swapper agreement when both are used (basis points; 1 = 0.01%)
+    /// @dev Unused for OracleOnly and SwapperOnly; must be non-zero only for SwapperVerified and OracleVerified
     uint16 swapperAccuracy;
     /// @notice Optional price oracle implementing the IPriceOracle
-    /// @dev If not set, the price strategy must be SwapperOnly and swapperAccuracy must be 0
+    /// @dev If not set, the price strategy must be SwapperOnly
     address priceOracle;
 }
 
