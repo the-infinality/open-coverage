@@ -25,10 +25,19 @@ Foundry must be on PATH: `export PATH="$HOME/.foundry/bin:$PATH"` (already in `~
 - **Lint:** `cd frontend && yarn lint` (ESLint)
 - **Format check:** `cd frontend && yarn format:check` (Prettier)
 
+### Pre-commit checks
+
+The following checks **must** pass before every commit:
+
+1. **`forge fmt`** — auto-formats all Solidity files (run from repo root)
+2. **`forge test`** — runs the full Solidity test suite (requires `MAINNET_ARCHIVE_RPC`)
+3. **`cd frontend && yarn lint`** — ESLint must exit with zero errors
+
+Run all three in order before committing. `forge fmt` modifies files in-place (no `--check` flag), so stage any reformatted files before committing.
+
 ### Key caveats
 
 - **Git submodules must be initialized** before `forge build` will work. Run `git submodule update --init --recursive` if `lib/` directories are empty.
 - **Tests require a mainnet archive RPC** set as `MAINNET_ARCHIVE_RPC` in the root `.env` file. A free public endpoint like `https://eth.llamarpc.com` works but may be rate-limited. For reliable testing, use a dedicated Alchemy/Infura key.
-- The frontend has a pre-existing ESLint error in `src/components/StrategySelect.tsx` (react-refresh/only-export-components). This is not a blocker for development.
 - The frontend `.env` is copied from `.env.example` and does not require secret values for local dev.
 - Contract dependencies are managed as git submodules (not npm). See `foundry.toml` for remapping paths.
