@@ -261,7 +261,7 @@ function StrategyAssetOption({
 
 /**
  * Quote Results Display Component
- * Matches `getQuote(inAmount, base, quote)` / swap helpers: amount in is base; quote result is in `quote` token decimals.
+ * Matches `getQuote(amountIn, base, quote)` on this facet (`IPriceOracle` uses the standard `inAmount` name for the same role).
  * This UI labels Asset B as base (amount in) and Asset A as quote (amount out) for getQuote.
  */
 function QuoteResults({

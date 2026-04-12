@@ -35,7 +35,7 @@ export const iAssetPriceOracleAndSwapperAbi = [
     {
         type: "function",
         inputs: [
-            { name: "inAmount", internalType: "uint256", type: "uint256" },
+            { name: "amountIn", internalType: "uint256", type: "uint256" },
             { name: "base", internalType: "address", type: "address" },
             { name: "quote", internalType: "address", type: "address" },
         ],

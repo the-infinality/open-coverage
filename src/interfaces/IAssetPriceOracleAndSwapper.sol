@@ -34,7 +34,8 @@ struct AssetPair {
 
 /// @title IAssetPriceOracleAndSwapper
 /// @notice Interface for the asset price oracle and swapper facet
-/// @dev `getQuote` matches `IPriceOracle.getQuote(inAmount, base, quote)` (returned amount is `quote` units).
+/// @dev `getQuote` mirrors `IPriceOracle` semantics (first arg is size in `base`); this facet names it `amountIn` for
+/// consistency with `swapForInput` / `swapForInputQuote`. `IPriceOracle` itself keeps the standard `inAmount` name.
 /// Swap entrypoints align with `ISwapperEngine` (`base` = asset received, `swap` = asset spent).
 /// Registration order (`AssetPair.assetA` / `assetB`) is independent of these axes; lookups accept either token order
 /// because the implementation resolves the stored pair by `(assetA, assetB)` or the reversed tuple.
@@ -89,13 +90,13 @@ interface IAssetPriceOracleAndSwapper {
     /// @return The maximum deadline offset for a swap
     function maxDeadlineOffset() external view returns (uint256);
 
-    /// @notice Same signature as `IPriceOracle.getQuote`: `outAmount` of `quote` for `inAmount` of `base`
-    /// @param inAmount Amount of `base` (see `IPriceOracle.getQuote`)
-    /// @param base The base asset (`IPriceOracle` `base` parameter)
-    /// @param quote The quote asset (`IPriceOracle` `quote` parameter)
-    /// @return outAmount Amount of `quote` equivalent to `inAmount` of `base` (before facet slippage in swap helpers)
+    /// @notice Same semantics as `IPriceOracle.getQuote` (`outAmount` of `quote` for `amountIn` of `base`); first arg named `amountIn` here for consistency with swap helpers on this facet
+    /// @param amountIn Amount of `base`
+    /// @param base The base asset
+    /// @param quote The quote asset
+    /// @return outAmount Amount of `quote` equivalent to `amountIn` of `base` (before facet slippage in swap helpers)
     /// @return verified Whether the quote has been verified by an oracle (if applicable)
-    function getQuote(uint256 inAmount, address base, address quote)
+    function getQuote(uint256 amountIn, address base, address quote)
         external
         view
         returns (uint256 outAmount, bool verified);
