@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+echo "Running pre-commit checks..."
+echo "=> forge fmt --check"
+forge fmt --check
+echo "   ✓ formatting OK"
+echo "=> forge test"
+forge test
+echo "   ✓ tests OK"
+echo "All pre-commit checks passed."

@@ -40,7 +40,13 @@ Add these contracts in the frontend UI using their Sepolia addresses and the mat
 
 ### Pre-commit checks
 
-A Git pre-commit hook is installed at `.git/hooks/pre-commit` that enforces:
+A Git pre-commit hook is version-controlled at `.githooks/pre-commit`. Activate it with:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The hook enforces:
 
 1. **`forge fmt --check`** — Solidity formatting must be correct
 2. **`forge test`** — full Solidity test suite must pass
