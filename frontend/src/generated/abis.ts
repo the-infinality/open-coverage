@@ -35,13 +35,13 @@ export const iAssetPriceOracleAndSwapperAbi = [
     {
         type: "function",
         inputs: [
-            { name: "amountIn", internalType: "uint256", type: "uint256" },
-            { name: "assetA", internalType: "address", type: "address" },
-            { name: "assetB", internalType: "address", type: "address" },
+            { name: "inAmount", internalType: "uint256", type: "uint256" },
+            { name: "base", internalType: "address", type: "address" },
+            { name: "quote", internalType: "address", type: "address" },
         ],
         name: "getQuote",
         outputs: [
-            { name: "quote", internalType: "uint256", type: "uint256" },
+            { name: "outAmount", internalType: "uint256", type: "uint256" },
             { name: "verified", internalType: "bool", type: "bool" },
         ],
         stateMutability: "view",
@@ -97,8 +97,8 @@ export const iAssetPriceOracleAndSwapperAbi = [
         type: "function",
         inputs: [
             { name: "amountIn", internalType: "uint256", type: "uint256" },
-            { name: "assetA", internalType: "address", type: "address" },
-            { name: "assetB", internalType: "address", type: "address" },
+            { name: "base", internalType: "address", type: "address" },
+            { name: "swap", internalType: "address", type: "address" },
             { name: "deadline", internalType: "uint256", type: "uint256" },
         ],
         name: "swapForInput",
@@ -109,8 +109,8 @@ export const iAssetPriceOracleAndSwapperAbi = [
         type: "function",
         inputs: [
             { name: "amountIn", internalType: "uint256", type: "uint256" },
-            { name: "assetA", internalType: "address", type: "address" },
-            { name: "assetB", internalType: "address", type: "address" },
+            { name: "base", internalType: "address", type: "address" },
+            { name: "swap", internalType: "address", type: "address" },
         ],
         name: "swapForInputQuote",
         outputs: [
@@ -123,8 +123,8 @@ export const iAssetPriceOracleAndSwapperAbi = [
         type: "function",
         inputs: [
             { name: "amountOut", internalType: "uint256", type: "uint256" },
-            { name: "assetA", internalType: "address", type: "address" },
-            { name: "assetB", internalType: "address", type: "address" },
+            { name: "base", internalType: "address", type: "address" },
+            { name: "swap", internalType: "address", type: "address" },
             { name: "deadline", internalType: "uint256", type: "uint256" },
         ],
         name: "swapForOutput",
@@ -135,8 +135,8 @@ export const iAssetPriceOracleAndSwapperAbi = [
         type: "function",
         inputs: [
             { name: "amountOut", internalType: "uint256", type: "uint256" },
-            { name: "assetA", internalType: "address", type: "address" },
-            { name: "assetB", internalType: "address", type: "address" },
+            { name: "base", internalType: "address", type: "address" },
+            { name: "swap", internalType: "address", type: "address" },
         ],
         name: "swapForOutputQuote",
         outputs: [

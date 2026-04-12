@@ -42,14 +42,14 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
     }
 
     /// @inheritdoc IAssetPriceOracleAndSwapper
-    function swapForOutput(uint256 amountOut, address assetA, address assetB, uint256 deadline) public {
-        AssetPair memory _assetPair = _getRegisteredAssetPair(assetA, assetB);
+    function swapForOutput(uint256 amountOut, address base, address swap, uint256 deadline) public {
+        AssetPair memory _assetPair = _getRegisteredAssetPair(base, swap);
         require(
             deadline <= _maxDeadlineOffset() + block.timestamp,
             ExceedsMaxDeadline(_maxDeadlineOffset() + block.timestamp, deadline)
         );
 
-        (uint256 maxAmountIn,) = swapForOutputQuote(amountOut, assetA, assetB);
+        (uint256 maxAmountIn,) = swapForOutputQuote(amountOut, base, swap);
 
         // Delegatecall version of swapForOutput
         (bool success,) = _assetPair.swapEngine
@@ -59,8 +59,8 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
                     _assetPair.poolInfo,
                     amountOut,
                     maxAmountIn,
-                    assetA,
-                    assetB,
+                    base,
+                    swap,
                     deadline
                 )
             );
@@ -68,14 +68,14 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
     }
 
     /// @inheritdoc IAssetPriceOracleAndSwapper
-    function swapForInput(uint256 amountIn, address assetA, address assetB, uint256 deadline) public {
-        AssetPair memory _assetPair = _getRegisteredAssetPair(assetA, assetB);
+    function swapForInput(uint256 amountIn, address base, address swap, uint256 deadline) public {
+        AssetPair memory _assetPair = _getRegisteredAssetPair(base, swap);
         require(
             deadline <= _maxDeadlineOffset() + block.timestamp,
             ExceedsMaxDeadline(_maxDeadlineOffset() + block.timestamp, deadline)
         );
 
-        (uint256 minAmountOut,) = swapForInputQuote(amountIn, assetA, assetB);
+        (uint256 minAmountOut,) = swapForInputQuote(amountIn, base, swap);
 
         // Delegatecall version of swapForInput
         (bool success,) = _assetPair.swapEngine
@@ -85,8 +85,8 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
                     _assetPair.poolInfo,
                     amountIn,
                     minAmountOut,
-                    assetA,
-                    assetB,
+                    base,
+                    swap,
                     deadline
                 )
             );
@@ -116,55 +116,55 @@ abstract contract AssetPriceOracleAndSwapper is AssetPriceOracleAndSwapperStorag
     }
 
     /// @inheritdoc IAssetPriceOracleAndSwapper
-    function getQuote(uint256 amountIn, address assetA, address assetB)
+    function getQuote(uint256 inAmount, address base, address quote)
         public
         view
-        returns (uint256 quote, bool verified)
+        returns (uint256 outAmount, bool verified)
     {
-        AssetPair memory _assetPair = _getRegisteredAssetPair(assetA, assetB);
+        AssetPair memory _assetPair = _getRegisteredAssetPair(base, quote);
         verified = true;
 
         if (_assetPair.priceStrategy == PriceStrategy.OracleOnly) {
-            quote = IPriceOracle(_assetPair.priceOracle).getQuote(amountIn, assetA, assetB);
+            outAmount = IPriceOracle(_assetPair.priceOracle).getQuote(inAmount, base, quote);
         } else if (_assetPair.priceStrategy == PriceStrategy.SwapperOnly) {
-            quote = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountIn, assetA, assetB);
+            outAmount = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, inAmount, base, quote);
         } else {
             uint256 verifyingQuote = 0;
             if (_assetPair.priceStrategy == PriceStrategy.SwapperVerified) {
-                quote = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountIn, assetA, assetB);
-                verifyingQuote = IPriceOracle(_assetPair.priceOracle).getQuote(amountIn, assetA, assetB);
+                outAmount = ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, inAmount, base, quote);
+                verifyingQuote = IPriceOracle(_assetPair.priceOracle).getQuote(inAmount, base, quote);
             } else if (_assetPair.priceStrategy == PriceStrategy.OracleVerified) {
-                quote = IPriceOracle(_assetPair.priceOracle).getQuote(amountIn, assetA, assetB);
+                outAmount = IPriceOracle(_assetPair.priceOracle).getQuote(inAmount, base, quote);
                 verifyingQuote =
-                    ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, amountIn, assetA, assetB);
+                    ISwapperEngine(_assetPair.swapEngine).getQuote(_assetPair.poolInfo, inAmount, base, quote);
             }
-            uint256 diff = quote > verifyingQuote ? quote - verifyingQuote : verifyingQuote - quote;
-            uint256 tolerance = (quote * _assetPair.swapperAccuracy) / 10000;
+            uint256 diff = outAmount > verifyingQuote ? outAmount - verifyingQuote : verifyingQuote - outAmount;
+            uint256 tolerance = (outAmount * _assetPair.swapperAccuracy) / 10000;
             verified = diff <= tolerance;
         }
     }
 
     /// @inheritdoc IAssetPriceOracleAndSwapper
-    function swapForOutputQuote(uint256 amountOut, address assetA, address assetB)
+    function swapForOutputQuote(uint256 amountOut, address base, address swap)
         public
         view
         returns (uint256 maxAmountIn, bool verified)
     {
-        // getQuote(amountIn, assetA, assetB) returns quote in assetA for amountIn of assetB.
-        // We need maxAmountIn of assetB for amountOut of assetA → use (amountOut, assetB, assetA).
-        (uint256 quote, bool verified_) = getQuote(amountOut, assetB, assetA);
-        maxAmountIn = quote + (uint256(_swapSlippage()) * quote) / 10000;
+        // getQuote(inAmount, base, quote) returns outAmount of quote for inAmount of base.
+        // We need maxAmountIn of swap for amountOut of base → getQuote(amountOut, swap, base).
+        (uint256 q, bool verified_) = getQuote(amountOut, swap, base);
+        maxAmountIn = q + (uint256(_swapSlippage()) * q) / 10000;
         verified = verified_;
     }
 
     /// @inheritdoc IAssetPriceOracleAndSwapper
-    function swapForInputQuote(uint256 amountIn, address assetA, address assetB)
+    function swapForInputQuote(uint256 amountIn, address base, address swap)
         public
         view
         returns (uint256 minAmountOut, bool verified)
     {
-        (uint256 quote, bool verified_) = getQuote(amountIn, assetA, assetB);
-        minAmountOut = quote - (quote * uint256(_swapSlippage())) / 10000;
+        (uint256 q, bool verified_) = getQuote(amountIn, base, swap);
+        minAmountOut = q - (q * uint256(_swapSlippage())) / 10000;
         verified = verified_;
     }
 
