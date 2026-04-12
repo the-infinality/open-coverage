@@ -27,16 +27,7 @@ Foundry must be on PATH: `export PATH="$HOME/.foundry/bin:$PATH"` (already in `~
 
 ### Testing with the frontend
 
-When manually testing the frontend, use `config/deployments.json` to load deployed contracts. The Sepolia (chain ID `11155111`) deployments are the primary test targets:
-
-| Contract | Sepolia Address |
-|----------|----------------|
-| `EigenCoverageDiamond` | `0x997102126a3B10AA7Bfd991ef4DE8E6E196AFDF2` |
-| `ExampleCoverageAgent` | `0x533DC1904809a47991797aE64d955c1029c143B1` |
-| `EigenServiceManagerFacet` | `0x6179f406C31ad3d0972fa0572A48E68c39a7a8EF` |
-| `EigenCoverageProviderFacet` | `0x114E3772F69EaDF80792Bc90477A83a6dCC06344` |
-
-Add these contracts in the frontend UI using their Sepolia addresses and the matching contract type (Coverage Agent, Coverage Provider, or Eigen Service Manager) to test contract interaction flows.
+When manually testing the frontend, read contract addresses from `config/deployments.json`. Use the Sepolia deployments (chain ID `11155111`) as the primary test targets. Add the contracts in the frontend UI using their addresses and the matching contract type (Coverage Agent, Coverage Provider, or Eigen Service Manager) to test contract interaction flows.
 
 ### Pre-commit checks
 
